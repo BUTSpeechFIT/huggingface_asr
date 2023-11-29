@@ -36,6 +36,7 @@ class ModelArguments:
     average_checkpoints: Optional[bool] = field(default=False, metadata={"help": "Whether to average checkpoints."})
     language: Optional[str] = field(default=None, metadata={"help": "Language of the model."})
     task: Optional[str] = field(default=None, metadata={"help": "Task of the model."})
+    wrap_with_ctc: Optional[bool] = field(default=False, metadata={"help": "Whether to wrap model with CTC."})
     config_overrides: Optional[str] = field(
         default=None,
         metadata={

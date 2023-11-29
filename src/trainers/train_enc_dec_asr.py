@@ -3,6 +3,7 @@ import sys
 
 from datasets import load_dataset, load_from_disk
 from transformers import (
+    CONFIG_MAPPING,
     AutoConfig,
     AutoFeatureExtractor,
     AutoModelForSpeechSeq2Seq,
@@ -17,6 +18,10 @@ from transformers.utils import logging
 from models.ctc_encoder_plus_autoregressive_decoder import (
     JointCTCAttentionEncoderDecoder,
     JointCTCAttentionEncoderDecoderConfig,
+)
+from models.whisper_with_ctc import (
+    WhisperForConditionalGenerationWithCTC,
+    WhisperWithCTCConfig,
 )
 from trainers.training_arguments import (
     DataTrainingArguments,
@@ -40,6 +45,9 @@ from training_utils import (
 
 AutoConfig.register("joint_aed_ctc_speech-encoder-decoder", JointCTCAttentionEncoderDecoderConfig)
 AutoModelForSpeechSeq2Seq.register(JointCTCAttentionEncoderDecoderConfig, JointCTCAttentionEncoderDecoder)
+
+AutoConfig.register("whisper-with-ctc", WhisperWithCTCConfig)
+AutoModelForSpeechSeq2Seq.register(WhisperWithCTCConfig, WhisperForConditionalGenerationWithCTC)
 
 if __name__ == "__main__":
     logging.set_verbosity_debug()
@@ -132,6 +140,8 @@ if __name__ == "__main__":
     # 4. Initialize seq2seq model
     if model_args.from_pretrained:
         config = AutoConfig.from_pretrained(model_args.from_pretrained)
+        if model_args.wrap_with_ctc:
+            config = CONFIG_MAPPING[config.model_type + "-with-ctc"](**config.to_dict())
         config.update(base_model_config)
         model_path = model_args.from_pretrained
         if model_args.average_checkpoints:
