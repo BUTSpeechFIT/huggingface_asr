@@ -1,3 +1,4 @@
+from dataclasses import dataclass
 from typing import Optional, Tuple, Union
 
 import torch.utils.checkpoint
@@ -9,6 +10,13 @@ from transformers.models.whisper.modeling_whisper import (
     WhisperForConditionalGeneration,
     shift_tokens_right,
 )
+
+
+@dataclass
+class Seq2SeqLMOutputLosses(Seq2SeqLMOutput):
+    enc_loss: Optional[torch.Tensor] = None
+    dec_loss: Optional[torch.Tensor] = None
+    encoder_logits: Optional[torch.Tensor] = None
 
 
 class WhisperWithCTCConfig(WhisperConfig):
@@ -135,7 +143,7 @@ class WhisperForConditionalGenerationWithCTC(WhisperForConditionalGeneration):
                     reduction=self.config.ctc_loss_reduction,
                     zero_infinity=self.config.ctc_zero_infinity,
                 )
-
+        dec_loss = None
         if labels is not None:
             loss_fct = CrossEntropyLoss()
             # move labels to correct device to enable PP
@@ -147,8 +155,10 @@ class WhisperForConditionalGenerationWithCTC(WhisperForConditionalGeneration):
             output = (dec_lm_logits,) + outputs[1:]
             return ((loss,) + output) if loss is not None else output
 
-        return Seq2SeqLMOutput(
+        return Seq2SeqLMOutputLosses(
             loss=loss,
+            enc_loss=ctc_loss,
+            dec_loss=dec_loss,
             logits=dec_lm_logits,
             past_key_values=outputs.past_key_values,
             decoder_hidden_states=outputs.decoder_hidden_states,
@@ -157,4 +167,5 @@ class WhisperForConditionalGenerationWithCTC(WhisperForConditionalGeneration):
             encoder_last_hidden_state=outputs.encoder_last_hidden_state,
             encoder_hidden_states=outputs.encoder_hidden_states,
             encoder_attentions=outputs.encoder_attentions,
+            encoder_logits=enc_lm_logits,
         )
