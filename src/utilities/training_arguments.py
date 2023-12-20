@@ -174,12 +174,6 @@ class ModelArgumentsContext(ModelArguments):
     enc_memory_dim: int = field(default=None, metadata={"help": "Size of memory on encoder size"})
 
     dec_memory_dim: int = field(default=None, metadata={"help": "Size of memory on decoder size"})
-
-
-@dataclass
-class GeneralTrainingArgumentsContext(GeneralTrainingArguments):
-    _argument_group_name = "Training-context specific arguments for context models."
-    freeze_others: bool = field(default=False, metadata={"help": "Whether to freeze rest of the model"})
     conv_ids_column_name: str = field(default=None, metadata={"help": "Conv ids column."})
     turn_index_column_name: str = field(default=None, metadata={"help": "Turn index column."})
 
