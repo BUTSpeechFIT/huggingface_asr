@@ -2,7 +2,7 @@
 #SBATCH --job-name TED
 #SBATCH --account OPEN-28-57
 #SBATCH --partition qgpu
-#SBATCH --gpus 1
+#SBATCH --gpus 4
 #SBATCH --nodes 1
 #SBATCH --time 2-00:00:00
 #SBATCH --output=/mnt/proj1/open-28-58/lakoc/huggingface_asr/outputs/ebranchformer_english_small_v3.out
