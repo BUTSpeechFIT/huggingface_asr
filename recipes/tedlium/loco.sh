@@ -5,9 +5,9 @@
 #SBATCH --gpus 1
 #SBATCH --nodes 1
 #SBATCH --time 2-00:00:00
-#SBATCH --output=/mnt/proj1/open-28-58/lakoc/huggingface_asr/outputs/ebranchformer_tedlium_loco1.out
+#SBATCH --output=/mnt/proj1/open-28-58/lakoc/huggingface_asr/outputs/ebranchformer_tedlium_loco2.out
 
-EXPERIMENT="ebranchformer_tedlium_loco1"
+EXPERIMENT="ebranchformer_tedlium_loco2"
 PROJECT="LoCo"
 WORK_DIR="/mnt/proj1/open-28-58/lakoc/huggingface_asr"
 ENV_DIR="/mnt/proj1/open-28-58/lakoc/LoCo-ASR"
@@ -30,7 +30,7 @@ args=(
   # General training arguments
   --output_dir=$EXPERIMENT_PATH
   --per_device_train_batch_size="64"
-  --per_device_eval_batch_size="64"
+  --per_device_eval_batch_size="8"
   --dataloader_num_workers="24"
   --num_train_epochs="150"
   --bf16
