@@ -42,12 +42,12 @@ args=(
   # Optimizer related arguments
   --optim="adamw_torch"
   --learning_rate="2e-3"
-  --warmup_steps="20000"
-  --early_stopping_patience="5"
+  --warmup_steps="15000"
+  --early_stopping_patience="20"
   --weight_decay="1e-6"
-  --max_grad_norm="5.0"
+  --max_grad_norm="1.0"
   --lsm_factor="0.1"
-  --gradient_accumulation_steps="1"
+  --gradient_accumulation_steps="4"
 
   # Logging, saving and evaluation related arguments
   --report_to="wandb"
