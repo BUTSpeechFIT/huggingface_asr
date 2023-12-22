@@ -195,6 +195,23 @@ class ContextAwareTrainer(Seq2SeqTrainer):
         else:
             raise NotImplementedError("Not implemented yet")
 
+    def evaluate(
+        self,
+        eval_dataset: Optional[Dataset] = None,
+        ignore_keys: Optional[List[str]] = None,
+        metric_key_prefix: str = "eval",
+        **gen_kwargs,
+    ) -> Dict[str, float]:
+        if eval_dataset:
+            recordings_to_erase = list(set(eval_dataset[self.conv_ids_column_name]))
+        else:
+            recordings_to_erase = list(set(self.eval_dataset[self.conv_ids_column_name]))
+        self.model.context_manager.erase_memory_cells(recordings_to_erase)
+        # pylint: disable=E1101
+        output = super().evaluate(eval_dataset, ignore_keys, metric_key_prefix, **gen_kwargs)
+        self.model.context_manager.erase_memory_cells(recordings_to_erase)
+        return output
+
 
 def fetch_config(
     enc_config_path: str, dec_config_path: str, base_config: Dict, config_overrides: str

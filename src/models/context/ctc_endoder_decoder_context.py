@@ -45,6 +45,13 @@ class ContextManager:
         self.current_conversations = None
         self.input_id_lens = None
 
+    def erase_memory_cells(self, conv_ids):
+        for conv_id in conv_ids:
+            if conv_id in self.hidden_states:
+                del self.hidden_states[conv_id]
+            if conv_id in self.context_vectors:
+                del self.context_vectors[conv_id]
+
     def set_current_conversations(self, ids, device):
         self.current_conversations = ids
         for conv_id in list(set(self.current_conversations)):
@@ -149,6 +156,10 @@ class ContextHolder(TrainerCallback):
     def set_conversations(self, ids, device):
         for block in self.context_blocks:
             block.set_current_conversations(ids, device)
+
+    def erase_memory_cells(self, conv_ids):
+        for block in self.context_blocks:
+            block.erase_memory_cells(conv_ids)
 
     def set_input_id_lens(self, input_id_lens):
         for block in self.context_blocks:
@@ -319,6 +330,8 @@ class JointCTCAttentionEncoderDecoderWithContext(JointCTCAttentionEncoderDecoder
         streamer: Optional["BaseStreamer"] = None,
         **kwargs,
     ) -> Union[GenerateOutput, torch.LongTensor]:
+        recording_ids = kwargs.get(self.config.conv_ids_column_name, [])
+        self.context_manager.set_conversations(recording_ids, device=self.device)
         self.context_manager.started_decoding()
         # pylint: disable=E1101
         output = super().generate(

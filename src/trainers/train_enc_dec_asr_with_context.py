@@ -81,6 +81,7 @@ if __name__ == "__main__":
         id_to_turn_mapping = {key: index for index, key in enumerate(sorted_ids)}
         dataset[split] = dataset[split].map(lambda x: {model_args.turn_index_column_name: id_to_turn_mapping[x["id"]]})
 
+    dataset["test"] = dataset["test"].select(range(5))
     if data_args.validation_slice:
         training_eval_dataset = dataset[data_args.validation_split].shuffle().select(range(data_args.validation_slice))
         # Ensure that transformations are also attached to the sliced validation dataset
