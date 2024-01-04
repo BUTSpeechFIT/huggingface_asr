@@ -59,10 +59,12 @@ if __name__ == "__main__":
         remove_punctuation=data_args.remove_punctuation,
     )
 
-    """"""
+    conv_ids_column_name = model_args.conv_ids_column_name
+    turn_index_column_name = model_args.turn_index_column_name
+
     for split in dataset.keys():
         dataset[split] = dataset[split].map(
-            lambda x: {model_args.conv_ids_column_name: split + "_" + os.path.splitext(os.path.basename(x))[0]},
+            lambda x: {conv_ids_column_name: split + "_" + os.path.splitext(os.path.basename(x))[0]},
             input_columns=["file"],
         )
 
@@ -79,9 +81,8 @@ if __name__ == "__main__":
     for split in dataset.keys():
         sorted_ids = sorted(dataset[split]["id"], key=custom_sort)
         id_to_turn_mapping = {key: index for index, key in enumerate(sorted_ids)}
-        dataset[split] = dataset[split].map(lambda x: {model_args.turn_index_column_name: id_to_turn_mapping[x["id"]]})
+        dataset[split] = dataset[split].map(lambda x: {turn_index_column_name: id_to_turn_mapping[x["id"]]})
 
-    dataset["test"] = dataset["test"].select(range(5))
     if data_args.validation_slice:
         training_eval_dataset = dataset[data_args.validation_split].shuffle().select(range(data_args.validation_slice))
         # Ensure that transformations are also attached to the sliced validation dataset

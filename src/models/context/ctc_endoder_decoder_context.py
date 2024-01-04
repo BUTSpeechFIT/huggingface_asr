@@ -40,6 +40,7 @@ class ContextManager:
         self.memory_init = nn.Parameter(torch.zeros(config.memory_dim, config.hidden_size))
         self.input_id_lens = None
         self.is_decoding = False
+        self.device = None
 
     def reset_state(self):
         self.hidden_states = {}
@@ -60,6 +61,7 @@ class ContextManager:
         self.global_convs = global_ids
 
     def init_conversations(self, ids, device):
+        self.device = device
         for conv_id in list(set(ids)):
             if conv_id not in self.hidden_states:
                 self.hidden_states[conv_id] = self.hidden_init.to(device)
@@ -68,28 +70,54 @@ class ContextManager:
 
     def synchronize_states(self):
         current_rank = dist.get_rank()
-        world_size = dist.get_world_size()
-        for conv_id in self.global_convs:
-            is_local = torch.tensor(conv_id in self.current_conversations, device="cpu")
-            source_rank = [torch.tensor(False, device="cpu") for _ in range(world_size)]
-            dist.all_gather(source_rank, is_local)
-            source_rank = int(torch.argwhere(torch.tensor(source_rank)))
-            self.broadcast_variable_size_tensor(self.hidden_states[conv_id], current_rank, source_rank)
-            self.broadcast_variable_size_tensor(self.context_vectors[conv_id], current_rank, source_rank)
+        source_ranks = torch.tensor(
+            [current_rank if conv_id in self.current_conversations else 0 for conv_id in self.global_convs],
+            device=self.device,
+        )
+        dist.all_reduce(source_ranks)
+        hidden_lengths = torch.tensor(
+            [
+                len(self.hidden_states[conv_id]) if conv_id in self.current_conversations else 0
+                for conv_id in self.global_convs
+            ],
+            device=self.device,
+        )
+        dist.all_reduce(hidden_lengths)
+        hidden_states_to_synchronize = torch.zeros((hidden_lengths.sum(), self.hidden_init.size(1)), device=self.device)
+        context_states_to_synchronize = torch.zeros(
+            (self.memory_init.size(0) * len(self.global_convs), self.memory_init.size(1)), device=self.device
+        )
+        ends = torch.cumsum(hidden_lengths, dim=0)
+        starts = ends - hidden_lengths
+        for index, (conv_id, source_rank, start, end) in enumerate(zip(self.global_convs, source_ranks, starts, ends)):
+            if source_rank == current_rank:
+                hidden_states_to_synchronize[start:end, ...] = self.hidden_states[conv_id]
+                context_states_to_synchronize[
+                    index * self.memory_init.size(0) : (index + 1) * self.memory_init.size(0), ...
+                ] = self.context_vectors[conv_id]
+        dist.all_reduce(hidden_states_to_synchronize)
+        dist.all_reduce(context_states_to_synchronize)
+
+        for index, (conv_id, start, end) in enumerate(zip(self.global_convs, starts, ends)):
+            self.hidden_states[conv_id] = hidden_states_to_synchronize[start:end, ...]
+            self.context_vectors[conv_id] = context_states_to_synchronize[
+                index * self.memory_init.size(0) : (index + 1) * self.memory_init.size(0), ...
+            ]
 
     @staticmethod
     def broadcast_variable_size_tensor(tensor, current_rank, source_rank):
         # Broadcast the size of the tensor
         size = list(tensor.size())
-        dist.broadcast_object_list(size, src=source_rank)
+        handle = dist.broadcast_object_list(size, src=source_rank, async_op=True)
 
         # Allocate a new tensor with the received size
         if current_rank != source_rank:
             tensor = torch.empty(size, dtype=tensor.dtype, device=tensor.device)
 
+        handle.wait()
         # Broadcast the actual tensor data
-        dist.broadcast(tensor, src=source_rank)
-        return tensor
+        handle = dist.broadcast(tensor, src=source_rank, async_op=True)
+        handle.wait()
 
     def save_state(self, hidden_states, memory_states, hidden_lens):
         if not self.is_decoding:

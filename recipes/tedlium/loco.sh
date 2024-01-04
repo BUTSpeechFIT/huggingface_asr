@@ -2,12 +2,12 @@
 #SBATCH --job-name TED
 #SBATCH --account OPEN-28-57
 #SBATCH --partition qgpu
-#SBATCH --gpus 1
+#SBATCH --gpus 8
 #SBATCH --nodes 1
 #SBATCH --time 2-00:00:00
-#SBATCH --output=/mnt/proj1/open-28-58/lakoc/huggingface_asr/outputs/ebranchformer_tedlium_loco2.out
+#SBATCH --output=/mnt/proj1/open-28-58/lakoc/huggingface_asr/outputs/ebranchformer_tedlium_loco_multigpu.out
 
-EXPERIMENT="ebranchformer_tedlium_loco2"
+EXPERIMENT="ebranchformer_tedlium_loco_multigpu"
 PROJECT="LoCo"
 WORK_DIR="/mnt/proj1/open-28-58/lakoc/huggingface_asr"
 ENV_DIR="/mnt/proj1/open-28-58/lakoc/LoCo-ASR"
@@ -30,7 +30,7 @@ args=(
   # General training arguments
   --output_dir=$EXPERIMENT_PATH
   --per_device_train_batch_size="64"
-  --per_device_eval_batch_size="8"
+  --per_device_eval_batch_size="1"
   --dataloader_num_workers="24"
   --num_train_epochs="150"
   --bf16
@@ -47,7 +47,7 @@ args=(
   --weight_decay="1e-6"
   --max_grad_norm="1.0"
   --lsm_factor="0.1"
-  --gradient_accumulation_steps="4"
+  --gradient_accumulation_steps="1"
 
   # Logging, saving and evaluation related arguments
   --report_to="wandb"
@@ -84,19 +84,19 @@ args=(
   --expect_2d_input
 
   # Generation related arguments
-  --num_beams="4"
+  --num_beams="20"
   --max_length="512"
   --predict_with_generate
   --decoding_ctc_weight="0.3"
-  --eval_beam_factor="10"
+  --eval_beam_factor="2"
 
   # Context related arguments
   --conv_ids_column_name="recording_id"
   --turn_index_column_name="turn_id"
-  --enc_memory_cells_location 9 10 11
-  --dec_memory_cells_location 3 4 5
-  --enc_memory_dim 16
-  --dec_memory_dim 16
+  --enc_memory_cells_location 11
+  --dec_memory_cells_location 0 1 2 3 4 5
+  --enc_memory_dim 32
+  --dec_memory_dim 32
 )
 
-python src/trainers/train_enc_dec_asr_with_context.py "${args[@]}"
+torchrun --standalone --nnodes=1 --nproc-per-node=8 src/trainers/train_enc_dec_asr_with_context.py "${args[@]}"
