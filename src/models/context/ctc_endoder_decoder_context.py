@@ -70,8 +70,8 @@ class ContextManager:
         current_rank = dist.get_rank()
         world_size = dist.get_world_size()
         for conv_id in self.global_convs:
-            is_local = torch.tensor(conv_id in self.current_conversations)
-            source_rank = [torch.tensor(False) for _ in range(world_size)]
+            is_local = torch.tensor(conv_id in self.current_conversations, device="cpu")
+            source_rank = [torch.tensor(False, device="cpu") for _ in range(world_size)]
             dist.all_gather(source_rank, is_local)
             source_rank = int(torch.argwhere(torch.tensor(source_rank)))
             self.broadcast_variable_size_tensor(self.hidden_states[conv_id], current_rank, source_rank)
