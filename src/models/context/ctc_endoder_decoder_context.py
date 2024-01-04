@@ -2,6 +2,7 @@ import inspect
 from typing import Any, Callable, Dict, List, Optional, Tuple, Union
 
 import torch
+import torch.distributed as dist
 from torch import nn
 from torch.nn.utils.rnn import pad_sequence
 from transformers import (
@@ -33,6 +34,7 @@ class ContextManager:
         self.hidden_states = {}
         self.context_vectors = {}
         self.current_conversations = None
+        self.global_convs = None
         self.memory = MemoryCell(config)
         self.hidden_init = nn.Parameter(torch.zeros(0, config.hidden_size))
         self.memory_init = nn.Parameter(torch.zeros(config.memory_dim, config.hidden_size))
@@ -43,6 +45,7 @@ class ContextManager:
         self.hidden_states = {}
         self.context_vectors = {}
         self.current_conversations = None
+        self.global_convs = None
         self.input_id_lens = None
 
     def erase_memory_cells(self, conv_ids):
@@ -52,14 +55,41 @@ class ContextManager:
             if conv_id in self.context_vectors:
                 del self.context_vectors[conv_id]
 
-    def set_current_conversations(self, ids, device):
+    def set_current_conversations(self, ids, global_ids):
         self.current_conversations = ids
-        for conv_id in list(set(self.current_conversations)):
+        self.global_convs = global_ids
 
+    def init_conversations(self, ids, device):
+        for conv_id in list(set(ids)):
             if conv_id not in self.hidden_states:
                 self.hidden_states[conv_id] = self.hidden_init.to(device)
             if conv_id not in self.context_vectors:
                 self.context_vectors[conv_id] = self.memory_init.to(device)
+
+    def synchronize_states(self):
+        current_rank = dist.get_rank()
+        world_size = dist.get_world_size()
+        for conv_id in self.global_convs:
+            is_local = torch.tensor(conv_id in self.current_conversations)
+            source_rank = [torch.tensor(False) for _ in range(world_size)]
+            dist.all_gather(source_rank, is_local)
+            source_rank = int(torch.argwhere(torch.tensor(source_rank)))
+            self.broadcast_variable_size_tensor(self.hidden_states[conv_id], current_rank, source_rank)
+            self.broadcast_variable_size_tensor(self.context_vectors[conv_id], current_rank, source_rank)
+
+    @staticmethod
+    def broadcast_variable_size_tensor(tensor, current_rank, source_rank):
+        # Broadcast the size of the tensor
+        size = list(tensor.size())
+        dist.broadcast_object_list(size, src=source_rank)
+
+        # Allocate a new tensor with the received size
+        if current_rank != source_rank:
+            tensor = torch.empty(size, dtype=tensor.dtype, device=tensor.device)
+
+        # Broadcast the actual tensor data
+        dist.broadcast(tensor, src=source_rank)
+        return tensor
 
     def save_state(self, hidden_states, memory_states, hidden_lens):
         if not self.is_decoding:
@@ -68,6 +98,8 @@ class ContextManager:
             ):
                 self.hidden_states[conv_id] = hidden_state[:hidden_len].detach().clone()
                 self.context_vectors[conv_id] = memory_state.detach().clone()
+            if dist.is_available() and dist.is_initialized():
+                self.synchronize_states()
 
     def set_input_id_lens(self, input_id_lens):
         self.input_id_lens = input_id_lens
@@ -153,9 +185,10 @@ class ContextHolder(TrainerCallback):
         for block in self.context_blocks:
             block.reset_state()
 
-    def set_conversations(self, ids, device):
+    def set_conversations(self, global_ids, local_ids, device):
         for block in self.context_blocks:
-            block.set_current_conversations(ids, device)
+            block.set_current_conversations(local_ids, global_ids)
+            block.init_conversations(global_ids, device)
 
     def erase_memory_cells(self, conv_ids):
         for block in self.context_blocks:
@@ -275,6 +308,16 @@ class JointCTCAttentionEncoderDecoderWithContext(JointCTCAttentionEncoderDecoder
 
         return input_ids, model_kwargs
 
+    def get_recording_ids(self, kwargs):
+        recording_ids = kwargs.get(self.config.conv_ids_column_name, [])
+        if dist.is_available() and dist.is_initialized():
+            all_ids = [None for _ in range(dist.get_world_size())]
+            dist.all_gather_object(all_ids, recording_ids)
+            all_processed_conversations = sorted(list(set([item for local_ids in all_ids for item in local_ids])))
+        else:
+            all_processed_conversations = recording_ids
+        return recording_ids, all_processed_conversations
+
     def forward(
         self,
         inputs: Optional[torch.FloatTensor] = None,
@@ -293,8 +336,10 @@ class JointCTCAttentionEncoderDecoderWithContext(JointCTCAttentionEncoderDecoder
         return_dict: Optional[bool] = None,
         **kwargs,
     ) -> Union[Tuple[torch.FloatTensor], Seq2SeqLMOutputLosses]:
-        recording_ids = kwargs.pop(self.config.conv_ids_column_name, [])
-        self.context_manager.set_conversations(recording_ids, device=self.device)
+        recording_ids, all_processed_conversations = self.get_recording_ids(kwargs)
+        del kwargs[self.config.conv_ids_column_name]
+        self.context_manager.set_conversations(all_processed_conversations, recording_ids, device=self.device)
+
         if (labels is not None) and (decoder_input_ids is None and decoder_inputs_embeds is None):
             decoder_input_ids = shift_tokens_right(labels, self.config.pad_token_id, self.config.decoder_start_token_id)
 
@@ -330,8 +375,8 @@ class JointCTCAttentionEncoderDecoderWithContext(JointCTCAttentionEncoderDecoder
         streamer: Optional["BaseStreamer"] = None,
         **kwargs,
     ) -> Union[GenerateOutput, torch.LongTensor]:
-        recording_ids = kwargs.get(self.config.conv_ids_column_name, [])
-        self.context_manager.set_conversations(recording_ids, device=self.device)
+        recording_ids, all_processed_conversations = self.get_recording_ids(kwargs)
+        self.context_manager.set_conversations(all_processed_conversations, recording_ids, device=self.device)
         self.context_manager.started_decoding()
         # pylint: disable=E1101
         output = super().generate(
@@ -346,7 +391,7 @@ class JointCTCAttentionEncoderDecoderWithContext(JointCTCAttentionEncoderDecoder
             **kwargs,
         )
         self.context_manager.finished_decoding()
-        self.context_manager.set_conversations(kwargs["recording_id"], self.device)
+        self.context_manager.set_conversations(all_processed_conversations, recording_ids, device=self.device)
         pseudo_labels = output[:, 1:].clone()
         pseudo_labels[pseudo_labels == self.generation_config.pad_token_id] = -100
         kwargs_copy = kwargs.copy()

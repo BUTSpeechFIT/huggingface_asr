@@ -179,7 +179,13 @@ class ContextAwareTrainer(Seq2SeqTrainer):
             ):
                 raise NotImplementedError("Not implemented yet")
             else:
-                raise NotImplementedError("Not implemented yet")
+                return RandomSamplerWithDependency(
+                    self.train_dataset,
+                    self.args.train_batch_size * self.args.gradient_accumulation_steps * self.args.world_size,
+                    conv_ids=conv_ids,
+                    turn_idxs=turn_idxs,
+                    generator=generator,
+                )
 
     def _get_eval_sampler(self, eval_dataset: Dataset) -> Optional[torch.utils.data.Sampler]:
         conv_ids = eval_dataset[self.conv_ids_column_name]
@@ -193,7 +199,12 @@ class ContextAwareTrainer(Seq2SeqTrainer):
                 eval_dataset, self.args.per_device_eval_batch_size, conv_ids=conv_ids, turn_idxs=turn_idxs
             )
         else:
-            raise NotImplementedError("Not implemented yet")
+            return RandomSamplerWithDependency(
+                eval_dataset,
+                self.args.per_device_eval_batch_size * self.args.world_size,
+                conv_ids=conv_ids,
+                turn_idxs=turn_idxs,
+            )
 
     def evaluate(
         self,
