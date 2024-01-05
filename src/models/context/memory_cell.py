@@ -46,12 +46,8 @@ class MemoryCell(nn.Module):
         self.config = config
 
         # Initialize (0th time stamp) memory cells as parameters + positional embeddings (MxH)
-        self.memory_init = torch.randn(1, config.memory_dim, config.hidden_size)
-        nn.init.normal_(self.memory_init)
-        self.memory_init = nn.Parameter(self.memory_init)
-
-        self.hidden_init = torch.randn(1, 0, config.hidden_size)
-        self.hidden_init = nn.Parameter(self.hidden_init)
+        self.hidden_init = nn.Parameter(torch.zeros(0, config.hidden_size))
+        self.memory_init = nn.Parameter(torch.zeros(config.memory_dim, config.hidden_size))
 
         self.memory_positional_embeddings = LearnablePositionalEmbedding(config.memory_dim, config.hidden_size)
 

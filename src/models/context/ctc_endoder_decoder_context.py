@@ -36,8 +36,6 @@ class ContextManager:
         self.current_conversations = None
         self.global_convs = None
         self.memory = MemoryCell(config)
-        self.hidden_init = nn.Parameter(torch.zeros(0, config.hidden_size))
-        self.memory_init = nn.Parameter(torch.zeros(config.memory_dim, config.hidden_size))
         self.input_id_lens = None
         self.is_decoding = False
         self.device = None
@@ -64,9 +62,9 @@ class ContextManager:
         self.device = device
         for conv_id in list(set(ids)):
             if conv_id not in self.hidden_states:
-                self.hidden_states[conv_id] = self.hidden_init.to(device)
+                self.hidden_states[conv_id] = self.memory.hidden_init.to(device)
             if conv_id not in self.context_vectors:
-                self.context_vectors[conv_id] = self.memory_init.to(device)
+                self.context_vectors[conv_id] = self.memory.memory_init.to(device)
 
     def synchronize_states(self):
         current_rank = dist.get_rank()
@@ -83,9 +81,12 @@ class ContextManager:
             device=self.device,
         )
         dist.all_reduce(hidden_lengths)
-        hidden_states_to_synchronize = torch.zeros((hidden_lengths.sum(), self.hidden_init.size(1)), device=self.device)
+        hidden_states_to_synchronize = torch.zeros(
+            (hidden_lengths.sum(), self.memory.hidden_init.size(1)), device=self.device
+        )
         context_states_to_synchronize = torch.zeros(
-            (self.memory_init.size(0) * len(self.global_convs), self.memory_init.size(1)), device=self.device
+            (self.memory.memory_init.size(0) * len(self.global_convs), self.memory.memory_init.size(1)),
+            device=self.device,
         )
         ends = torch.cumsum(hidden_lengths, dim=0)
         starts = ends - hidden_lengths
@@ -93,7 +94,7 @@ class ContextManager:
             if source_rank == current_rank:
                 hidden_states_to_synchronize[start:end, ...] = self.hidden_states[conv_id]
                 context_states_to_synchronize[
-                    index * self.memory_init.size(0) : (index + 1) * self.memory_init.size(0), ...
+                    index * self.memory.memory_init.size(0) : (index + 1) * self.memory.memory_init.size(0), ...
                 ] = self.context_vectors[conv_id]
         dist.all_reduce(hidden_states_to_synchronize)
         dist.all_reduce(context_states_to_synchronize)
@@ -101,7 +102,7 @@ class ContextManager:
         for index, (conv_id, start, end) in enumerate(zip(self.global_convs, starts, ends)):
             self.hidden_states[conv_id] = hidden_states_to_synchronize[start:end, ...]
             self.context_vectors[conv_id] = context_states_to_synchronize[
-                index * self.memory_init.size(0) : (index + 1) * self.memory_init.size(0), ...
+                index * self.memory.memory_init.size(0) : (index + 1) * self.memory.memory_init.size(0), ...
             ]
 
     @staticmethod
