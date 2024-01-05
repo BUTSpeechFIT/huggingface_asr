@@ -150,7 +150,8 @@ class ContextManager:
 
             if attention_mask is not None:
                 attention_mask_mha = (
-                    attention_mask.squeeze(dim=1)[:, : self.memory_dim, :]
+                    attention_mask.squeeze(dim=1)[:, :1, ...]
+                    .repeat_interleave(self.memory_dim, dim=1)
                     .repeat_interleave(self.layer.memory.output_attention.num_heads, dim=0)
                     .transpose(1, 2)
                 )
@@ -158,11 +159,13 @@ class ContextManager:
 
             else:
                 hidden_lens = self.input_id_lens
-                attention_mask_mha = torch.ones(
-                    (len(hidden_lens), hidden_states.size(1), self.memory_dim), device=hidden_states.device
+                attention_mask_mha = torch.zeros(
+                    (len(hidden_lens), hidden_states.size(1), self.memory_dim),
+                    device=hidden_states.device,
+                    dtype=torch.bool,
                 )
                 for index, hidden_len in enumerate(hidden_lens):
-                    attention_mask_mha[index, hidden_len:, :] = 0
+                    attention_mask_mha[index, hidden_len:, :] = 1
                 attention_mask_mha = attention_mask_mha.repeat_interleave(
                     self.layer.memory.output_attention.num_heads, dim=0
                 )
@@ -300,17 +303,11 @@ class JointCTCAttentionEncoderDecoderWithContext(JointCTCAttentionEncoderDecoder
     def prepare_inputs_for_generation(
         self, input_ids, past_key_values=None, attention_mask=None, use_cache=None, encoder_outputs=None, **kwargs
     ):
-        decoder_inputs = self.decoder.prepare_inputs_for_generation(input_ids, past_key_values=past_key_values)
-        decoder_attention_mask = decoder_inputs["attention_mask"] if "attention_mask" in decoder_inputs else None
-        input_dict = {
-            "attention_mask": attention_mask,
-            "decoder_attention_mask": decoder_attention_mask,
-            "decoder_input_ids": decoder_inputs["input_ids"],
-            "encoder_outputs": encoder_outputs,
-            "past_key_values": decoder_inputs["past_key_values"],
-            "use_cache": use_cache,
-            self.config.conv_ids_column_name: kwargs[self.config.conv_ids_column_name],
-        }
+        # pylint: disable=E1101
+        input_dict = super().prepare_inputs_for_generation(
+            input_ids, past_key_values, attention_mask, use_cache, encoder_outputs, **kwargs
+        )
+        input_dict[self.config.conv_ids_column_name] = kwargs[self.config.conv_ids_column_name]
         return input_dict
 
     @staticmethod
