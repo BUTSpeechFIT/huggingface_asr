@@ -281,7 +281,7 @@ def instantiate_aed_model(
         model_path = model_args.from_pretrained
         if model_args.average_checkpoints:
             model_path = average_checkpoints(model_path)
-        model = AutoModelForSpeechSeq2Seq.from_pretrained(model_path, config=config)
+        model = AutoModelForSpeechSeq2Seq.from_pretrained(model_path, config=config, ignore_mismatched_sizes=True)
     elif model_args.from_encoder_decoder_config:
         config = fetch_config(
             model_args.base_encoder_model,

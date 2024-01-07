@@ -162,10 +162,10 @@ class ContextManager:
                 attention_mask_mha = torch.zeros(
                     (len(hidden_lens), hidden_states.size(1), self.memory_dim),
                     device=hidden_states.device,
-                    dtype=torch.bool,
+                    dtype=torch.float32,
                 )
                 for index, hidden_len in enumerate(hidden_lens):
-                    attention_mask_mha[index, hidden_len:, :] = 1
+                    attention_mask_mha[index, hidden_len:, :] = torch.finfo(torch.float32).min
                 attention_mask_mha = attention_mask_mha.repeat_interleave(
                     self.layer.memory.output_attention.num_heads, dim=0
                 )
@@ -173,10 +173,13 @@ class ContextManager:
             memory_mask = (
                 pad_sequence(
                     [
-                        torch.ones(prev_hidden_lens[index], self.memory_dim, device=hidden_states.device)
+                        torch.zeros(
+                            prev_hidden_lens[index], self.memory_dim, dtype=torch.float32, device=hidden_states.device
+                        )
                         for index in range(len(self.current_conversations))
                     ],
                     batch_first=True,
+                    padding_value=torch.finfo(torch.float32).min,
                 )
                 .repeat_interleave(self.layer.memory.update_attention.num_heads, dim=0)
                 .transpose(1, 2)
