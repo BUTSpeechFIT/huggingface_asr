@@ -27,8 +27,9 @@ from models.ctc_encoder_plus_autoregressive_decoder import (
 )
 
 
-class ContextManager:
-    def __init__(self, layer, config):
+class ContextManager(nn.Module):
+    def __init__(self, layer, config, *args, **kwargs):
+        super().__init__(*args, **kwargs)
         self.layer = layer
         self.memory_dim = config.memory_dim
         self.hidden_states = {}
@@ -125,8 +126,8 @@ class ContextManager:
             for conv_id, hidden_state, memory_state, hidden_len in zip(
                 self.current_conversations, hidden_states, memory_states, hidden_lens
             ):
-                self.hidden_states[conv_id] = hidden_state[:hidden_len].detach().clone()
-                self.context_vectors[conv_id] = memory_state.detach().clone()
+                self.hidden_states[conv_id] = hidden_state[:hidden_len].clone().detach()
+                self.context_vectors[conv_id] = memory_state.clone().detach()
             if dist.is_available() and dist.is_initialized():
                 self.synchronize_states()
 
@@ -150,7 +151,8 @@ class ContextManager:
 
             if attention_mask is not None:
                 attention_mask_mha = (
-                    attention_mask.squeeze(dim=1)[:, :1, ...]
+                    attention_mask.clone()
+                    .squeeze(dim=1)[:, :1, ...]
                     .repeat_interleave(self.memory_dim, dim=1)
                     .repeat_interleave(self.layer.memory.output_attention.num_heads, dim=0)
                     .transpose(1, 2)
@@ -159,31 +161,38 @@ class ContextManager:
 
             else:
                 hidden_lens = self.input_id_lens
-                attention_mask_mha = torch.zeros(
+                attention_mask_mha = -torch.zeros(
                     (len(hidden_lens), hidden_states.size(1), self.memory_dim),
                     device=hidden_states.device,
-                    dtype=torch.float32,
+                    dtype=hidden_states.dtype,
                 )
                 for index, hidden_len in enumerate(hidden_lens):
-                    attention_mask_mha[index, hidden_len:, :] = torch.finfo(torch.float32).min
+                    attention_mask_mha[index, hidden_len:, :] = torch.finfo(hidden_states.dtype).min
                 attention_mask_mha = attention_mask_mha.repeat_interleave(
                     self.layer.memory.output_attention.num_heads, dim=0
                 )
+                # attention_mask_mha = None
 
             memory_mask = (
                 pad_sequence(
                     [
-                        torch.zeros(
-                            prev_hidden_lens[index], self.memory_dim, dtype=torch.float32, device=hidden_states.device
+                        -torch.zeros(
+                            prev_hidden_lens[index],
+                            self.memory_dim,
+                            dtype=hidden_states.dtype,
+                            device=hidden_states.device,
                         )
                         for index in range(len(self.current_conversations))
                     ],
                     batch_first=True,
-                    padding_value=torch.finfo(torch.float32).min,
+                    padding_value=torch.finfo(hidden_states.dtype).min,
                 )
                 .repeat_interleave(self.layer.memory.update_attention.num_heads, dim=0)
                 .transpose(1, 2)
             )
+            # print(module)
+            # print((memory_mask != 0).reshape(memory_mask.shape[0], -1).all(dim=1).any())
+            # print((attention_mask_mha != 0).reshape(attention_mask_mha.shape[0], -1).all(dim=1).any())
 
             altered_hidden_states, altered_memory_state = module.memory(
                 hidden_states,
@@ -199,7 +208,7 @@ class ContextManager:
         self.layer.register_forward_hook(hook, with_kwargs=True)
 
 
-class ContextHolder(TrainerCallback):
+class ContextHolder(TrainerCallback, nn.Module):
     def __init__(self, enc_layers_to_attach_memory, dec_layers_to_attach_memory, config):
         super().__init__()
         self.context_blocks = []

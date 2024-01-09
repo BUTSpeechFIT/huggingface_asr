@@ -46,14 +46,17 @@ class MemoryCell(nn.Module):
         self.config = config
 
         # Initialize (0th time stamp) memory cells as parameters + positional embeddings (MxH)
-        self.hidden_init = nn.Parameter(torch.zeros(0, config.hidden_size))
-        self.memory_init = nn.Parameter(torch.zeros(config.memory_dim, config.hidden_size))
+        self.hidden_init = nn.Parameter(torch.randn(1, config.hidden_size))
+        self.memory_init = nn.Parameter(torch.randn(config.memory_dim, config.hidden_size))
 
         self.memory_positional_embeddings = LearnablePositionalEmbedding(config.memory_dim, config.hidden_size)
 
         # Initialize update memory
         self.update_attention = nn.MultiheadAttention(
-            config.hidden_size, num_heads=config.num_attention_heads, dropout=config.attention_dropout, batch_first=True
+            config.hidden_size,
+            num_heads=config.num_attention_heads,
+            dropout=config.attention_dropout,
+            batch_first=True,
         )
         self.update_norm1 = nn.LayerNorm(config.hidden_size)
         self.update_ff = FeedForward(config)
@@ -61,13 +64,16 @@ class MemoryCell(nn.Module):
 
         # Initialize output memory
         self.output_attention = nn.MultiheadAttention(
-            config.hidden_size, num_heads=config.num_attention_heads, dropout=config.attention_dropout, batch_first=True
+            config.hidden_size,
+            num_heads=config.num_attention_heads,
+            dropout=config.attention_dropout,
+            batch_first=True,
         )
         self.output_norm = nn.LayerNorm(config.hidden_size)
 
     def forward(self, hidden_states, prev_hidden_states, prev_memory_state, memory_mask=None, attention_mask_mha=None):
         """Actualize memory state"""
-
+        # print(f"hidden_states: {hidden_states}, prev_hidden_states: {prev_hidden_states}, prev_memory_state: {prev_memory_state}, memory_mask: {memory_mask}, attention_mask_mha: {attention_mask_mha}")
         """Update prev memory state with positional embeddings"""
         # Equation 4: Mt-1 = Mt-1 + PE(Mt-1)
         memory_state = self.memory_positional_embeddings(prev_memory_state)
@@ -76,7 +82,11 @@ class MemoryCell(nn.Module):
         # Equation 2: Mt-1_tilde = AddNorm(MHA(Mt-1, ht-1, ht-1))
         residual = memory_state
         temporal_memory_state, _ = self.update_attention(
-            memory_state, prev_hidden_states, prev_hidden_states, attn_mask=memory_mask
+            query=memory_state,
+            key=prev_hidden_states,
+            value=prev_hidden_states,
+            attn_mask=memory_mask,
+            need_weights=False,
         )
         temporal_memory_state = self.update_norm1(temporal_memory_state + residual)
 
@@ -89,7 +99,11 @@ class MemoryCell(nn.Module):
         residual = hidden_states
         # Equation 5: ht_tilde = MHA(ht, Mt, Mt)
         hidden_states, _ = self.output_attention(
-            hidden_states, current_memory_state, current_memory_state, attn_mask=attention_mask_mha
+            query=hidden_states,
+            key=current_memory_state,
+            value=current_memory_state,
+            attn_mask=attention_mask_mha,
+            need_weights=False,
         )
         hidden_states = hidden_states + residual
         hidden_states = self.output_norm(hidden_states)
