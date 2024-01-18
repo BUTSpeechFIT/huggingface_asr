@@ -1,0 +1,27 @@
+[
+  {
+    "dataset_name": "google/fleurs",
+    "dataset_id": "fleurs",
+    "load_from_disk": false,
+    "train_splits": [
+      "train"
+    ],
+    "dev_splits": [
+      "validation"
+    ],
+    "test_splits": [
+      "test"
+    ],
+    "text_column_name": "transcription",
+    "audio_column_name": "audio",
+    "length_column_name": "input_len",
+    "text_transformations": [
+      "whisper_normalize_english",
+      "clean_special_tokens_english_train",
+      "transforms_unfinished_words_to_unks_train"
+    ],
+    "additional_args": {
+      "name": "en_us"
+    }
+  }
+]
