@@ -6,6 +6,7 @@ import os
 import wave
 from itertools import groupby
 from typing import Iterable, List, Optional, Tuple, Union
+from transformers.utils import logging
 
 import datasets
 import kaldiio
@@ -13,38 +14,78 @@ import librosa
 import numpy as np
 
 _FILEPATHS = {
-    "feats": "wav.scp",
+    "audios": "wav.scp",
     "segments": "segments",
     "transcripts": "text",
-    "channels2recordings": "reco2file_and_channel",
+    "segments2speakers": "utt2spk", # not used
+    "speakers2segments": "spk2utt", # not used
+}
+
+_DATASET_TYPE = {
+    "audio_only": 1,     # expects only wav.scp and segments Kaldi files to be defined
+    "text_only": 2,      # expects only text Kaldi file to be defined
+    "dialog": 3,         # not used - expects only text, spk2utt, utt2spk Kaldi files to be defined
+    "full": 4,           # expects all Kaldi files to be defined
 }
 
 
 class KaldiDataset(datasets.GeneratorBasedBuilder):
-    """Dataset builder for Fisher dataset"""
+    """Dataset builder for Kaldi format dataset"""
 
     DEFAULT_WRITER_BATCH_SIZE = 50  # the default size of the batch may not fit in memory
 
-    def __init__(self, data_dir: Optional[str], splits: List[str], sampling_rate: int = 16000, **kwargs):
+    def __init__(self, data_dir: Optional[str], splits: List[str], sampling_rate: int = 16_000, data_type: str = "full", **kwargs):
         super().__init__(data_dir=data_dir, **kwargs)
         self.sampling_rate = sampling_rate
         self.data_dir = data_dir
         self.splits = splits
+        self.data_type = _DATASET_TYPE[data_type]
+        self.logger = logging.get_logger("transformers")
+        if self.data_type == _DATASET_TYPE["dialog"]:
+            self.logger.critical("Kaldi data type 'dialog' is not implemented.")
 
     def _info(self):
-        return datasets.DatasetInfo(
-            features=datasets.Features(
-                {
-                    "audio": datasets.Audio(sampling_rate=16_000),
-                    "labels": datasets.Value("string"),
-                    "uttid": datasets.Value("string"),
-                    "recording": datasets.Value("string"),
-                    "turn_index": datasets.Value("int32"),
-                    "input_len": datasets.Value("float32"),
-                }
-            ),
-            supervised_keys=None,
-        )
+        match self.data_type:
+            case _DATASET_TYPE["full"]:
+                return datasets.DatasetInfo(
+                    features=datasets.Features(
+                        {
+                            "audio": datasets.Audio(sampling_rate=16_000),
+                            "labels": datasets.Value("string"),
+                            "uttid": datasets.Value("string"),
+                            "recording": datasets.Value("string"),
+                            "turn_index": datasets.Value("int32"),
+                            "input_len": datasets.Value("float32"),
+                        }
+                    ),
+                    supervised_keys=None,
+                )
+            case _DATASET_TYPE["text_only"]:
+                return datasets.DatasetInfo(
+                    features=datasets.Features(
+                        {
+                            "labels": datasets.Value("string"),
+                            "uttid": datasets.Value("string"),
+                        }
+                    ),
+                    supervised_keys=None,
+                )
+            case _DATASET_TYPE["audio_only"]:
+                return datasets.DatasetInfo(
+                    features=datasets.Features(
+                        {
+                            "audio": datasets.Audio(sampling_rate=16_000),
+                            "uttid": datasets.Value("string"),
+                            "recording": datasets.Value("string"),
+                            "turn_index": datasets.Value("int32"),
+                            "input_len": datasets.Value("float32"),
+                        }
+                    ),
+                    supervised_keys=None,
+                )
+            case _:
+                self.logger.critical("Kaldi data type '%i' is not implemented." % self.data_type)
+                return None
 
     def _prepare_split_single(
         self,
@@ -82,20 +123,29 @@ class KaldiDataset(datasets.GeneratorBasedBuilder):
     def _fetch_split_meta(self, split: str):
         """Fetch split meta data from kaldi-like dataset"""
 
-        with open(os.path.join(self.data_dir, split, _FILEPATHS["transcripts"])) as file:
-            texts = dict(map(lambda line: self._split_text_string(line), file))  # creates (segment_id -> text) mapping
+        text_file = os.path.join(self.data_dir, split, _FILEPATHS["transcripts"])
+        segm_file = os.path.join(self.data_dir, split, _FILEPATHS["segments"])
+        feat_file = os.path.join(self.data_dir, split, _FILEPATHS["audios"])
 
-        segments_file = os.path.join(self.data_dir, split, _FILEPATHS["segments"])
-        if os.path.exists(segments_file):
-            with open(segments_file) as file:
+
+        if os.path.exists(text_file):
+            with open(text_file) as file:
+                texts = dict(map(lambda line: self._split_text_string(line), file))  # creates (segment_id -> text) mapping
+        else:
+            self.logger.warning("Segment file %s does not exists. Creating a dummy segmentation 0 -> -1." % segm_file)
+
+        segm_file = os.path.join(self.data_dir, split, _FILEPATHS["segments"])
+        if os.path.exists(segm_file):
+            with open(segm_file) as file:
                 segments = dict(map(lambda s: self._parse_segment_info(*s.strip().split()), file))
         else:
             """If segments file does not exist, create dummy mapping (segment_id -> (segment_id, 0, -1))"""
+            self.logger.warning("Segment file %s does not exists. Creating a dummy segmentation 0 -> -1." % segm_file)
             segments = dict(map(lambda s: (s, (s, 0, -1)), texts.keys()))
 
         # load kaldiio feature generator
-        featfile = os.path.join(self.data_dir, split, _FILEPATHS["feats"])
-        feats_generator = kaldiio.load_scp(featfile)
+        feat_file = os.path.join(self.data_dir, split, _FILEPATHS["audios"])
+        feats_generator = kaldiio.load_scp(feat_file)
         segments = [(*segments[uttid], uttid, transcript) for (uttid, transcript) in texts.items()]
         grouped_by_recordings = [(k, list(v)) for k, v in groupby(sorted(segments), key=lambda segment: segment[0])]
         return {

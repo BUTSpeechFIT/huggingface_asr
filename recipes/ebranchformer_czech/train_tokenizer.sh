@@ -6,33 +6,41 @@
 #SBATCH --time 24:00:00
 #SBATCH --output=/mnt/proj1/open-28-58/lakoc/huggingface_asr/outputs/ebranchformer_english_tokenizer.out
 
-EXPERIMENT="ebranchformer_english_tokenizer"
-PROJECT="regularizations_english_corpus"
-WORK_DIR="/mnt/proj1/open-28-58/lakoc/huggingface_asr"
-ENV_DIR="/mnt/proj1/open-28-58/lakoc/LoCo-ASR"
-RECIPE_DIR="${WORK_DIR}/recipes/ebranchformer_english"
+unset PYTHONPATH
+unset PYTHONHOME
+. /usr/local/share/Anaconda2/bin/activate python3
+conda activate /mnt/matylda6/szoke/CONDA_ENVS/huggingface_asr
 
-export HF_HOME="/scratch/project/open-28-57/lakoc/huggingface_cache"
+
+EXPERIMENT="ebranchformer_czech_small_v3" #wandb, dirname
+PROJECT="tokenizer_czech_corpus" #wandb
+WORK_DIR="/mnt/matylda6/szoke/HuggingFace/huggingface_asr/"
+#ENV_DIR="/mnt/matylda6/szoke/CONDA_ENVS/huggingface_asr/"
+RECIPE_DIR="${WORK_DIR}/recipes/ebranchformer_czech"
+
+export HF_HOME="/mnt/scratch/tmp/szoke/huggingface_cache" # do not forget to set the HF token in this cache!
 export PYTHONPATH="${PYTHONPATH}:${WORK_DIR}/src"
 export OMP_NUM_THREADS=64
+export WANDB_PROJECT=$PROJECT
+export WANDB_RUN_ID="${EXPERIMENT}"
 
-conda deactivate
-source activate loco_asr
+
+#conda deactivate
+#source activate loco_asr
+#conda deactivate
+#conda activate /mnt/matylda6/szoke/CONDA_ENVS/huggingface_asr
 
 EXPERIMENT_PATH="${WORK_DIR}/experiments/${EXPERIMENT}"
 
 cd $WORK_DIR
 
-python src/trainers/train_tokenizer.py \
-  --max_duration_in_seconds="20.0" \
-  --min_duration_in_seconds="0.0" \
+python ./src/trainers/train_tokenizer.py \
   --output_dir=$EXPERIMENT_PATH \
-  --length_column_name="input_len" \
   --preprocessing_num_workers="64" \
-  --datasets_creation_config="${RECIPE_DIR}/datasets.json" \
+  --datasets_creation_config="${RECIPE_DIR}/datasets_tokenizer_fit.json" \
   --writer_batch_size="1000" \
-  --tokenizer_name="Lakoc/english_corpus_uni5000" \
-  --vocab_size=5000 \
+  --tokenizer_name="szoke/czech_corpus_uni2000" \
+  --vocab_size=2000 \
   --tokenizer_type="unigram" \
   --text_column_name="text" \
   --train_split="train" \

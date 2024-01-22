@@ -100,7 +100,7 @@ if __name__ == "__main__":
     parser = HfArgumentParser((TokenizerTrainingArguments, DataTrainingArguments, GeneralTrainingArguments))
 
     tokenizer_args, data_args, training_args = parser.parse_args_into_dataclasses()
-
+    print(tokenizer_args, data_args, training_args)
     # 0. Skip if exists
     if tokenizer_args.skip_if_exists is not None and repo_exists(tokenizer_args.skip_if_exists):
         logger.warning(f"Tokenizer {tokenizer_args.skip_if_exists} already exists. Skipping training.")
