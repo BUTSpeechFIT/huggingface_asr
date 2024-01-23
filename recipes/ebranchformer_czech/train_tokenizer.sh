@@ -39,8 +39,8 @@ python ./src/trainers/train_tokenizer.py \
   --preprocessing_num_workers="8" \
   --datasets_creation_config="${RECIPE_DIR}/datasets_tokenizer_fit.json" \
   --writer_batch_size="1000" \
-  --tokenizer_name="szoke/czech_corpus_uni2000" \
-  --vocab_size=2000 \
+  --tokenizer_name="iszoke/czech_tokenizer_uni5000" \
+  --vocab_size=5000 \
   --tokenizer_type="unigram" \
   --text_column_name="text" \
   --train_split="train" \
