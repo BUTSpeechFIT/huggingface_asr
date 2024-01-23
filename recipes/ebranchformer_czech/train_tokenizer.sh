@@ -36,7 +36,7 @@ cd $WORK_DIR
 
 python ./src/trainers/train_tokenizer.py \
   --output_dir=$EXPERIMENT_PATH \
-  --preprocessing_num_workers="64" \
+  --preprocessing_num_workers="8" \
   --datasets_creation_config="${RECIPE_DIR}/datasets_tokenizer_fit.json" \
   --writer_batch_size="1000" \
   --tokenizer_name="szoke/czech_corpus_uni2000" \

@@ -1,0 +1,21 @@
+[
+  {
+    "dataset_name": "text",
+    "dataset_id": "bison",
+    "load_from_disk": false,
+    "train_splits": [
+      "train"
+    ],
+    "dev_splits": [
+    ],
+    "test_splits": [
+    ],
+    "text_column_name": "labels",
+    "text_transformations": [
+      "transforms_unfinished_words_to_unks_train"
+    ],
+    "additional_args": {
+      "data_dir": "/mnt/matylda6/szoke/HuggingFace/huggingface_asr/metadata_dirs/bison_cz/train/"
+    }
+  }
+]
