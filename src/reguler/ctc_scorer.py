@@ -1,6 +1,14 @@
 # pylint: skip-file
 # Copied from: https://github.com/espnet/espnet/blob/master/espnet/nets/ctc_prefix_score.py
 import torch
+from transformers import GenerationConfig, LogitsProcessor
+
+
+class GenerationConfigWithCTC(GenerationConfig):
+    def __init__(self, ctc_weight=0.0, ctc_margin=0, **kwargs):
+        super().__init__(**kwargs)
+        self.ctc_weight = ctc_weight
+        self.ctc_margin = ctc_margin
 
 
 class CTCPrefixScoreTH(object):
@@ -253,3 +261,51 @@ class CTCPrefixScoreTH(object):
                 r_prev_new[t, 1] = r_prev_new[t - 1, 1] + self.x[0, t, :, self.blank]
 
             return (r_prev_new, s_prev, f_min_prev, f_max_prev)
+
+
+class CTCRescorerLogitsProcessor(LogitsProcessor):
+    def __init__(
+        self,
+        encoder_logits: torch.FloatTensor,
+        encoder_output_lens: torch.LongTensor,
+        pad_token_id: int,
+        eos_token_id: int,
+        ctc_margin: int,
+        ctc_weight: float,
+        num_beams: int,
+    ):
+        super().__init__()
+        self.pad_token_id = pad_token_id
+        self.ctc_prefix_scorer = CTCPrefixScoreTH(
+            torch.nn.functional.log_softmax(encoder_logits, dim=-1),
+            encoder_output_lens,
+            pad_token_id,
+            eos_token_id,
+            ctc_margin,
+        )
+        self.ctc_weight = ctc_weight
+        self.ctc_states = None
+        self.num_beams = num_beams
+
+    def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor) -> torch.FloatTensor:
+        scores[:, self.pad_token_id] = self.ctc_prefix_scorer.logzero
+        if self.ctc_states is not None:
+            self.ctc_states = self.ctc_prefix_scorer.index_select_state(
+                self.ctc_states, input_ids[:, -1].reshape(-1, self.num_beams)
+            )
+        ctc_scores, ctc_states = self.ctc_prefix_scorer(input_ids, self.ctc_states)
+        self.ctc_states = ctc_states
+        next_token_scores = (1 - self.ctc_weight) * scores + self.ctc_weight * ctc_scores
+        # return scores
+        return next_token_scores
+
+
+class LogSoftmaxProcessor(LogitsProcessor):
+    def __init__(
+        self,
+    ):
+        super().__init__()
+
+    def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor) -> torch.FloatTensor:
+        scores = torch.nn.functional.log_softmax(scores, dim=-1)
+        return scores

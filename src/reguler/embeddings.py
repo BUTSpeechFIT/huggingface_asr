@@ -62,7 +62,7 @@ class AdaptiveEmbedding(nn.Module):
         return embed
 
 
-class PositionalEmbedding(nn.Module):
+class PositionalEmbeddingAux(nn.Module):
     def __init__(self, demb):
         super().__init__()
 
@@ -79,3 +79,8 @@ class PositionalEmbedding(nn.Module):
             return pos_emb[:, None, :].expand(-1, bsz, -1)
         else:
             return pos_emb[:, None, :]
+
+
+class PositionalEmbedding(PositionalEmbeddingAux):
+    def forward(self, pos_seq, bsz=None):
+        return super().forward(pos_seq.squeeze(0), bsz=bsz).squeeze(1)

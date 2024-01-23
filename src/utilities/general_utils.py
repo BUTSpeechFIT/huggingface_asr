@@ -15,11 +15,7 @@ from transformers import (
 from transformers.generation.utils import BeamSearchOutput
 from transformers.utils import logging
 
-from utilities.generation_utils import (
-    check_and_activate_joint_decoding,
-    save_nbests,
-    save_predictions,
-)
+from utilities.generation_utils import save_nbests, save_predictions
 from utilities.training_arguments import (
     DataTrainingArguments,
     GeneralTrainingArguments,
@@ -116,12 +112,10 @@ def do_evaluate(
     gen_args: Optional[GenerationArguments],
     training_args: GeneralTrainingArguments,
     data_args: DataTrainingArguments,
-    eos_token_id: int,
 ):
     if data_args.test_splits is None:
         return
     if isinstance(trainer, Seq2SeqTrainer) and isinstance(model, SpeechEncoderDecoderModel):
-        check_and_activate_joint_decoding(gen_args, model, tokenizer, eos_token_id)
         trainer.args.per_device_eval_batch_size = math.ceil(
             trainer.args.per_device_eval_batch_size / gen_args.eval_beam_factor
         )
@@ -152,11 +146,9 @@ def do_generate(
     gen_args: GenerationArguments,
     data_args: DataTrainingArguments,
     gen_config: GenerationConfig,
-    eos_token_id: int,
 ):
     if data_args.test_splits is None:
         return
-    check_and_activate_joint_decoding(gen_args, model, tokenizer, eos_token_id)
 
     gen_config.num_return_sequences = gen_args.num_predictions_to_return
     gen_config.return_dict_in_generate = True

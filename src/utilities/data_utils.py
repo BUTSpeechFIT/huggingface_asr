@@ -179,7 +179,11 @@ def prepare_dataset(
 ) -> DatasetDict:
     """Preprocesses dataset."""
     # 1. Preprocess audio columns
-    if length_column_name not in set().union(*dataset.column_names.values()) or "kaldi_dataset" in dataset_name:
+    if (
+        length_column_name is not None
+        and length_column_name not in set().union(*dataset.column_names.values())
+        or "kaldi_dataset" in dataset_name
+    ):
         dataset = distributed_process(
             dataset,
             process_by="map",
@@ -192,7 +196,7 @@ def prepare_dataset(
             desc="Extracting audio lens",
         )
 
-    if train_split is not None:
+    if length_column_name is not None and train_split is not None:
         dataset[train_split] = distributed_process(
             dataset[train_split],
             process_by="filter",
@@ -206,12 +210,25 @@ def prepare_dataset(
         )
 
     # 2. Preprocess label columns
-    for transformation_name in text_transformations:
-        if transformation_name.endswith("_train"):
-            if train_split is not None:
-                transformation = globals()[re.sub("_train", "", transformation_name)]
-                dataset[train_split] = distributed_process(
-                    dataset[train_split],
+    if text_column_name is not None:
+        for transformation_name in text_transformations:
+            if transformation_name.endswith("_train"):
+                if train_split is not None:
+                    transformation = globals()[re.sub("_train", "", transformation_name)]
+                    dataset[train_split] = distributed_process(
+                        dataset[train_split],
+                        process_by="map",
+                        function=transformation,
+                        input_columns=[text_column_name],
+                        num_proc=preprocessing_num_workers,
+                        writer_batch_size=writer_batch_size,
+                        fn_kwargs={"label_column": text_column_name},
+                        desc=f"Applying {transformation_name} transformation",
+                    )
+            else:
+                transformation = globals()[transformation_name]
+                dataset = distributed_process(
+                    dataset,
                     process_by="map",
                     function=transformation,
                     input_columns=[text_column_name],
@@ -220,34 +237,24 @@ def prepare_dataset(
                     fn_kwargs={"label_column": text_column_name},
                     desc=f"Applying {transformation_name} transformation",
                 )
-        else:
-            transformation = globals()[transformation_name]
-            dataset = distributed_process(
-                dataset,
-                process_by="map",
-                function=transformation,
-                input_columns=[text_column_name],
-                num_proc=preprocessing_num_workers,
-                writer_batch_size=writer_batch_size,
-                fn_kwargs={"label_column": text_column_name},
-                desc=f"Applying {transformation_name} transformation",
-            )
 
-    # 3. Remove segments with empty annotations
-    dataset = distributed_process(
-        dataset,
-        process_by="filter",
-        function=filter_empty_transcriptions,
-        input_columns=[text_column_name],
-        writer_batch_size=writer_batch_size,
-        num_proc=preprocessing_num_workers,
-        desc="Filtering out empty transcriptions",
-    )
+        # 3. Remove segments with empty annotations
+        dataset = distributed_process(
+            dataset,
+            process_by="filter",
+            function=filter_empty_transcriptions,
+            input_columns=[text_column_name],
+            writer_batch_size=writer_batch_size,
+            num_proc=preprocessing_num_workers,
+            desc="Filtering out empty transcriptions",
+        )
 
     logger.info("Casting audio column to Audio, and length column to float32")
     feature_types = dataset[list(dataset.keys())[0]].features
-    feature_types[audio_column_name] = Audio(sampling_rate=sampling_rate)
-    feature_types[length_column_name] = Value(dtype="float32")
+    if audio_column_name is not None:
+        feature_types[audio_column_name] = Audio(sampling_rate=sampling_rate)
+    if length_column_name is not None:
+        feature_types[length_column_name] = Value(dtype="float32")
     for split in dataset:
         dataset[split] = distributed_process(
             dataset[split],
@@ -346,28 +353,30 @@ def load_multiple_datasets(
         dataset_processed = prepare_dataset(
             dataset=dataset,
             dataset_name=dataset_config["dataset_name"],
-            length_column_name=dataset_config["length_column_name"],
-            text_column_name=dataset_config["text_column_name"],
-            audio_column_name=dataset_config["audio_column_name"],
+            length_column_name=dataset_config.get("length_column_name"),
+            text_column_name=dataset_config.get("text_column_name"),
+            audio_column_name=dataset_config.get("audio_column_name"),
             preprocessing_num_workers=num_proc,
             writer_batch_size=writer_batch_size,
             train_split=new_train_split_name,
-            text_transformations=dataset_config["text_transformations"],
+            text_transformations=dataset_config.get("text_transformations"),
             sampling_rate=sampling_rate,
             max_input_len=max_input_len,
             min_input_len=min_input_len,
         )
-        dataset_renamed = dataset_processed.rename_columns(
-            {
-                dataset_config["length_column_name"]: global_len_column,
-                dataset_config["text_column_name"]: global_text_column,
-                dataset_config["audio_column_name"]: global_audio_column,
-            }
-        )
-        dataset_local = dataset_renamed.remove_columns(
+
+        for column, global_column in [
+            ("length_column_name", global_len_column),
+            ("text_column_name", global_text_column),
+            ("audio_column_name", global_audio_column),
+        ]:
+            if dataset_config.get(column) is not None and dataset_config.get(column) != global_column:
+                dataset_processed = dataset_processed.rename_column(dataset_config.get(column), global_column)
+
+        dataset_local = dataset_processed.remove_columns(
             list(
                 set()
-                .union(*dataset_renamed.column_names.values())
+                .union(*dataset_processed.column_names.values())
                 .difference([global_len_column, global_text_column, global_audio_column])
             )
         )

@@ -4,19 +4,18 @@ import sys
 from transformers import (
     AutoFeatureExtractor,
     AutoTokenizer,
-    GenerationConfig,
     HfArgumentParser,
     Seq2SeqTrainer,
     WhisperForConditionalGeneration,
 )
 from transformers.utils import logging
 
+from decoding.ctc_scorer import GenerationConfigWithCTC
 from utilities.callbacks import init_callbacks
 from utilities.collators import SpeechCollatorWithPadding
 from utilities.data_utils import get_dataset
 from utilities.eval_utils import compute_metrics
 from utilities.general_utils import do_evaluate, do_generate
-from utilities.generation_utils import activate_joint_decoding
 from utilities.model_utils import instantiate_aed_model
 from utilities.training_arguments import (
     DataTrainingArguments,
@@ -72,7 +71,7 @@ if __name__ == "__main__":
     model = instantiate_aed_model(model_args, tokenizer, feature_extractor)
 
     # 4. Update generation config
-    gen_config = GenerationConfig(
+    gen_config = GenerationConfigWithCTC(
         bos_token_id=tokenizer.bos_token_id,
         pad_token_id=tokenizer.pad_token_id,
         decoder_start_token_id=tokenizer.bos_token_id,
@@ -81,6 +80,8 @@ if __name__ == "__main__":
         eos_token_id=tokenizer.eos_token_id,
         max_length=gen_args.max_length,
         num_beams=gen_args.num_beams,
+        ctc_weight=gen_args.decoding_ctc_weight,
+        ctc_margin=gen_args.ctc_margin,
     )
     logger.info(f"Model updating generation config:\n {str(gen_config)}")
     training_args.generation_max_length = gen_args.max_length
@@ -122,16 +123,6 @@ if __name__ == "__main__":
 
     # 8. Train model
     if training_args.do_train:
-        if gen_args.decoding_ctc_weight > 0 and training_args.joint_decoding_during_training:
-            activate_joint_decoding(
-                model=model,
-                ctc_weight=gen_args.decoding_ctc_weight,
-                ctc_margin=gen_args.ctc_margin,
-                num_tokens=len(tokenizer),
-                eos_token=tokenizer.eos_token_id,
-                external_lm=None,
-                external_lm_weight=0,
-            )
         trainer.train(resume_from_checkpoint=training_args.restart_from or None)
 
     # 9. Evaluation
@@ -144,7 +135,6 @@ if __name__ == "__main__":
             gen_args=gen_args,
             training_args=training_args,
             data_args=data_args,
-            eos_token_id=tokenizer.eos_token_id,
         )
     # 10. N-best generation
     if training_args.do_generate:
@@ -155,6 +145,5 @@ if __name__ == "__main__":
             tokenizer=tokenizer,
             gen_args=gen_args,
             data_args=data_args,
-            eos_token_id=tokenizer.eos_token_id,
             gen_config=gen_config,
         )

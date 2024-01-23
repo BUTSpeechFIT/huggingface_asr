@@ -101,5 +101,4 @@ if __name__ == "__main__":
             gen_args=None,
             data_args=data_args,
             training_args=training_args,
-            eos_token_id=tokenizer.eos_token_id,
         )
