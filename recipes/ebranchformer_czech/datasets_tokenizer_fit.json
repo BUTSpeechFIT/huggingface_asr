@@ -1,7 +1,7 @@
 [
   {
     "dataset_name": "text",
-    "dataset_id": "bison",
+    "dataset_id": "czech_tokenizer",
     "load_from_disk": false,
     "train_splits": [
       "train"
@@ -10,12 +10,14 @@
     ],
     "test_splits": [
     ],
-    "text_column_name": "labels",
+    "text_column_name": "text",
     "text_transformations": [
       "transforms_unfinished_words_to_unks_train"
     ],
     "additional_args": {
-      "data_dir": "/mnt/matylda6/szoke/HuggingFace/huggingface_asr/metadata_dirs/bison_cz/train/"
+      "data_files": {
+        "train": ["/mnt/matylda6/szoke/HuggingFace/huggingface_asr/metadata_dirs/tokenizer/bison_cz/train/train"]
+      }
     }
   }
 ]
