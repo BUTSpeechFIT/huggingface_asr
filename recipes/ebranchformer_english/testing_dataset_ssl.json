@@ -1,0 +1,38 @@
+[
+    {
+    "dataset_name": "google/fleurs",
+    "dataset_id": "fleurs",
+    "load_from_disk": false,
+    "train_splits": [
+      "train",       "validation"
+
+    ],
+    "dev_splits": [
+              "test"
+    ],
+    "test_splits": [
+    ],
+    "audio_column_name": "audio",
+    "length_column_name": "input_len",
+    "additional_args": {
+      "name": "en_us"
+    }
+  },
+    {
+    "dataset_name": "src/dataset_builders/audio_folder_vad",
+    "dataset_id": "RAND",
+    "load_from_disk": false,
+    "train_splits": [
+      "train"
+    ],
+    "dev_splits": [
+    ],
+    "test_splits": [
+    ],
+    "audio_column_name": "audio",
+    "length_column_name": "input_len",
+    "additional_args": {
+      "data_files":{"train": ["/Users/alexanderpolok/PycharmProjects/huggingface_asr/audios_here/*"]}
+    }
+  }
+]

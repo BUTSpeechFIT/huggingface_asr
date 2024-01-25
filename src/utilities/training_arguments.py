@@ -78,6 +78,14 @@ class GeneralTrainingArguments(Seq2SeqTrainingArguments):
 
 
 @dataclass
+class PretrainingArguments(GeneralTrainingArguments):
+    _argument_group_name = "Pretraining related arguments"
+    gumbel_temperature_decay: Optional[float] = field(default=0.999995, metadata={"help": "Gumbel temperature decay."})
+    min_gumbel_temperature: Optional[float] = field(default=0.5, metadata={"help": "Minimum Gumbel temperature."})
+    max_gumbel_temperature: Optional[float] = field(default=2.0, metadata={"help": "Maximum Gumbel temperature."})
+
+
+@dataclass
 class GenerationArguments:
     _argument_group_name = "Generation related arguments"
     """General generation arguments."""

@@ -27,6 +27,26 @@ from utilities.training_arguments import DataTrainingArguments, GeneralTrainingA
 logger = logging.get_logger("transformers")
 
 
+class GumbelTemperatureCallback(TrainerCallback):
+    def __init__(self, gumbel_temperature_decay: float, min_gumbel_temperature: float, max_gumbel_temperature: float):
+        super().__init__()
+        self.gumbel_temperature_decay = gumbel_temperature_decay
+        self.min_gumbel_temperature = min_gumbel_temperature
+        self.max_gumbel_temperature = max_gumbel_temperature
+        self.current_gumbel_temperature = max_gumbel_temperature
+
+    def on_train_begin(self, args: TrainingArguments, state: TrainerState, control: TrainerControl, **kwargs):
+        self.current_gumbel_temperature = self.max_gumbel_temperature
+        kwargs["model"].set_gumbel_temperature(self.current_gumbel_temperature)
+
+    def on_step_end(self, args: TrainingArguments, state: TrainerState, control: TrainerControl, **kwargs):
+        self.current_gumbel_temperature = max(
+            self.max_gumbel_temperature * self.gumbel_temperature_decay**state.global_step,
+            self.min_gumbel_temperature,
+        )
+        kwargs["model"].set_gumbel_temperature(self.current_gumbel_temperature)
+
+
 class DelayedStartWrapper:
     def __init__(self, callback: FunctionReturnWrapper, delay_steps: int):
         self.callback = callback

@@ -6,6 +6,7 @@ from typing import Dict
 import torch
 from transformers import (
     AutoConfig,
+    AutoModelForPreTraining,
     AutoModelForSpeechSeq2Seq,
     PretrainedConfig,
     PreTrainedModel,
@@ -24,6 +25,7 @@ from models.ctc_encoder_plus_autoregressive_decoder import (
 from models.encoders.e_branchformer import (
     Wav2Vec2EBranchformerConfig,
     Wav2Vec2EBranchformerForCTC,
+    Wav2Vec2EBranchformerForPreTraining,
 )
 from utilities.general_utils import average_dicts
 from utilities.training_arguments import ModelArguments
@@ -35,6 +37,7 @@ AutoModelForSpeechSeq2Seq.register(JointCTCAttentionEncoderDecoderConfig, JointC
 
 AutoConfig.register("wav2vec2-ebranchformer", Wav2Vec2EBranchformerConfig)
 CustomAutoModelForCTC.register(Wav2Vec2EBranchformerConfig, Wav2Vec2EBranchformerForCTC)
+AutoModelForPreTraining.register(Wav2Vec2EBranchformerConfig, Wav2Vec2EBranchformerForPreTraining)
 
 
 def average_checkpoints(experiment_dir: str) -> str:
@@ -145,4 +148,27 @@ def instantiate_aed_model(
             decoder_pretrained_model_name_or_path=model_args.base_decoder_model,
             **base_model_config,
         )
+    return model
+
+
+def instantiate_speech_encoder_model(
+    model_args: ModelArguments, feature_extractor: SequenceFeatureExtractor
+) -> PreTrainedModel:
+    base_model_config = {
+        "layerdrop": 0.0,
+        "expect_2d_input": model_args.expect_2d_input,
+    }
+    if base_model_config["expect_2d_input"] and isinstance(feature_extractor, Speech2TextFeatureExtractor):
+        base_model_config["second_dim_input_size"] = feature_extractor.num_mel_bins
+    if model_args.from_pretrained:
+        config = AutoConfig.from_pretrained(model_args.from_pretrained)
+        config.update(base_model_config)
+        model_path = model_args.from_pretrained
+        if model_args.average_checkpoints:
+            model_path = average_checkpoints(model_path)
+        model = AutoModelForPreTraining.from_pretrained(model_path, config=config)
+    else:
+        config = AutoConfig.from_pretrained(model_args.base_encoder_model)
+        config.update(base_model_config)
+        model = AutoModelForPreTraining.from_config(config)
     return model
