@@ -4,10 +4,10 @@ from typing import Dict, List, Optional, Union
 import torch
 from transformers import (
     BatchFeature,
+    PreTrainedModel,
     PreTrainedTokenizer,
     Speech2TextFeatureExtractor,
     Wav2Vec2FeatureExtractor,
-    Wav2Vec2ForPreTraining,
 )
 from transformers.models.wav2vec2.modeling_wav2vec2 import (
     _compute_mask_indices,
@@ -133,25 +133,28 @@ class DataCollatorForWav2Vec2Pretraining:
             originates from the original wav2vec 2.0 article and corresponds to the ``M`` variable mentioned there.
     """
 
-    model: Wav2Vec2ForPreTraining
-    feature_extractor: Wav2Vec2FeatureExtractor
+    model: PreTrainedModel
+    feature_extractor: Union[Wav2Vec2FeatureExtractor, Speech2TextFeatureExtractor]
     padding: Union[bool, str] = "longest"
     pad_to_multiple_of: Optional[int] = None
     mask_time_prob: Optional[float] = 0.65
     mask_time_length: Optional[int] = 10
     sampling_rate: Optional[int] = 16_000
+    audio_path: str = None
+    model_input_name: str = True
+
+    def __post_init__(self):
+        if not isinstance(self.feature_extractor, Wav2Vec2FeatureExtractor):
+            raise ValueError(f"`feature_extractor` has to be of type {Wav2Vec2FeatureExtractor} for {self.__class__}.")
 
     def __call__(
         self, features: List[Dict[str, Union[List[int], torch.Tensor]]]
     ) -> Union[Dict[str, torch.Tensor], BatchFeature]:
         # reformat list to dict and set to pytorch format
-        input_features = self.feature_extractor(
-            [feature["audio"]["array"] for feature in features],
-            # [feature["input_values"] for feature in features],
-            padding=True,
-            sampling_rate=self.sampling_rate,
-        )
-
+        input_features = [
+            BatchFeature({self.feature_extractor.model_input_names[0]: feature[self.audio_path].squeeze(dim=0)})
+            for feature in features
+        ]
         batch = self.feature_extractor.pad(
             input_features,
             padding=self.padding,
@@ -159,11 +162,16 @@ class DataCollatorForWav2Vec2Pretraining:
             return_tensors="pt",
         )
 
-        device = batch["input_values"].device
-        batch_size = batch["input_values"].shape[0]
+        device = batch[self.feature_extractor.model_input_names[0]].device
+        batch_size = batch[self.feature_extractor.model_input_names[0]].shape[0]
 
+        input_len = (
+            batch[self.feature_extractor.model_input_names[0]].shape[-2]
+            if isinstance(self.feature_extractor, Speech2TextFeatureExtractor)
+            else batch[self.feature_extractor.model_input_names[0]].shape[-1]
+        )
         # pylint: disable=no-member
-        mask_indices_seq_length = self.model._get_feat_extract_output_lengths(batch["input_values"].shape[-1])
+        mask_indices_seq_length = self.model._get_feat_extract_output_lengths(input_len)
         # make sure masked sequence length is a Python scalar
         mask_indices_seq_length = int(mask_indices_seq_length)
 
@@ -195,4 +203,9 @@ class DataCollatorForWav2Vec2Pretraining:
         batch["mask_time_indices"] = torch.tensor(mask_time_indices, dtype=torch.long, device=device)
         batch["sampled_negative_indices"] = torch.tensor(sampled_negative_indices, dtype=torch.long, device=device)
 
+        if self.model_input_name != self.feature_extractor.model_input_names[0]:
+            batch[self.model_input_name] = batch[self.feature_extractor.model_input_names[0]]
+            del batch[self.feature_extractor.model_input_names[0]]
+
+        del batch["sub_attention_mask"]
         return batch

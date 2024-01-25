@@ -66,9 +66,6 @@ def train_tokenizer(
         # trainer = WordLevelTrainer(special_tokens=spl_tokens)
         raise NotImplementedError
 
-    tokenizer.normalizer = normalizers.Sequence(
-        [normalizers.Replace("``", '"'), normalizers.Replace("''", '"'), normalizers.Lowercase()]
-    )
     tokenizer.train_from_iterator(text_iterator, trainer=trainer)
 
     tokenizer.post_processor = processors.TemplateProcessing(

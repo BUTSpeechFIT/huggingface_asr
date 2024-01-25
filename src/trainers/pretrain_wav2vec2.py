@@ -1,26 +1,25 @@
 """Main training script for training of attention based encoder decoder ASR models."""
 import sys
 
-from transformers import AutoFeatureExtractor, HfArgumentParser, Seq2SeqTrainer
+from transformers import AutoFeatureExtractor, HfArgumentParser
 from transformers.utils import logging
 
-from utilities.callbacks import init_callbacks
+from utilities.callbacks import GumbelTemperatureCallback, init_callbacks
 from utilities.collators import DataCollatorForWav2Vec2Pretraining
 from utilities.data_utils import get_dataset
-from utilities.eval_utils import compute_metrics
 from utilities.model_utils import instantiate_speech_encoder_model
 from utilities.training_arguments import (
     DataTrainingArguments,
-    GeneralTrainingArguments,
     GenerationArguments,
     ModelArguments,
+    PretrainingArguments,
 )
-from utilities.training_utils import AdditionalLossTrackerTrainer
+from utilities.training_utils import SSLTrainer
 
 if __name__ == "__main__":
     logging.set_verbosity_debug()
     logger = logging.get_logger("transformers")
-    parser = HfArgumentParser((ModelArguments, DataTrainingArguments, GeneralTrainingArguments, GenerationArguments))
+    parser = HfArgumentParser((ModelArguments, DataTrainingArguments, PretrainingArguments, GenerationArguments))
 
     model_args, data_args, training_args, gen_args = parser.parse_args_into_dataclasses()
 
@@ -64,14 +63,25 @@ if __name__ == "__main__":
     # 4. Initialize callbacks
     callbacks = init_callbacks(data_args, training_args, dataset, feature_extractor)
 
+    temperature_callback = GumbelTemperatureCallback(
+        training_args.gumbel_temperature_decay,
+        training_args.min_gumbel_temperature,
+        training_args.max_gumbel_temperature,
+    )
+    callbacks.append(temperature_callback)
+
     # 6. Initialize data collator
     data_collator = DataCollatorForWav2Vec2Pretraining(
-        feature_extractor=feature_extractor, padding=True, sampling_rate=data_args.sampling_rate, model=model
+        feature_extractor=feature_extractor,
+        padding=True,
+        sampling_rate=data_args.sampling_rate,
+        model=model,
+        audio_path=data_args.audio_column_name,
+        model_input_name=model.main_input_name,
     )
 
     # 7. Initialize trainer
-    trainer_class = AdditionalLossTrackerTrainer if training_args.track_ctc_loss else Seq2SeqTrainer
-    trainer = trainer_class(
+    trainer = SSLTrainer(
         args=training_args,
         model=model,
         callbacks=callbacks,
