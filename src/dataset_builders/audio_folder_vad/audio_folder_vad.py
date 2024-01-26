@@ -2,6 +2,7 @@
 from typing import List
 
 import datasets
+import torch
 import torchaudio
 from datasets.packaged_modules.folder_based_builder import folder_based_builder
 from datasets.tasks import AudioClassification
@@ -21,21 +22,33 @@ class AudioFolderConfig(folder_based_builder.FolderBasedBuilderConfig):
 class AudioFolderVAD(folder_based_builder.FolderBasedBuilder):
     """AudioFolderVAD dataset."""
 
+    DEFAULT_WRITER_BATCH_SIZE = 100
+
     BASE_FEATURE = datasets.Audio
     BASE_COLUMN_NAME = "audio"
     BUILDER_CONFIG_CLASS = AudioFolderConfig
     EXTENSIONS: List[str]  # definition at the bottom of the script
     CLASSIFICATION_TASK = AudioClassification(audio_column="audio", label_column="label")
 
-    def __init__(self, *args, **kwargs):
+    def __init__(
+        self,
+        vad_model: str = "pyannote/segmentation-3.0",
+        vad_device: str = "cpu",
+        vad_batch_size: int = 1024,
+        vad_min_duration_on: float = 0.0,
+        vad_min_duration_off: float = 0.0,
+        *args,
+        **kwargs,
+    ):
         super().__init__(*args, **kwargs)
-        model = Model.from_pretrained("pyannote/segmentation-3.0", use_auth_token=kwargs.get("use_auth_token", None))
-        self.vad_pipeline = VoiceActivityDetection(segmentation=model)
+        device = torch.device(vad_device)
+        model = Model.from_pretrained(vad_model, use_auth_token=kwargs.get("use_auth_token", None))
+        self.vad_pipeline = VoiceActivityDetection(segmentation=model, batch_size=vad_batch_size, device=device)
         HYPER_PARAMETERS = {
             # remove speech regions shorter than that many seconds.
-            "min_duration_on": 0.0,
+            "min_duration_on": vad_min_duration_on,
             # fill non-speech regions shorter than that many seconds.
-            "min_duration_off": 0.0,
+            "min_duration_off": vad_min_duration_off,
         }
         self.vad_pipeline.instantiate(HYPER_PARAMETERS)
 

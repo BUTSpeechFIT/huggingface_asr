@@ -328,13 +328,16 @@ def load_multiple_datasets(
             context.wait_before()
             if dataset_config["load_from_disk"]:
                 dataset = load_from_disk(
-                    dataset_config["dataset_name"], keep_in_memory=False, **dataset_config["additional_args"]
+                    dataset_config["dataset_name"],
+                    keep_in_memory=False,
+                    **dataset_config["additional_args"],
                 )
 
             else:
                 dataset = load_dataset(
                     dataset_config["dataset_name"],
                     keep_in_memory=False,
+                    writer_batch_size=writer_batch_size,
                     num_proc=num_proc,
                     **dataset_config["additional_args"],
                 )
@@ -427,7 +430,11 @@ def get_dataset(
             context.wait_before()
             if dataset_config is not None:
                 dataset = load_dataset(
-                    dataset_name, dataset_config, keep_in_memory=False, num_proc=preprocessing_num_workers
+                    dataset_name,
+                    dataset_config,
+                    keep_in_memory=False,
+                    num_proc=preprocessing_num_workers,
+                    writer_batch_size=writer_batch_size,
                 )
             else:
                 dataset = load_from_disk(dataset_name, keep_in_memory=False)
