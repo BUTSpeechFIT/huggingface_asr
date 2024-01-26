@@ -16,7 +16,13 @@
     ],
     "additional_args": {
       "data_files": {
-        "train": ["/mnt/matylda6/szoke/HuggingFace/huggingface_asr/metadata_dirs/tokenizer/bison_cz/train/train"]
+        "train": [
+          "/scratch/project/open-28-57/szoke/huggingface_asr/metadata_dirs/tokenizer/bison_cz/train/train",
+          "/scratch/project/open-28-57/szoke/huggingface_asr/metadata_dirs/tokenizer/bnc-ldc_cz/train/train",
+          "/scratch/project/open-28-57/szoke/huggingface_asr/metadata_dirs/tokenizer/parczech30_cz/train/train",
+          "/scratch/project/open-28-57/szoke/huggingface_asr/metadata_dirs/tokenizer/pdtsc20_cz/train/train",
+          "/scratch/project/open-28-57/szoke/huggingface_asr/metadata_dirs/tokenizer/pravednes_cz/train/train_head10M"
+        ]
       }
     }
   }
