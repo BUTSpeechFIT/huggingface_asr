@@ -368,7 +368,7 @@ def load_multiple_datasets(
         config_dict = json.load(config_handle)
     dataset_merged = DatasetDict()
     for dataset_config in config_dict:
-        logger.info(f"Loading dataset {dataset_config['dataset_name']}")
+        logger.info(f"Loading dataset {dataset_config['dataset_name']} {dataset_config['dataset_id']}")
         with DistributedContext() as context:
             context.wait_before()
             if dataset_config["load_from_disk"]:
