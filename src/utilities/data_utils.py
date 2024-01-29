@@ -144,6 +144,25 @@ def audio_object_stripper(audio: Union[Dict, np.ndarray, List[float]], key="arra
     return trimmed
 
 
+def split_long_segments_to_chunks_fun(
+    audios: List[Dict],
+    lens: List[float],
+    audio_column: str,
+    length_column_name: str,
+    max_input_len: float,
+    sampling_rate: int,
+) -> Dict[str, List[List[float]]]:
+    audio_encoder = Audio(sampling_rate=sampling_rate, mono=True)
+    chunks = []
+    lens_new = []
+    for index, example_len in enumerate(lens):
+        for i in range(0, len(audios[index]["array"]), int(max_input_len * sampling_rate)):
+            new_chunk = audio_object_stripper(audios[index])[i : i + int(max_input_len * sampling_rate)]
+            chunks.append(audio_encoder.encode_example({"array": new_chunk, "sampling_rate": sampling_rate}))
+            lens_new.append(len(new_chunk) / sampling_rate)
+    return {audio_column: chunks, length_column_name: lens_new}
+
+
 def filter_sequences_in_range_batched(batch: List[float], max_input_len: float, min_input_len: float) -> List[bool]:
     """Filters out sequences form dataset which are in bounds."""
     arr = np.array(batch)
@@ -173,11 +192,33 @@ def prepare_dataset(
     writer_batch_size: int,
     train_split: str,
     text_transformations: List[str],
+    split_long_segments_to_chunks: bool,
+    filter_empty_labels: bool,
     sampling_rate: int,
     max_input_len: float,
     min_input_len: float,
 ) -> DatasetDict:
     """Preprocesses dataset."""
+    if audio_column_name is not None and split_long_segments_to_chunks:
+        dataset = distributed_process(
+            dataset,
+            process_by="map",
+            function=split_long_segments_to_chunks_fun,
+            num_proc=preprocessing_num_workers,
+            input_columns=[audio_column_name, length_column_name],
+            batched=True,
+            batch_size=writer_batch_size // 4,
+            remove_columns=dataset.column_names[train_split],
+            writer_batch_size=writer_batch_size,
+            fn_kwargs={
+                "audio_column": audio_column_name,
+                "length_column_name": length_column_name,
+                "max_input_len": max_input_len,
+                "sampling_rate": sampling_rate,
+            },
+            desc=f"Splitting segments to chunks of size {max_input_len}s",
+        )
+
     # 1. Preprocess audio columns
     if (
         length_column_name is not None
@@ -191,6 +232,7 @@ def prepare_dataset(
             num_proc=preprocessing_num_workers,
             input_columns=[audio_column_name],
             batched=True,
+            batch_size=writer_batch_size // 4,
             writer_batch_size=writer_batch_size,
             fn_kwargs={"sampling_rate": sampling_rate, "len_column": length_column_name},
             desc="Extracting audio lens",
@@ -239,15 +281,16 @@ def prepare_dataset(
                 )
 
         # 3. Remove segments with empty annotations
-        dataset = distributed_process(
-            dataset,
-            process_by="filter",
-            function=filter_empty_transcriptions,
-            input_columns=[text_column_name],
-            writer_batch_size=writer_batch_size,
-            num_proc=preprocessing_num_workers,
-            desc="Filtering out empty transcriptions",
-        )
+        if filter_empty_labels:
+            dataset = distributed_process(
+                dataset,
+                process_by="filter",
+                function=filter_empty_transcriptions,
+                input_columns=[text_column_name],
+                writer_batch_size=writer_batch_size,
+                num_proc=preprocessing_num_workers,
+                desc="Filtering out empty transcriptions",
+            )
 
     logger.info("Casting audio column to Audio, and length column to float32")
     feature_types = dataset[list(dataset.keys())[0]].features
@@ -317,6 +360,8 @@ def load_multiple_datasets(
     global_audio_column: str,
     global_train_split: str,
     global_validation_split: str,
+    split_long_segments_to_chunks: bool,
+    filter_empty_labels: bool,
 ) -> DatasetDict:
     """Loads multiple datasets, preprocess them and join to single dataset instance."""
     with open(config_path) as config_handle:
@@ -366,6 +411,8 @@ def load_multiple_datasets(
             sampling_rate=sampling_rate,
             max_input_len=max_input_len,
             min_input_len=min_input_len,
+            split_long_segments_to_chunks=split_long_segments_to_chunks,
+            filter_empty_labels=filter_empty_labels,
         )
 
         for column, global_column in [
@@ -409,6 +456,8 @@ def get_dataset(
     train_split: str,
     validation_split: str,
     text_transformations: List[str],
+    split_long_segments_to_chunks: bool,
+    filter_empty_labels: bool,
 ) -> DatasetDict:
     """Loads single or multiple datasets, preprocess, and merge them."""
     if datasets_creation_config_path is not None:
@@ -424,6 +473,8 @@ def get_dataset(
             global_audio_column=audio_column,
             global_train_split=train_split,
             global_validation_split=validation_split,
+            split_long_segments_to_chunks=split_long_segments_to_chunks,
+            filter_empty_labels=filter_empty_labels,
         )
     else:
         with DistributedContext() as context:
@@ -454,6 +505,8 @@ def get_dataset(
             max_input_len=max_input_len,
             min_input_len=min_input_len,
             text_transformations=text_transformations,
+            split_long_segments_to_chunks=split_long_segments_to_chunks,
+            filter_empty_labels=filter_empty_labels,
         )
 
     # Filter samples shorter than 0.1s - {MIN_INPUT_LEN},

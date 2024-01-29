@@ -39,6 +39,8 @@ if __name__ == "__main__":
         train_split=data_args.train_split,
         validation_split=data_args.validation_split,
         text_transformations=data_args.text_transformations,
+        split_long_segments_to_chunks=data_args.split_long_segments_to_chunks,
+        filter_empty_labels=data_args.filter_empty_labels,
     )
 
     if data_args.validation_slice:

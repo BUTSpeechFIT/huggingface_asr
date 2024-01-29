@@ -163,6 +163,12 @@ class DataTrainingArguments:
     test_splits: Optional[List[str]] = field(default=None, metadata={"help": "Splits to use for evaluation."})
     validation_slice: Optional[int] = field(default=None, metadata={"help": "Part of the validation split to be used."})
     sampling_rate: Optional[int] = field(default=16_000, metadata={"help": "Sampling rate for the model."})
+    split_long_segments_to_chunks: Optional[bool] = field(
+        default=False, metadata={"help": "Whether to split long segments to chunks."}
+    )
+    filter_empty_labels: Optional[bool] = field(
+        default=False, metadata={"help": "Whether to filter out samples with empty labels."}
+    )
 
 
 @dataclass
