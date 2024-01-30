@@ -162,13 +162,29 @@ class MetadataTensor(torch.Tensor):
 
         return MetadataTensor(result, result.metadata)
 
+    def __iter__(self):
+        metadata = self.metadata
+
+        return iter(
+            [
+                MetadataTensor(
+                    x,
+                    {key: metadata[key][index] for key in metadata.keys()},
+                )
+                for index, x in enumerate(super().__iter__())
+            ]
+        )
+
     def repeat(self, *sizes):
-        # Your custom implementation of the repeat method
-        # Here, I'm just printing a message for demonstration purposes
-        print("Custom repeat method is called.")
         result = super(MetadataTensor, self).repeat(*sizes)
-        result.metadata = [self.metadata.copy()] * sizes[0]
+        result.metadata = {key: self.metadata[key].repeat(*sizes) for key in self.metadata.keys()}
         return result
+
+    def __getitem__(self, index):
+        # Override the slicing behavior
+        result = super(MetadataTensor, self).__getitem__(index)
+        metadata_result = {key: self.metadata[key][index] for key in self.metadata.keys()}
+        return MetadataTensor(result, metadata_result)
 
     @classmethod
     def __torch_function__(cls, func, types, args=(), kwargs=None):
@@ -302,7 +318,9 @@ class SSLTrainer(Trainer):
         num_losses = inputs["mask_time_indices"].sum()
         sub_attention_mask = inputs.pop("sub_attention_mask", None)
         sub_attention_mask = (
-            sub_attention_mask if sub_attention_mask is not None else torch.ones_like(inputs["mask_time_indices"])
+            sub_attention_mask
+            if sub_attention_mask is not None
+            else torch.ones_like(inputs["mask_time_indices"], device=inputs["mask_time_indices"].device)
         )
         percent_masked = num_losses / sub_attention_mask.sum()
 
@@ -310,7 +328,9 @@ class SSLTrainer(Trainer):
         additional_logs["div_loss"] = outputs.diversity_loss / num_losses
         additional_logs["%_mask_idx"] = percent_masked / self.accelerator.num_processes
         additional_logs["ppl"] = outputs.codevector_perplexity
-        additional_logs["temp"] = torch.tensor(self.gumbel_callback.current_gumbel_temperature)
+        additional_logs["temp"] = torch.tensor(
+            self.gumbel_callback.current_gumbel_temperature, device=inputs["mask_time_indices"].device
+        )
 
         for key in additional_logs.keys():
             additional_logs[key] = additional_logs[key].detach()
@@ -379,7 +399,7 @@ class SSLTrainer(Trainer):
             grad_norm = model.get_global_grad_norm()
         else:
             grad_norm = _grad_norm.item() if _grad_norm is not None else None
-        additional_logs["gradient_norm"] = torch.tensor(grad_norm)
+        additional_logs["gradient_norm"] = torch.tensor(grad_norm, device=loss.device)
 
         loss_detached = loss.detach() / self.args.gradient_accumulation_steps
         loss_detached_with_metadata = MetadataTensor(loss_detached, metadata=additional_logs)
@@ -546,6 +566,27 @@ class SSLTrainer(Trainer):
 
         return (loss, logits, labels)
 
+    @staticmethod
+    def _expand_metadata(metadata, num_processes):
+        expanded_list = [[] for _ in range(num_processes)]
+
+        # Iterate over each dictionary in the list
+        for per_process_index, data_dict in enumerate(metadata):
+            # Get the keys and values from the dictionary
+            keys = list(data_dict.keys())
+            values = list(data_dict.values())
+
+            # Iterate over the indices of the lists
+            for i in range(len(values[0])):
+                # Create a new dictionary with elements at the current index for each key
+                new_dict = {keys[j]: values[j][i] for j in range(len(keys))}
+                expanded_list[i].append(new_dict)
+
+        output_arr = []
+        for i in range(num_processes):
+            output_arr.extend(expanded_list[i])
+        return output_arr
+
     def evaluation_loop(
         self,
         dataloader: DataLoader,
@@ -641,7 +682,7 @@ class SSLTrainer(Trainer):
 
             # Prediction step
             loss, logits, labels = self.prediction_step(model, inputs, prediction_loss_only, ignore_keys=ignore_keys)
-            print(self.accelerator.local_process_index, loss, inputs["input_values"].shape)
+
             inputs_decode = self._prepare_input(inputs["input_ids"]) if args.include_inputs_for_metrics else None
 
             if is_torch_tpu_available():
@@ -650,7 +691,13 @@ class SSLTrainer(Trainer):
             # Update containers on host
             if loss is not None:
                 # TODO: Gather metadata tensors properly
-                losses = self.accelerator.gather_for_metrics((loss.repeat(batch_size)))
+                loss_repeated = loss.repeat(batch_size)
+                losses = self.accelerator.gather_for_metrics(torch.tensor(loss_repeated))
+                metadata = {}
+                for key in loss_repeated.metadata.keys():
+                    metadata[key] = self.accelerator.gather_for_metrics(loss_repeated.metadata[key])
+                losses = MetadataTensor(losses, metadata)
+                # serialize list of dicts containing tensors to list of dicts containing single item
                 losses_host = losses if losses_host is None else [*losses_host, *losses]
             if labels is not None:
                 labels = self.accelerator.pad_across_processes(labels, dim=1, pad_index=-100)
@@ -686,7 +733,7 @@ class SSLTrainer(Trainer):
         # Gather all remaining tensors and put them back on the CPU
         if losses_host is not None:
             additional_metrics = {
-                key: np.array([value.metadata[key] for value in losses_host]).mean().item()
+                key: np.array([value.metadata[key].cpu() for value in losses_host]).mean().item()
                 for key in losses_host[-1].metadata.keys()
             }
             losses = np.array(nested_numpify(losses_host))
