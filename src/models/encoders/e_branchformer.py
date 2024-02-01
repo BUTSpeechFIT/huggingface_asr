@@ -1,6 +1,7 @@
 """ PyTorch Wav2Vec2-Ebranchformer model."""
 
-from typing import Optional
+import math
+from typing import Optional, Tuple
 
 import torch
 import torch.utils.checkpoint
@@ -20,11 +21,11 @@ from transformers.models.wav2vec2_conformer.modeling_wav2vec2_conformer import (
 )
 from transformers.models.wav2vec2_conformer.modeling_wav2vec2_conformer import (
     Wav2Vec2ConformerModel,
-)
-from transformers.models.wav2vec2_conformer.modeling_wav2vec2_conformer import (
-    Wav2Vec2ConformerSelfAttention as Wav2Vec2EBranchformerSelfAttention,
+    Wav2Vec2ConformerSelfAttention,
 )
 from transformers.utils import logging
+
+from models.streaming_modules import CausalConv1d, FeatureExtractorForStreaming
 
 logger = logging.get_logger(__name__)
 
@@ -42,6 +43,7 @@ class Wav2Vec2EBranchformerConfig(Wav2Vec2ConformerConfig, Wav2Vec2Config):
         csgu_use_linear_after_conv=False,
         merge_conv_kernel=31,
         use_macaron_ff=True,
+        is_causal=False,
         **kwargs,
     ):
         super().__init__(**kwargs)
@@ -52,6 +54,85 @@ class Wav2Vec2EBranchformerConfig(Wav2Vec2ConformerConfig, Wav2Vec2Config):
         self.csgu_use_linear_after_conv = csgu_use_linear_after_conv
         self.merge_conv_kernel = merge_conv_kernel
         self.use_macaron_ff = use_macaron_ff
+        self.is_causal = is_causal
+
+
+class Wav2Vec2EBranchformerSelfAttention(Wav2Vec2ConformerSelfAttention):
+    def __init__(self, config: Wav2Vec2EBranchformerConfig):
+        super().__init__(config)
+        self.is_causal = config.is_causal
+
+    def get_causal_mask(self, i, j, device):
+        return torch.ones((i, j), device=device, dtype=torch.bool).triu(j - i + 1)
+
+    def forward(
+        self,
+        hidden_states: torch.Tensor,
+        attention_mask: Optional[torch.Tensor] = None,
+        relative_position_embeddings: Optional[torch.Tensor] = None,
+        output_attentions: bool = False,
+    ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Tuple[torch.Tensor]]]:
+        # self-attention mechanism
+        batch_size, sequence_length, hidden_size = hidden_states.size()
+
+        # make sure query/key states can be != value states
+        query_key_states = hidden_states
+        value_states = hidden_states
+
+        if self.position_embeddings_type == "rotary":
+            if relative_position_embeddings is None:
+                raise ValueError(
+                    "`relative_position_embeddings` has to be defined when `self.position_embeddings_type == 'rotary'"
+                )
+            query_key_states = self._apply_rotary_embedding(query_key_states, relative_position_embeddings)
+
+        # project query_key_states and value_states
+        query = self.linear_q(query_key_states).view(batch_size, -1, self.num_heads, self.head_size)
+        key = self.linear_k(query_key_states).view(batch_size, -1, self.num_heads, self.head_size)
+        value = self.linear_v(value_states).view(batch_size, -1, self.num_heads, self.head_size)
+
+        # => (batch, head, time1, d_k)
+        query = query.transpose(1, 2)
+        key = key.transpose(1, 2)
+        value = value.transpose(1, 2)
+
+        if self.position_embeddings_type == "relative":
+            if relative_position_embeddings is None:
+                raise ValueError(
+                    "`relative_position_embeddings` has to be defined when `self.position_embeddings_type =="
+                    " 'relative'"
+                )
+            # apply relative_position_embeddings to qk scores
+            # as proposed in Transformer_XL: https://arxiv.org/abs/1901.02860
+            scores = self._apply_relative_embeddings(
+                query=query, key=key, relative_position_embeddings=relative_position_embeddings
+            )
+        else:
+            scores = torch.matmul(query, key.transpose(-2, -1)) / math.sqrt(self.head_size)
+
+        if self.is_causal:
+            causal_mask = self.get_causal_mask(query.size(-2), key.size(-2), device=query.device)
+            if attention_mask is None:
+                attention_mask = causal_mask * -torch.finfo(query.dtype).max
+            else:
+                attention_mask = attention_mask.masked_fill(causal_mask, -torch.finfo(query.dtype).max)
+
+        # apply attention_mask if necessary
+        if attention_mask is not None:
+            scores = scores + attention_mask
+
+        # => (batch, head, time1, time2)
+        probs = torch.softmax(scores, dim=-1)
+        probs = self.dropout(probs)
+
+        # => (batch, head, time1, d_k)
+        hidden_states = torch.matmul(probs, value)
+
+        # => (batch, time1, hidden_size)
+        hidden_states = hidden_states.transpose(1, 2).reshape(batch_size, -1, self.num_heads * self.head_size)
+        hidden_states = self.linear_out(hidden_states)
+
+        return hidden_states, probs
 
 
 class ConvolutionalSpatialGatingUnit(torch.nn.Module):
@@ -62,14 +143,26 @@ class ConvolutionalSpatialGatingUnit(torch.nn.Module):
 
         n_channels = config.intermediate_size // 2  # split input channels
         self.norm = torch.nn.LayerNorm(n_channels)
-        self.conv = torch.nn.Conv1d(
-            n_channels,
-            n_channels,
-            config.csgu_kernel_size,
-            1,
-            (config.csgu_kernel_size - 1) // 2,
-            groups=n_channels,
+        self.conv = (
+            CausalConv1d(
+                n_channels,
+                n_channels,
+                config.csgu_kernel_size,
+                1,
+                (config.csgu_kernel_size - 1) // 2,
+                groups=n_channels,
+            )
+            if config.is_causal
+            else torch.nn.Conv1d(
+                n_channels,
+                n_channels,
+                config.csgu_kernel_size,
+                1,
+                (config.csgu_kernel_size - 1) // 2,
+                groups=n_channels,
+            )
         )
+
         if config.csgu_use_linear_after_conv:
             self.linear = torch.nn.Linear(n_channels, n_channels)
         else:
@@ -223,7 +316,7 @@ class Wav2Vec2EBranchformerEncoder(Wav2Vec2ConformerEncoder):
         self.pos_conv_embed = None
 
 
-class Wav2Vec2EBranchformerModel(Wav2Vec2ConformerModel):
+class Wav2Vec2EBranchformerModel(FeatureExtractorForStreaming, Wav2Vec2ConformerModel):
     def __init__(self, config: Wav2Vec2EBranchformerConfig):
         super().__init__(config)
         self.encoder = Wav2Vec2EBranchformerEncoder(config)

@@ -14,6 +14,7 @@ from transformers.dynamic_module_utils import (
 from transformers.models.auto.auto_factory import _BaseAutoModelClass, _get_model_class
 
 from models.extractors import Conv2dFeatureExtractor
+from models.streaming_modules import FeatureExtractorForStreaming
 
 
 class FeatureExtractionInitModifier(type):
@@ -37,6 +38,19 @@ class FeatureExtractionInitModifier(type):
 
 
 class CustomAutoModelWrapper(_BaseAutoModelClass):
+    @staticmethod
+    def get_streaming_model_class(original_cls, config):
+        class StreamingModel(FeatureExtractorForStreaming, original_cls):
+            pass
+
+        if hasattr(config, "is_causal"):
+            if config.is_causal and config.expect_2d_input:
+                return StreamingModel
+            elif config.is_causal:
+                raise NotImplementedError("Causal streaming models are not supported for 1d input")
+
+        return original_cls
+
     @classmethod
     def from_pretrained(cls, pretrained_model_name_or_path, *model_args, **kwargs):
         config = kwargs.pop("config", None)
@@ -84,6 +98,7 @@ class CustomAutoModelWrapper(_BaseAutoModelClass):
                 class_ref, pretrained_model_name_or_path, **hub_kwargs, **kwargs
             )
             model_class = FeatureExtractionInitModifier(model_class.__name__, (model_class,), {})
+            model_class = CustomAutoModelWrapper.get_streaming_model_class(model_class, config)
             _ = hub_kwargs.pop("code_revision", None)
             if os.path.isdir(pretrained_model_name_or_path):
                 model_class.register_for_auto_class(cls.__name__)
@@ -95,6 +110,7 @@ class CustomAutoModelWrapper(_BaseAutoModelClass):
         elif type(config) in cls._model_mapping.keys():
             model_class = _get_model_class(config, cls._model_mapping)
             model_class = FeatureExtractionInitModifier(model_class.__name__, (model_class,), {})
+            model_class = CustomAutoModelWrapper.get_streaming_model_class(model_class, config)
             return model_class.from_pretrained(
                 pretrained_model_name_or_path, *model_args, config=config, **hub_kwargs, **kwargs
             )
@@ -125,10 +141,12 @@ class CustomAutoModelWrapper(_BaseAutoModelClass):
                 cls.register(config.__class__, model_class, exist_ok=True)
             _ = kwargs.pop("code_revision", None)
             model_class = FeatureExtractionInitModifier(model_class.__name__, (model_class,), {})
+            model_class = CustomAutoModelWrapper.get_streaming_model_class(model_class, config)
             return model_class._from_config(config, **kwargs)
         elif type(config) in cls._model_mapping.keys():
             model_class = _get_model_class(config, cls._model_mapping)
             model_class = FeatureExtractionInitModifier(model_class.__name__, (model_class,), {})
+            model_class = CustomAutoModelWrapper.get_streaming_model_class(model_class, config)
             return model_class._from_config(config, **kwargs)
 
         raise ValueError(
