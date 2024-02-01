@@ -1,12 +1,17 @@
 import copy
 import os
 
-from transformers import AutoConfig, AutoModelForCTC, PretrainedConfig
+from transformers import (
+    AutoConfig,
+    AutoModelForCTC,
+    AutoModelForPreTraining,
+    PretrainedConfig,
+)
 from transformers.dynamic_module_utils import (
     get_class_from_dynamic_module,
     resolve_trust_remote_code,
 )
-from transformers.models.auto.auto_factory import _get_model_class
+from transformers.models.auto.auto_factory import _BaseAutoModelClass, _get_model_class
 
 from models.extractors import Conv2dFeatureExtractor
 
@@ -31,7 +36,7 @@ class FeatureExtractionInitModifier(type):
         return new_cls
 
 
-class CustomAutoModelForCTC(AutoModelForCTC):
+class CustomAutoModelWrapper(_BaseAutoModelClass):
     @classmethod
     def from_pretrained(cls, pretrained_model_name_or_path, *model_args, **kwargs):
         config = kwargs.pop("config", None)
@@ -130,3 +135,11 @@ class CustomAutoModelForCTC(AutoModelForCTC):
             f"Unrecognized configuration class {config.__class__} for this kind of AutoModel: {cls.__name__}.\n"
             f"Model type should be one of {', '.join(c.__name__ for c in cls._model_mapping.keys())}."
         )
+
+
+class CustomAutoModelForCTC(CustomAutoModelWrapper, AutoModelForCTC):
+    pass
+
+
+class CustomAutoModelForPretraining(CustomAutoModelWrapper, AutoModelForPreTraining):
+    pass

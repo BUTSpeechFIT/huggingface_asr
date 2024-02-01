@@ -6,7 +6,6 @@ from typing import Dict
 import torch
 from transformers import (
     AutoConfig,
-    AutoModelForPreTraining,
     AutoModelForSpeechSeq2Seq,
     PretrainedConfig,
     PreTrainedModel,
@@ -17,7 +16,7 @@ from transformers import (
 )
 from transformers.utils import logging
 
-from models.auto_wrappers import CustomAutoModelForCTC
+from models.auto_wrappers import CustomAutoModelForCTC, CustomAutoModelForPretraining
 from models.ctc_encoder_plus_autoregressive_decoder import (
     JointCTCAttentionEncoderDecoder,
     JointCTCAttentionEncoderDecoderConfig,
@@ -37,7 +36,7 @@ AutoModelForSpeechSeq2Seq.register(JointCTCAttentionEncoderDecoderConfig, JointC
 
 AutoConfig.register("wav2vec2-ebranchformer", Wav2Vec2EBranchformerConfig)
 CustomAutoModelForCTC.register(Wav2Vec2EBranchformerConfig, Wav2Vec2EBranchformerForCTC)
-AutoModelForPreTraining.register(Wav2Vec2EBranchformerConfig, Wav2Vec2EBranchformerForPreTraining)
+CustomAutoModelForPretraining.register(Wav2Vec2EBranchformerConfig, Wav2Vec2EBranchformerForPreTraining)
 
 
 def average_checkpoints(experiment_dir: str) -> str:
@@ -166,9 +165,9 @@ def instantiate_speech_encoder_model(
         model_path = model_args.from_pretrained
         if model_args.average_checkpoints:
             model_path = average_checkpoints(model_path)
-        model = AutoModelForPreTraining.from_pretrained(model_path, config=config)
+        model = CustomAutoModelForPretraining.from_pretrained(model_path, config=config)
     else:
         config = AutoConfig.from_pretrained(model_args.base_encoder_model)
         config.update(base_model_config)
-        model = AutoModelForPreTraining.from_config(config)
+        model = CustomAutoModelForPretraining.from_config(config)
     return model

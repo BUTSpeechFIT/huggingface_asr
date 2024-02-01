@@ -324,18 +324,34 @@ class SSLTrainer(Trainer):
         )
         percent_masked = num_losses / sub_attention_mask.sum()
 
-        additional_logs["constrast_loss"] = outputs.contrastive_loss / num_losses
-        additional_logs["div_loss"] = outputs.diversity_loss / num_losses
-        additional_logs["%_mask_idx"] = percent_masked / self.accelerator.num_processes
-        additional_logs["ppl"] = outputs.codevector_perplexity
-        additional_logs["temp"] = torch.tensor(
+        additional_logs["contrastive_loss"] = outputs.contrastive_loss
+        additional_logs["diversity_loss"] = outputs.diversity_loss
+        additional_logs["%_mask_idx"] = percent_masked
+        additional_logs["avg_ppl"] = outputs.codevector_perplexity
+        additional_logs["gumbel_temperature"] = torch.tensor(
             self.gumbel_callback.current_gumbel_temperature, device=inputs["mask_time_indices"].device
         )
+        additional_logs["num_losses"] = num_losses
 
         for key in additional_logs.keys():
             additional_logs[key] = additional_logs[key].detach()
 
         return additional_logs, num_losses
+
+    @staticmethod
+    def normalize_additional_logs(additional_logs, normalizer):
+        for key in additional_logs.keys():
+            if key != "num_losses":
+                if "loss" in key and "num_losses" in additional_logs.keys():
+                    additional_logs[key] = additional_logs[key] / additional_logs["num_losses"]
+                else:
+                    additional_logs[key] = round(
+                        additional_logs[key] / normalizer,
+                        4,
+                    )
+        if "num_losses" in additional_logs.keys():
+            del additional_logs["num_losses"]
+        return additional_logs
 
     def training_step(
         self, model: nn.Module, inputs: Dict[str, Union[torch.Tensor, Any]]
@@ -367,8 +383,17 @@ class SSLTrainer(Trainer):
         with self.compute_loss_context_manager():
             loss, outputs = self.compute_loss(model, inputs, return_outputs=True)
 
-        additional_logs, num_losses = self.gather_additional_statistics(inputs, outputs)
-        loss = loss / num_losses
+        additional_stats, num_losses = self.gather_additional_statistics(inputs, outputs)
+        loss = MetadataTensor(loss, metadata=additional_stats)
+        num_losses = loss.metadata["num_losses"]
+
+        if self.do_grad_scaling:
+            self.scaler.scale(loss).backward()
+        elif self.use_apex:
+            with amp.scale_loss(loss, self.optimizer) as scaled_loss:
+                scaled_loss.backward()
+        else:
+            self.accelerator.backward(loss)
 
         # pylint: disable=no-member
         if self.accelerator.state.num_processes > 1:
@@ -379,17 +404,6 @@ class SSLTrainer(Trainer):
         else:
             self.multiply_grads(model.parameters(), 1 / num_losses)
 
-        loss.additional_logs = additional_logs
-        if self.args.n_gpu > 1:
-            loss = loss.mean()  # mean() to average on multi-gpu parallel training
-
-        if self.do_grad_scaling:
-            self.scaler.scale(loss).backward()
-        elif self.use_apex:
-            with amp.scale_loss(loss, self.optimizer) as scaled_loss:
-                scaled_loss.backward()
-        else:
-            self.accelerator.backward(loss)
         _grad_norm = self.accelerator.clip_grad_norm_(
             model.parameters(),
             self.args.max_grad_norm,
@@ -399,11 +413,9 @@ class SSLTrainer(Trainer):
             grad_norm = model.get_global_grad_norm()
         else:
             grad_norm = _grad_norm.item() if _grad_norm is not None else None
-        additional_logs["gradient_norm"] = torch.tensor(grad_norm, device=loss.device)
+        loss.metadata["gradient_norm"] = torch.tensor(grad_norm, device=loss.device)
 
-        loss_detached = loss.detach() / self.args.gradient_accumulation_steps
-        loss_detached_with_metadata = MetadataTensor(loss_detached, metadata=additional_logs)
-        return loss_detached_with_metadata
+        return loss
 
     def _maybe_log_save_evaluate(self, tr_loss, model, trial, epoch, ignore_keys_for_eval):
         if self.control.should_log:
@@ -413,16 +425,22 @@ class SSLTrainer(Trainer):
             logs: Dict[str, float] = {}
 
             for item in tr_loss.metadata.keys():
-                item_scalar = self._nested_gather(tr_loss.metadata[item]).mean().item()
+                item_scalar = self._nested_gather(tr_loss.metadata[item]).sum().item()
                 tr_loss.metadata[item] -= tr_loss.metadata[item]
-                logs[item] = round(item_scalar / (self.state.global_step - self._globalstep_last_logged), 4)
+                logs[item] = item_scalar
             # all_gather + mean() to get average loss over all processes
-            tr_loss_scalar = self._nested_gather(tr_loss).mean().item()
+            tr_loss_scalar = self._nested_gather(tr_loss).sum().item()
 
             # reset tr_loss to zero
             tr_loss -= tr_loss
 
-            logs["loss"] = round(tr_loss_scalar / (self.state.global_step - self._globalstep_last_logged), 4)
+            logs["loss"] = tr_loss_scalar
+            logs = self.normalize_additional_logs(
+                # pylint: disable=no-member
+                logs,
+                self.accelerator.state.num_processes * (self.state.global_step - self._globalstep_last_logged),
+            )
+
             logs["learning_rate"] = self._get_learning_rate()
 
             self._total_loss_scalar += tr_loss_scalar
@@ -537,8 +555,6 @@ class SSLTrainer(Trainer):
                         loss, outputs = self.compute_loss(model, inputs, return_outputs=True)
 
                     additional_logs, num_losses = self.gather_additional_statistics(inputs, outputs)
-                    loss = loss.mean().detach()
-                    loss = loss / num_losses
                     loss = MetadataTensor(loss, metadata=additional_logs)
 
                     if isinstance(outputs, dict):
@@ -565,27 +581,6 @@ class SSLTrainer(Trainer):
             logits = logits[0]
 
         return (loss, logits, labels)
-
-    @staticmethod
-    def _expand_metadata(metadata, num_processes):
-        expanded_list = [[] for _ in range(num_processes)]
-
-        # Iterate over each dictionary in the list
-        for per_process_index, data_dict in enumerate(metadata):
-            # Get the keys and values from the dictionary
-            keys = list(data_dict.keys())
-            values = list(data_dict.values())
-
-            # Iterate over the indices of the lists
-            for i in range(len(values[0])):
-                # Create a new dictionary with elements at the current index for each key
-                new_dict = {keys[j]: values[j][i] for j in range(len(keys))}
-                expanded_list[i].append(new_dict)
-
-        output_arr = []
-        for i in range(num_processes):
-            output_arr.extend(expanded_list[i])
-        return output_arr
 
     def evaluation_loop(
         self,
@@ -733,7 +728,7 @@ class SSLTrainer(Trainer):
         # Gather all remaining tensors and put them back on the CPU
         if losses_host is not None:
             additional_metrics = {
-                key: np.array([value.metadata[key].cpu() for value in losses_host]).mean().item()
+                key: np.array([value.metadata[key].cpu() for value in losses_host]).sum().item()
                 for key in losses_host[-1].metadata.keys()
             }
             losses = np.array(nested_numpify(losses_host))
@@ -780,7 +775,10 @@ class SSLTrainer(Trainer):
         metrics = denumpify_detensorize(metrics)
 
         if all_losses is not None:
-            metrics[f"{metric_key_prefix}_loss"] = all_losses.mean().item()
+            additional_metrics[f"{metric_key_prefix}_loss"] = all_losses.sum().item()
+
+        if additional_metrics is not None:
+            additional_metrics = self.normalize_additional_logs(additional_metrics, num_samples)
 
         if additional_metrics is not None:
             metrics.update(additional_metrics)

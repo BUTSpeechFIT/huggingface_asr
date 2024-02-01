@@ -144,8 +144,10 @@ class DataCollatorForWav2Vec2Pretraining:
     model_input_name: str = True
 
     def __post_init__(self):
-        if not isinstance(self.feature_extractor, Wav2Vec2FeatureExtractor):
-            raise ValueError(f"`feature_extractor` has to be of type {Wav2Vec2FeatureExtractor} for {self.__class__}.")
+        if not isinstance(self.feature_extractor, (Wav2Vec2FeatureExtractor, Speech2TextFeatureExtractor)):
+            raise ValueError(
+                f"`feature_extractor` has to be of type {Wav2Vec2FeatureExtractor} or {Speech2TextFeatureExtractor} for {self.__class__}."
+            )
 
     def __call__(
         self, features: List[Dict[str, Union[List[int], torch.Tensor]]]
