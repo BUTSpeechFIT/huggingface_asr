@@ -88,6 +88,11 @@ class AudioFolderVAD(folder_based_builder.FolderBasedBuilder):
 
             for segment in annotation.itersegments():
                 chunk = waveform[:, int(segment.start * sample_rate) : int(segment.end * sample_rate)].squeeze().numpy()
+                chunk_shape = chunk.shape
+
+                if len(chunk_shape) > 1 and chunk_shape[0] > 1:
+                    raise ValueError(f"Expected mono audio, please fix recording {example['audio']}")
+
                 yield f"{example_id}_{segment.start:.2f}_{segment.end:.2f}", {
                     **example,
                     "audio": audio_encoder.encode_example({"array": chunk, "sampling_rate": sample_rate}),

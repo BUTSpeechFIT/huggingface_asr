@@ -1,7 +1,7 @@
 """ PyTorch Wav2Vec2-Ebranchformer model."""
 
 import math
-from typing import Optional, Tuple
+from typing import Optional, Tuple, Union
 
 import torch
 import torch.utils.checkpoint
@@ -11,6 +11,7 @@ from transformers.models.wav2vec2.modeling_wav2vec2 import (
     Wav2Vec2Config,
     Wav2Vec2ForCTC,
     Wav2Vec2ForPreTraining,
+    Wav2Vec2ForPreTrainingOutput,
 )
 from transformers.models.wav2vec2_conformer.modeling_wav2vec2_conformer import (
     Wav2Vec2ConformerConfig,
@@ -24,6 +25,9 @@ from transformers.models.wav2vec2_conformer.modeling_wav2vec2_conformer import (
     Wav2Vec2ConformerSelfAttention,
 )
 from transformers.utils import logging
+from vector_quantize_pytorch.random_projection_quantizer import (
+    RandomProjectionQuantizer,
+)
 
 from models.streaming_modules import CausalConv1d, FeatureExtractorForStreaming
 
@@ -343,3 +347,102 @@ class Wav2Vec2EBranchformerForCTC(Wav2Vec2ForCTC):
         super().__init__(config)
         self.wav2vec2 = Wav2Vec2EBranchformerModel(config)
         self.post_init()
+
+
+class BestRQEBranchformerConfig(Wav2Vec2EBranchformerConfig):
+    model_type = "bestrq-ebranchformer"
+
+    def __init__(
+        self,
+        best_rq_codebook_size=8192,
+        best_rq_codebook_dim=16,
+        best_rq_num_books=1,
+        **kwargs,
+    ):
+        super().__init__(**kwargs)
+        self.best_rq_codebook_size = best_rq_codebook_size
+        self.best_rq_codebook_dim = best_rq_codebook_dim
+        self.best_rq_num_books = best_rq_num_books
+
+
+class BestRQEBranchformerForPreTraining(Wav2Vec2ForPreTraining):
+    config_class = BestRQEBranchformerConfig
+    base_model_prefix = "wav2vec2"
+
+    def __init__(self, config: BestRQEBranchformerConfig):
+        super().__init__(config)
+        self.wav2vec2 = Wav2Vec2EBranchformerModel(config)
+        self.post_init()
+        self.rpqs = nn.ModuleList(
+            nn.Sequential(
+                nn.LayerNorm(config.conv_dim[-1], elementwise_affine=True),
+                RandomProjectionQuantizer(
+                    dim=config.conv_dim[-1],
+                    codebook_size=config.best_rq_codebook_size,
+                    codebook_dim=config.best_rq_codebook_dim,
+                    norm=False,
+                ),
+            )
+            for _ in range(config.best_rq_num_books)
+        )
+        for rpq in self.rpqs:
+            rpq.requires_grad = False
+        self.classifiers = nn.ModuleList(
+            nn.Sequential(nn.Linear(config.hidden_size, config.best_rq_codebook_size), nn.LogSoftmax(dim=-1))
+            for _ in range(config.best_rq_num_books)
+        )
+
+    def forward(
+        self,
+        input_values: Optional[torch.Tensor],
+        attention_mask: Optional[torch.Tensor] = None,
+        mask_time_indices: Optional[torch.BoolTensor] = None,
+        sampled_negative_indices: Optional[torch.BoolTensor] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
+    ) -> Union[Tuple, Wav2Vec2ForPreTrainingOutput]:
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+
+        if mask_time_indices is not None:
+            mask_time_indices = mask_time_indices.to(torch.bool)
+
+        outputs = self.wav2vec2(
+            input_values,
+            attention_mask=attention_mask,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            mask_time_indices=mask_time_indices,
+            return_dict=return_dict,
+        )
+
+        extract_features = outputs[1]
+        last_hidden_states = outputs[0]
+
+        loss = None
+        for classifier, rpq in zip(self.classifiers, self.rpqs):
+            probs = classifier(last_hidden_states)
+            labels = rpq(extract_features)
+            # pylint: disable=invalid-unary-operand-type
+            labels.masked_fill_(~mask_time_indices, -100)
+
+            loss_local = nn.functional.cross_entropy(probs.transpose(1, 2), labels, reduction="sum")
+            if loss is None:
+                loss = 1 / len(self.rpqs) * loss_local
+            else:
+                loss += 1 / len(self.rpqs) * loss_local
+
+        if not return_dict:
+            if loss is not None:
+                return (loss, last_hidden_states, None, None) + outputs[2:]
+            return (last_hidden_states, None, None) + outputs[2:]
+
+        return Wav2Vec2ForPreTrainingOutput(
+            loss=loss,
+            projected_states=last_hidden_states,
+            codevector_perplexity=torch.zeros(1, device=loss.device),
+            hidden_states=outputs.hidden_states,
+            attentions=outputs.attentions,
+            contrastive_loss=torch.zeros(1, device=loss.device),
+            diversity_loss=torch.zeros(1, device=loss.device),
+        )

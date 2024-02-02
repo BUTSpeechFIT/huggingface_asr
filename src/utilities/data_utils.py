@@ -1,12 +1,13 @@
 """Utilities for data loading and preprocessing."""
 import json
 import re
-from typing import Dict, List, Union
+from typing import Dict, List, Optional, Tuple, Union
 
 import numpy as np
 import torch.distributed
 from datasets import (
     Audio,
+    Dataset,
     DatasetDict,
     Value,
     concatenate_datasets,
@@ -388,9 +389,9 @@ def load_multiple_datasets(
                 )
             context.wait_after()
         new_train_split_name = global_train_split if len(dataset_config["train_splits"]) > 0 else None
-        new_dev_split_name = global_validation_split if len(dataset_config["dev_splits"]) > 0 else None
+        new_dev_split_name = global_validation_split if len(dataset_config["validation_splits"]) > 0 else None
         dataset = merge_splits(dataset, dataset_config["train_splits"], new_train_split_name)
-        dataset = merge_splits(dataset, dataset_config["dev_splits"], new_dev_split_name)
+        dataset = merge_splits(dataset, dataset_config["validation_splits"], new_dev_split_name)
 
         # Remove unused splits
         for split in list(dataset.keys()):
@@ -441,6 +442,39 @@ def load_multiple_datasets(
     return dataset_merged
 
 
+def get_eval_split(
+    dataset: DatasetDict,
+    train_split_name: str,
+    validation_split_name: str,
+    data_slice_str: str,
+    cut_validation_from_train: bool,
+    seed: Optional[int],
+) -> Dataset:
+    if cut_validation_from_train:
+        if validation_split_name in dataset:
+            raise ValueError(
+                "Cannot use cut_validation_from_train and validation_split that exist in the dataset at the same time."
+            )
+        if data_slice_str is not None:
+            train_split = dataset[train_split_name]
+            data_slice = extract_num_samples(train_split, data_slice_str)
+            new_splits = train_split.train_test_split(test_size=data_slice, shuffle=True, seed=seed)
+            dataset[train_split_name] = new_splits["train"]
+            dataset[validation_split_name + data_slice_str] = new_splits["test"]
+            return new_splits["test"]
+        else:
+            raise ValueError("Cannot use cut_validation_from_train without specifying data_slice.")
+    elif train_split_name == validation_split_name:
+        raise ValueError("Cannot use the same split for training and validation.")
+    else:
+        validation_split = dataset[validation_split_name]
+        if data_slice_str is not None:
+            data_slice = extract_num_samples(validation_split, data_slice_str)
+            training_eval_dataset = validation_split.shuffle(seed=seed).select(range(data_slice))
+            dataset[validation_split_name + data_slice_str] = training_eval_dataset
+        return validation_split
+
+
 def get_dataset(
     datasets_creation_config_path: str,
     dataset_name: str,
@@ -458,7 +492,10 @@ def get_dataset(
     text_transformations: List[str],
     split_long_segments_to_chunks: bool,
     filter_empty_labels: bool,
-) -> DatasetDict:
+    validation_slice_str: str,
+    cut_validation_from_train: bool,
+    seed: Optional[int],
+) -> Tuple[DatasetDict, Dataset]:
     """Loads single or multiple datasets, preprocess, and merge them."""
     if datasets_creation_config_path is not None:
         dataset = load_multiple_datasets(
@@ -525,5 +562,19 @@ def get_dataset(
             fn_kwargs={"max_input_len": np.finfo(np.float32).max, "min_input_len": MIN_INPUT_LEN},
             desc="Filter samples that the model is not able to process due to the conv subsampling.",
         )
+    train_eval_split = get_eval_split(
+        dataset, train_split, validation_split, validation_slice_str, cut_validation_from_train, seed
+    )
+    return dataset, train_eval_split
 
-    return dataset
+
+def extract_num_samples(dataset: Dataset, data_slice: str) -> int:
+    if data_slice.isnumeric():
+        data_slice = int(data_slice)
+    else:
+        data_slice = data_slice.replace("%", "")
+        if data_slice.isnumeric():
+            data_slice = int(float(data_slice) * len(dataset) / 100)
+        else:
+            raise ValueError(f"Invalid slice value: {data_slice}, must be number or percentage")
+    return data_slice

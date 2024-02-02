@@ -22,6 +22,8 @@ from models.ctc_encoder_plus_autoregressive_decoder import (
     JointCTCAttentionEncoderDecoderConfig,
 )
 from models.encoders.e_branchformer import (
+    BestRQEBranchformerConfig,
+    BestRQEBranchformerForPreTraining,
     Wav2Vec2EBranchformerConfig,
     Wav2Vec2EBranchformerForCTC,
     Wav2Vec2EBranchformerForPreTraining,
@@ -37,6 +39,9 @@ AutoModelForSpeechSeq2Seq.register(JointCTCAttentionEncoderDecoderConfig, JointC
 AutoConfig.register("wav2vec2-ebranchformer", Wav2Vec2EBranchformerConfig)
 CustomAutoModelForCTC.register(Wav2Vec2EBranchformerConfig, Wav2Vec2EBranchformerForCTC)
 CustomAutoModelForPretraining.register(Wav2Vec2EBranchformerConfig, Wav2Vec2EBranchformerForPreTraining)
+
+AutoConfig.register("bestrq-ebranchformer", BestRQEBranchformerConfig)
+CustomAutoModelForPretraining.register(BestRQEBranchformerConfig, BestRQEBranchformerForPreTraining)
 
 
 def average_checkpoints(experiment_dir: str) -> str:

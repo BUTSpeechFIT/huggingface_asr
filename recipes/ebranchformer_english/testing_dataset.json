@@ -6,7 +6,7 @@
     "train_splits": [
       "train"
     ],
-    "dev_splits": [
+    "validation_splits": [
       "validation"
     ],
     "test_splits": [

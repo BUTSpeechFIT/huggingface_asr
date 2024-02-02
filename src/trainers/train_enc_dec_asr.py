@@ -33,7 +33,7 @@ if __name__ == "__main__":
     model_args, data_args, training_args, gen_args = parser.parse_args_into_dataclasses()
 
     # 1. Collect, preprocess dataset and extract evaluation dataset
-    dataset = get_dataset(
+    dataset, training_eval_dataset = get_dataset(
         datasets_creation_config_path=data_args.datasets_creation_config,
         dataset_name=data_args.dataset_name,
         dataset_config=data_args.dataset_config,
@@ -50,14 +50,10 @@ if __name__ == "__main__":
         text_transformations=data_args.text_transformations,
         split_long_segments_to_chunks=data_args.split_long_segments_to_chunks,
         filter_empty_labels=data_args.filter_empty_labels,
+        validation_slice_str=data_args.validation_slice,
+        cut_validation_from_train=data_args.cut_validation_from_train,
+        seed=data_args.validation_slice_seed,
     )
-
-    if data_args.validation_slice:
-        training_eval_dataset = dataset[data_args.validation_split].shuffle().select(range(data_args.validation_slice))
-        # Ensure that transformations are also attached to the sliced validation dataset
-        dataset[data_args.validation_split + str(data_args.validation_slice)] = training_eval_dataset
-    else:
-        training_eval_dataset = dataset[data_args.validation_split]
 
     logger.info(f"Dataset processed successfully.{dataset}")
 

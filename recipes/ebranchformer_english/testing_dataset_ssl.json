@@ -1,38 +1,24 @@
 [
     {
-    "dataset_name": "google/fleurs",
-    "dataset_id": "fleurs",
-    "load_from_disk": false,
-    "train_splits": [
-      "train",       "validation"
-
-    ],
-    "dev_splits": [
-              "test"
-    ],
-    "test_splits": [
-    ],
-    "audio_column_name": "audio",
-    "length_column_name": "input_len",
-    "additional_args": {
-      "name": "en_us"
-    }
-  },
-    {
     "dataset_name": "src/dataset_builders/audio_folder_vad",
     "dataset_id": "RAND",
     "load_from_disk": false,
     "train_splits": [
       "train"
     ],
-    "dev_splits": [
+    "validation_splits": [
     ],
     "test_splits": [
     ],
     "audio_column_name": "audio",
     "length_column_name": "input_len",
     "additional_args": {
-      "data_files":{"train": ["/Users/alexanderpolok/PycharmProjects/huggingface_asr/audios_here/*"]}
+        "vad_model": "pyannote/segmentation-3.0",
+        "vad_batch_size": 2048,
+        "vad_device"   : "mps",
+        "vad_min_duration_on" : 2,
+        "vad_min_duration_off": 1,
+      "data_files":{"train": ["/Users/alexanderpolok/PycharmProjects/huggingface_asr/audios_here/**/*.wav", "/Users/alexanderpolok/PycharmProjects/huggingface_asr/audios_here/*.wav"]}
     }
   }
 ]

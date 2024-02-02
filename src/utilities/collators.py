@@ -68,6 +68,7 @@ class SpeechCollatorWithPadding:
             BatchFeature({self.feature_extractor.model_input_names[0]: feature[self.audio_path].squeeze(dim=0)})
             for feature in features
         ]
+        from transformers import GPT2Model
 
         labels = self.tokenizer.batch_encode_plus(
             [feature[self.text_path] for feature in features],

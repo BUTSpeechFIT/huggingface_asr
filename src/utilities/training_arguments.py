@@ -161,13 +161,19 @@ class DataTrainingArguments:
     train_split: Optional[str] = field(default="train", metadata={"help": "Training split to be used."})
     validation_split: Optional[str] = field(default="validation", metadata={"help": "Validation split to be used."})
     test_splits: Optional[List[str]] = field(default=None, metadata={"help": "Splits to use for evaluation."})
-    validation_slice: Optional[int] = field(default=None, metadata={"help": "Part of the validation split to be used."})
+    validation_slice: Optional[str] = field(default=None, metadata={"help": "Part of the validation split to be used."})
     sampling_rate: Optional[int] = field(default=16_000, metadata={"help": "Sampling rate for the model."})
     split_long_segments_to_chunks: Optional[bool] = field(
         default=False, metadata={"help": "Whether to split long segments to chunks."}
     )
     filter_empty_labels: Optional[bool] = field(
         default=False, metadata={"help": "Whether to filter out samples with empty labels."}
+    )
+    cut_validation_from_train: Optional[bool] = field(
+        default=False, metadata={"help": "Whether to cut validation split from train split."}
+    )
+    validation_slice_seed: Optional[int] = field(
+        default=None, metadata={"help": "Seed to use for splitting validation slice."}
     )
 
 
