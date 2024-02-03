@@ -201,6 +201,19 @@ def prepare_dataset(
 ) -> DatasetDict:
     """Preprocesses dataset."""
     if audio_column_name is not None and split_long_segments_to_chunks:
+        if length_column_name is not None and length_column_name not in set().union(*dataset.column_names.values()):
+            dataset = distributed_process(
+                dataset,
+                process_by="map",
+                function=extract_lens_batched,
+                num_proc=preprocessing_num_workers,
+                input_columns=[audio_column_name],
+                batched=True,
+                batch_size=writer_batch_size // 4,
+                writer_batch_size=writer_batch_size,
+                fn_kwargs={"sampling_rate": sampling_rate, "len_column": length_column_name},
+                desc="Extracting audio lens",
+            )
         dataset = distributed_process(
             dataset,
             process_by="map",

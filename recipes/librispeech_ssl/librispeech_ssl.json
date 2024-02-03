@@ -1,0 +1,24 @@
+[
+    {
+    "dataset_name": "librispeech_asr",
+    "dataset_id": "librispeech",
+    "load_from_disk": false,
+    "train_splits": [
+      "train.clean.100",
+      "train.clean.360",
+      "train.other.500",
+              "validation.clean",
+      "validation.other"
+    ],
+    "validation_splits": [
+      "test.clean"
+    ],
+    "test_splits": [
+    ],
+    "audio_column_name": "audio",
+    "length_column_name": "input_len",
+    "additional_args": {
+      "name": "all"
+    }
+  }
+]
