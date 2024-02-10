@@ -5,9 +5,9 @@
 #SBATCH --gpus 8
 #SBATCH --nodes 1
 #SBATCH --time 2-00:00:00
-#SBATCH --output=/mnt/proj1/open-28-58/lakoc/huggingface_asr/outputs/librispeech_ssl/ssl_small_8gpus_bestrq_fixed.out
+#SBATCH --output=/mnt/proj1/open-28-58/lakoc/huggingface_asr/outputs/librispeech_ssl/ssl_small_8gpus_wav2vec2.out
 
-EXPERIMENT="ssl_small_8gpus_bestrq_fixed"
+EXPERIMENT="ssl_small_8gpus_wav2vec2"
 PROJECT="librispeech_ssl"
 WORK_DIR="/mnt/proj1/open-28-58/lakoc/huggingface_asr"
 RECIPE_DIR="${WORK_DIR}/recipes/librispeech_ssl"
@@ -29,7 +29,7 @@ cd $WORK_DIR
 args=(
   # General training arguments
   --output_dir=$EXPERIMENT_PATH
-  --per_device_train_batch_size="24"
+  --per_device_train_batch_size="40"
   --per_device_eval_batch_size="64"
   --dataloader_num_workers="24"
   --num_train_epochs="50"
@@ -40,7 +40,7 @@ args=(
 
   # Optimizer related arguments
   --optim="adamw_torch"
-  --learning_rate="4e-3"
+  --learning_rate="1e-3"
   --warmup_steps="5000"
   --early_stopping_patience="5"
   --weight_decay="1e-6"
@@ -49,7 +49,7 @@ args=(
 
   # Logging, saving and evaluation related arguments
   --report_to="wandb"
-  --logging_steps="5"
+  --logging_steps="10"
   --save_strategy="epoch"
   --evaluation_strategy="epoch"
   --greater_is_better="False"
@@ -68,12 +68,11 @@ args=(
   --validation_slice="10%"
 
   # Preprocessing related arguments
-  --data_preprocessing_config="${RECIPE_DIR}/data_preprocessing2d_no_spec_aug.json"
+  --data_preprocessing_config="${WORK_DIR}/configs/default_data_preprocessing2d.json"
 
   # Model related arguments
   --expect_2d_input
-  --config_overrides="best_rq_num_books=8,best_rq_codebook_size=2048,best_rq_codebook_dim=16"
-  --base_encoder_model="Lakoc/ebranchformer_12_256h_2d_bestrq"
+  --base_encoder_model="Lakoc/ebranchformer_12_256h_2d"
   --feature_extractor_name="Lakoc/log_80mel_extractor_16k")
 
 torchrun --standalone --nnodes=1 --nproc-per-node=$SLURM_GPUS_ON_NODE src/trainers/pretrain_wav2vec2.py "${args[@]}"

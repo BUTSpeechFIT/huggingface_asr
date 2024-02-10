@@ -1,0 +1,48 @@
+{
+  "train": [
+    {
+      "name": "torchaudio.transforms.SpeedPerturbation",
+      "params": {
+        "orig_freq": 16000,
+        "factors": [
+          0.9,
+          1.1
+        ]
+      },
+      "steps_before_activation": 2,
+      "return_behaviour": [
+        0
+      ],
+      "fn_call_params": {
+      }
+    },
+    {
+      "name": "feature_extractor",
+      "steps_before_activation": 0,
+      "fn_call_params": {
+        "return_attention_mask": false,
+        "padding": false,
+        "sampling_rate": 16000,
+        "return_tensors": "pt"
+      },
+      "return_behaviour": [
+        "input_features[0]"
+      ]
+    }
+  ],
+  "default_preprocessing": [
+    {
+      "name": "feature_extractor",
+      "steps_before_activation": 0,
+      "fn_call_params": {
+        "return_attention_mask": false,
+        "padding": false,
+        "sampling_rate": 16000,
+        "return_tensors": "pt"
+      },
+      "return_behaviour": [
+        "input_features[0]"
+      ]
+    }
+  ]
+}

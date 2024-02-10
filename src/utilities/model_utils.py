@@ -182,7 +182,6 @@ def instantiate_speech_encoder_model(
         config.update(base_model_config)
         if model_args.config_overrides is not None:
             logger.info(f"Overriding config: {model_args.config_overrides}")
-            parsed_dict = dict(x.split("=") for x in model_args.config_overrides.split(","))
-            config.update(parsed_dict)
+            config.update_from_string(model_args.config_overrides)
         model = CustomAutoModelForPretraining.from_config(config)
     return model

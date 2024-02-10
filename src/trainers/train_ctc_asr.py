@@ -7,7 +7,7 @@ from transformers.utils import logging
 from utilities.callbacks import init_callbacks
 from utilities.collators import SpeechCollatorWithPadding
 from utilities.data_utils import get_dataset
-from utilities.eval_utils import compute_metrics_ctc
+from utilities.eval_utils import compute_metrics_ctc, get_most_likely_tokens
 from utilities.general_utils import do_evaluate
 from utilities.model_utils import instantiate_ctc_model
 from utilities.training_arguments import (
@@ -82,6 +82,7 @@ if __name__ == "__main__":
         train_dataset=dataset[data_args.train_split],
         eval_dataset=training_eval_dataset,
         data_collator=data_collator,
+        preprocess_logits_for_metrics=get_most_likely_tokens,
         compute_metrics=lambda pred: compute_metrics_ctc(tokenizer, pred, gen_args.wandb_predictions_to_save),
     )
 

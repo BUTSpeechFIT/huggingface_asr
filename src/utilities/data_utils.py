@@ -485,7 +485,9 @@ def get_eval_split(
             data_slice = extract_num_samples(validation_split, data_slice_str)
             training_eval_dataset = validation_split.shuffle(seed=seed).select(range(data_slice))
             dataset[validation_split_name + data_slice_str] = training_eval_dataset
-        return validation_split
+            return training_eval_dataset
+        else:
+            return validation_split
 
 
 def get_dataset(

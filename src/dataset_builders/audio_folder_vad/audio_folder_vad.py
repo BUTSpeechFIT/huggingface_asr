@@ -73,7 +73,7 @@ class AudioFolderVAD(folder_based_builder.FolderBasedBuilder):
         num_proc: Optional[int] = None,
         max_shard_size: Optional[Union[int, str]] = None,
     ):
-        set_start_method("spawn")
+        set_start_method("spawn", force=True)
         super()._prepare_split(split_generator, check_duplicate_keys, file_format, num_proc, max_shard_size)
 
     def _generate_examples(self, files, metadata_files, split_name, add_metadata, add_labels):

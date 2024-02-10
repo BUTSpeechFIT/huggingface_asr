@@ -6,6 +6,7 @@ from typing import Optional, Tuple, Union
 import torch
 import torch.utils.checkpoint
 from torch import nn
+from torch.linalg import vector_norm
 from transformers.activations import ACT2FN
 from transformers.models.wav2vec2.modeling_wav2vec2 import (
     Wav2Vec2Config,
@@ -25,9 +26,6 @@ from transformers.models.wav2vec2_conformer.modeling_wav2vec2_conformer import (
     Wav2Vec2ConformerSelfAttention,
 )
 from transformers.utils import logging
-from vector_quantize_pytorch.random_projection_quantizer import (
-    RandomProjectionQuantizer,
-)
 
 from models.streaming_modules import CausalConv1d, FeatureExtractorForStreaming
 
@@ -365,6 +363,42 @@ class BestRQEBranchformerConfig(Wav2Vec2EBranchformerConfig):
         self.best_rq_num_books = best_rq_num_books
 
 
+class RandomProjectionQuantizer(nn.Module):
+    def __init__(self, config: BestRQEBranchformerConfig):
+        super().__init__()
+        self.random_projection = nn.Linear(config.conv_dim[-1], config.best_rq_codebook_dim, bias=False)
+        nn.init.xavier_uniform_(self.random_projection.weight)
+
+        self.code_book = nn.Parameter(torch.randn(config.best_rq_codebook_size, config.best_rq_codebook_dim))
+        nn.init.normal_(self.code_book)
+        self.code_book = nn.Parameter(torch.nn.functional.normalize(self.code_book, p=2, dim=-1))
+
+        self.random_projection.weight.requires_grad = False
+        self.code_book.requires_grad = False
+
+    @torch.no_grad()
+    def forward(self, input_values: torch.Tensor) -> torch.Tensor:
+        """
+        Args:
+            input_values (torch.Tensor): with shape `(B, L, D)`
+            mask_time_indices (torch.Tensor): with shape `(B, L)`
+
+        Returns:
+            torch.Tensor with shape `(N)`
+
+        """
+        from torch.nn.functional import normalize
+
+        targets = self.random_projection(input_values).unsqueeze(-2)
+
+        # Compute l2 norm targets and code vectors
+        vector_distances = vector_norm(normalize(targets, p=2, dim=-1) - self.code_book, dim=-1)
+
+        labels = torch.argmin(vector_distances, dim=-1)
+
+        return labels
+
+
 class BestRQEBranchformerForPreTraining(Wav2Vec2ForPreTraining):
     config_class = BestRQEBranchformerConfig
     base_model_prefix = "wav2vec2"
@@ -373,23 +407,11 @@ class BestRQEBranchformerForPreTraining(Wav2Vec2ForPreTraining):
         super().__init__(config)
         self.wav2vec2 = Wav2Vec2EBranchformerModel(config)
         self.post_init()
-        self.rpqs = nn.ModuleList(
-            nn.Sequential(
-                nn.LayerNorm(config.conv_dim[-1], elementwise_affine=True),
-                RandomProjectionQuantizer(
-                    dim=config.conv_dim[-1],
-                    codebook_size=config.best_rq_codebook_size,
-                    codebook_dim=config.best_rq_codebook_dim,
-                    norm=False,
-                ),
-            )
-            for _ in range(config.best_rq_num_books)
-        )
+        self.rpqs = nn.ModuleList(RandomProjectionQuantizer(config) for _ in range(config.best_rq_num_books))
         for rpq in self.rpqs:
             rpq.requires_grad = False
         self.classifiers = nn.ModuleList(
-            nn.Sequential(nn.Linear(config.hidden_size, config.best_rq_codebook_size), nn.LogSoftmax(dim=-1))
-            for _ in range(config.best_rq_num_books)
+            nn.Linear(config.hidden_size, config.best_rq_codebook_size) for _ in range(config.best_rq_num_books)
         )
 
     def forward(
@@ -420,11 +442,20 @@ class BestRQEBranchformerForPreTraining(Wav2Vec2ForPreTraining):
         last_hidden_states = outputs[0]
 
         loss = None
+        utilization = torch.zeros(1, device=last_hidden_states.device)
         for classifier, rpq in zip(self.classifiers, self.rpqs):
             probs = classifier(last_hidden_states)
             labels = rpq(extract_features)
             # pylint: disable=invalid-unary-operand-type
             labels.masked_fill_(~mask_time_indices, -100)
+
+            valid_elements = labels[labels != -100]
+
+            # Calculate the number of duplicates
+            duplicates_count = len(valid_elements) - len(torch.unique(valid_elements))
+
+            # Calculate utilization
+            utilization += duplicates_count / len(valid_elements)
 
             loss_local = nn.functional.cross_entropy(probs.transpose(1, 2), labels, reduction="sum")
             if loss is None:
@@ -440,7 +471,7 @@ class BestRQEBranchformerForPreTraining(Wav2Vec2ForPreTraining):
         return Wav2Vec2ForPreTrainingOutput(
             loss=loss,
             projected_states=last_hidden_states,
-            codevector_perplexity=torch.zeros(1, device=loss.device),
+            codevector_perplexity=utilization / len(self.rpqs),
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
             contrastive_loss=torch.zeros(1, device=loss.device),
