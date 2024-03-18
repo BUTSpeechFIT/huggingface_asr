@@ -1,11 +1,17 @@
 #!/usr/bin/bash
-#!/usr/bin/bash
 #SBATCH --job-name TED
 #SBATCH --account OPEN-28-57
-#SBATCH --partition qcpu
-#SBATCH --nodes 1
-#SBATCH --time 24:00:00
-#SBATCH --output=/mnt/proj1/open-28-58/lakoc/huggingface_asr/outputs/ebranchformer_english_tokenizer.out
+# #SBATCH --gpus 1
+#SBATCH --partition qgpu_exp
+# #SBATCH --nodes 1
+# #SBATCH --gpus-per-task=1
+#SBATCH --gres=gpu:1
+#SBATCH --time 1:00:00
+#SBATCH --output=/mnt/proj1/open-28-57/szoke/huggingface_asr/recipes/ebranchformer_czech/datasets_ssl_split/output/ssl.%A.%a.out  # %A is the job ID, %a is the array task ID
+#SBATCH --error=/mnt/proj1/open-28-57/szoke/huggingface_asr/recipes/ebranchformer_czech/datasets_ssl_split/output/ssl.%A.%a.err
+#SBATCH --array=50-64  # Specify the range of array tasks
+
+ml Anaconda3/2023.07-2
 
 #unset PYTHONPATH
 #unset PYTHONHOME
@@ -24,13 +30,17 @@ export OMP_NUM_THREADS=64
 export WANDB_PROJECT=$PROJECT
 export WANDB_RUN_ID="${EXPERIMENT}"
 
+#export SLURM_ARRAY_TASK_ID=93
 
-
-conda deactivate
-source activate /mnt/proj1/open-28-57/szoke/CONDA_ENVS/huggingface_asr
+[ -z "${CONDA_EXE}" ] && echo "Error, missing conda $CONDA_EXE !" && exit 1
+CONDA_BASE=$(${CONDA_EXE} info --base)
+source $CONDA_BASE/etc/profile.d/conda.sh
 
 #conda deactivate
-#conda activate /mnt/matylda6/szoke/CONDA_ENVS/huggingface_asr
+#source activate /mnt/proj1/open-28-57/szoke/CONDA_ENVS/huggingface_asr
+
+conda deactivate
+conda activate /mnt/proj1/open-28-57/szoke/CONDA_ENVS/huggingface_asr
 
 EXPERIMENT_PATH="${WORK_DIR}/experiments/${EXPERIMENT}"
 
@@ -43,16 +53,15 @@ cd $WORK_DIR
 args=(
   # General training arguments
   --output_dir=$EXPERIMENT_PATH
-  --per_device_train_batch_size="64"
+  --per_device_train_batch_size="32"
   --per_device_eval_batch_size="64"
   --dataloader_num_workers="24"
   --num_train_epochs="50"
   --group_by_length="True"
   --bf16
   --do_train
-  --do_evaluate
-  --joint_decoding_during_training
   --load_best_model_at_end
+  --auto_find_batch_size=True
 
   # Optimizer related arguments
   --optim="adamw_torch"
@@ -61,7 +70,6 @@ args=(
   --early_stopping_patience="5"
   --weight_decay="1e-6"
   --max_grad_norm="5.0"
-  --lsm_factor="0.1"
   --gradient_accumulation_steps="1"
 
   # Logging, saving and evaluation related arguments
@@ -72,41 +80,29 @@ args=(
   --wandb_predictions_to_save=50
   --greater_is_better="False"
   --save_total_limit="5"
-  --track_ctc_loss
 
   # Data related arguments
-  --max_duration_in_seconds="20.0"
-  --min_duration_in_seconds="0.2"
-  --length_column_name="input_len"
-  --remove_unused_columns="False"
-  --preprocessing_num_workers="64"
-  --datasets_creation_config="${RECIPE_DIR}/datasets_ssl.json"
-  #--datasets_creation_config="${RECIPE_DIR}/testing_dataset.json"
-  --writer_batch_size="1000"
-  #--test_splits wsj_test fisher_swbd_test voxpopuli_test tedlium3_test librispeech_test.clean librispeech_test.other commonvoice_en_test fleurs_test
-  --test_splits fleurs_test
-  #--validation_slice=10000
+    --max_duration_in_seconds="20.0"
+    --min_duration_in_seconds="2.0"
+    --length_column_name="input_len"
+    --remove_unused_columns="False"
+    --preprocessing_num_workers="4"
+    --datasets_creation_config="${RECIPE_DIR}/datasets_ssl_split/datasets_ssl.json_new_part_${SLURM_ARRAY_TASK_ID}"
+    --writer_batch_size="100"
+    --validation_split=validation
+    --validation_slice=5%
+    --cut_validation_from_train
+    --split_long_segments_to_chunks
 
   # Preprocessing related arguments
   --data_preprocessing_config="${RECIPE_DIR}/data_preprocessing.json"
 
   # Model related arguments
-  --from_encoder_decoder_config
-  --tokenizer_name="Lakoc/english_corpus_uni5000"
-  --feature_extractor_name="Lakoc/log_80mel_extractor_16k"
-  --base_encoder_model="Lakoc/fisher_ebranchformer_enc_12_layers_fixed"
-  --base_decoder_model="Lakoc/gpt2_256h_8l_add_head6_03"
-  --ctc_weight="0.3"
-  --decoder_pos_emb_fixed
   --expect_2d_input
-
-  # Generation related arguments
-  --num_beams="1"
-  --max_length="512"
-  --predict_with_generate
-  --decoding_ctc_weight="0.3"
-  #--eval_beam_factor="1"
+  --base_encoder_model="iszoke/ebranchformer_12_256h_2D"
+  --feature_extractor_name="Lakoc/log_80mel_extractor_16k"
+  --config_overrides="is_causal=True"
 )
 
-#torchrun --standalone --nnodes=1 --nproc-per-node=1 src/trainers/train_enc_dec_asr.py "${args[@]}"
-python src/trainers/train_enc_dec_asr.py "${args[@]}"
+#torchrun --standalone --nnodes=1 --nproc-per-node=8 src/trainers/train_enc_dec_asr.py "${args[@]}"
+python src/trainers/pretrain_wav2vec2.py "${args[@]}" --preprocess_dataset_only

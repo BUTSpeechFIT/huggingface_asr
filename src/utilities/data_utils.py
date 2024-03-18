@@ -1,12 +1,13 @@
 """Utilities for data loading and preprocessing."""
 import json
 import re
-from typing import Dict, List, Union
+from typing import Dict, List, Optional, Tuple, Union
 
 import numpy as np
 import torch.distributed
 from datasets import (
     Audio,
+    Dataset,
     DatasetDict,
     Value,
     concatenate_datasets,
@@ -144,6 +145,25 @@ def audio_object_stripper(audio: Union[Dict, np.ndarray, List[float]], key="arra
     return trimmed
 
 
+def split_long_segments_to_chunks_fun(
+    audios: List[Dict],
+    lens: List[float],
+    audio_column: str,
+    length_column_name: str,
+    max_input_len: float,
+    sampling_rate: int,
+) -> Dict[str, List[List[float]]]:
+    audio_encoder = Audio(sampling_rate=sampling_rate, mono=True)
+    chunks = []
+    lens_new = []
+    for index, example_len in enumerate(lens):
+        for i in range(0, len(audios[index]["array"]), int(max_input_len * sampling_rate)):
+            new_chunk = audio_object_stripper(audios[index])[i : i + int(max_input_len * sampling_rate)]
+            chunks.append(audio_encoder.encode_example({"array": new_chunk, "sampling_rate": sampling_rate}))
+            lens_new.append(len(new_chunk) / sampling_rate)
+    return {audio_column: chunks, length_column_name: lens_new}
+
+
 def filter_sequences_in_range_batched(batch: List[float], max_input_len: float, min_input_len: float) -> List[bool]:
     """Filters out sequences form dataset which are in bounds."""
     arr = np.array(batch)
@@ -173,11 +193,46 @@ def prepare_dataset(
     writer_batch_size: int,
     train_split: str,
     text_transformations: List[str],
+    split_long_segments_to_chunks: bool,
+    filter_empty_labels: bool,
     sampling_rate: int,
     max_input_len: float,
     min_input_len: float,
 ) -> DatasetDict:
     """Preprocesses dataset."""
+    if audio_column_name is not None and split_long_segments_to_chunks:
+        if length_column_name is not None and length_column_name not in set().union(*dataset.column_names.values()):
+            dataset = distributed_process(
+                dataset,
+                process_by="map",
+                function=extract_lens_batched,
+                num_proc=preprocessing_num_workers,
+                input_columns=[audio_column_name],
+                batched=True,
+                batch_size=writer_batch_size // 4,
+                writer_batch_size=writer_batch_size,
+                fn_kwargs={"sampling_rate": sampling_rate, "len_column": length_column_name},
+                desc="Extracting audio lens",
+            )
+        dataset = distributed_process(
+            dataset,
+            process_by="map",
+            function=split_long_segments_to_chunks_fun,
+            num_proc=preprocessing_num_workers,
+            input_columns=[audio_column_name, length_column_name],
+            batched=True,
+            batch_size=writer_batch_size // 4,
+            remove_columns=dataset.column_names[train_split],
+            writer_batch_size=writer_batch_size,
+            fn_kwargs={
+                "audio_column": audio_column_name,
+                "length_column_name": length_column_name,
+                "max_input_len": max_input_len,
+                "sampling_rate": sampling_rate,
+            },
+            desc=f"Splitting segments to chunks of size {max_input_len}s",
+        )
+
     # 1. Preprocess audio columns
     if (
         length_column_name is not None
@@ -191,6 +246,7 @@ def prepare_dataset(
             num_proc=preprocessing_num_workers,
             input_columns=[audio_column_name],
             batched=True,
+            batch_size=writer_batch_size // 4,
             writer_batch_size=writer_batch_size,
             fn_kwargs={"sampling_rate": sampling_rate, "len_column": length_column_name},
             desc="Extracting audio lens",
@@ -239,15 +295,16 @@ def prepare_dataset(
                 )
 
         # 3. Remove segments with empty annotations
-        dataset = distributed_process(
-            dataset,
-            process_by="filter",
-            function=filter_empty_transcriptions,
-            input_columns=[text_column_name],
-            writer_batch_size=writer_batch_size,
-            num_proc=preprocessing_num_workers,
-            desc="Filtering out empty transcriptions",
-        )
+        if filter_empty_labels:
+            dataset = distributed_process(
+                dataset,
+                process_by="filter",
+                function=filter_empty_transcriptions,
+                input_columns=[text_column_name],
+                writer_batch_size=writer_batch_size,
+                num_proc=preprocessing_num_workers,
+                desc="Filtering out empty transcriptions",
+            )
 
     logger.info("Casting audio column to Audio, and length column to float32")
     feature_types = dataset[list(dataset.keys())[0]].features
@@ -317,32 +374,37 @@ def load_multiple_datasets(
     global_audio_column: str,
     global_train_split: str,
     global_validation_split: str,
+    split_long_segments_to_chunks: bool,
+    filter_empty_labels: bool,
 ) -> DatasetDict:
     """Loads multiple datasets, preprocess them and join to single dataset instance."""
     with open(config_path) as config_handle:
         config_dict = json.load(config_handle)
     dataset_merged = DatasetDict()
     for dataset_config in config_dict:
-        logger.info(f"Loading dataset {dataset_config['dataset_name']}")
+        logger.info(f"Loading dataset {dataset_config['dataset_name']} {dataset_config['dataset_id']}")
         with DistributedContext() as context:
             context.wait_before()
             if dataset_config["load_from_disk"]:
                 dataset = load_from_disk(
-                    dataset_config["dataset_name"], keep_in_memory=False, **dataset_config["additional_args"]
+                    dataset_config["dataset_name"],
+                    keep_in_memory=False,
+                    **dataset_config["additional_args"],
                 )
 
             else:
                 dataset = load_dataset(
                     dataset_config["dataset_name"],
                     keep_in_memory=False,
+                    writer_batch_size=writer_batch_size,
                     num_proc=num_proc,
                     **dataset_config["additional_args"],
                 )
             context.wait_after()
         new_train_split_name = global_train_split if len(dataset_config["train_splits"]) > 0 else None
-        new_dev_split_name = global_validation_split if len(dataset_config["dev_splits"]) > 0 else None
+        new_dev_split_name = global_validation_split if len(dataset_config["validation_splits"]) > 0 else None
         dataset = merge_splits(dataset, dataset_config["train_splits"], new_train_split_name)
-        dataset = merge_splits(dataset, dataset_config["dev_splits"], new_dev_split_name)
+        dataset = merge_splits(dataset, dataset_config["validation_splits"], new_dev_split_name)
 
         # Remove unused splits
         for split in list(dataset.keys()):
@@ -363,6 +425,8 @@ def load_multiple_datasets(
             sampling_rate=sampling_rate,
             max_input_len=max_input_len,
             min_input_len=min_input_len,
+            split_long_segments_to_chunks=split_long_segments_to_chunks,
+            filter_empty_labels=filter_empty_labels,
         )
 
         for column, global_column in [
@@ -391,6 +455,41 @@ def load_multiple_datasets(
     return dataset_merged
 
 
+def get_eval_split(
+    dataset: DatasetDict,
+    train_split_name: str,
+    validation_split_name: str,
+    data_slice_str: str,
+    cut_validation_from_train: bool,
+    seed: Optional[int],
+) -> Dataset:
+    if cut_validation_from_train:
+        if validation_split_name in dataset:
+            raise ValueError(
+                "Cannot use cut_validation_from_train and validation_split that exist in the dataset at the same time."
+            )
+        if data_slice_str is not None:
+            train_split = dataset[train_split_name]
+            data_slice = extract_num_samples(train_split, data_slice_str)
+            new_splits = train_split.train_test_split(test_size=data_slice, shuffle=True, seed=seed)
+            dataset[train_split_name] = new_splits["train"]
+            dataset[validation_split_name + data_slice_str] = new_splits["test"]
+            return new_splits["test"]
+        else:
+            raise ValueError("Cannot use cut_validation_from_train without specifying data_slice.")
+    elif train_split_name == validation_split_name:
+        raise ValueError("Cannot use the same split for training and validation.")
+    else:
+        validation_split = dataset[validation_split_name]
+        if data_slice_str is not None:
+            data_slice = extract_num_samples(validation_split, data_slice_str)
+            training_eval_dataset = validation_split.shuffle(seed=seed).select(range(data_slice))
+            dataset[validation_split_name + data_slice_str] = training_eval_dataset
+            return training_eval_dataset
+        else:
+            return validation_split
+
+
 def get_dataset(
     datasets_creation_config_path: str,
     dataset_name: str,
@@ -406,7 +505,12 @@ def get_dataset(
     train_split: str,
     validation_split: str,
     text_transformations: List[str],
-) -> DatasetDict:
+    split_long_segments_to_chunks: bool,
+    filter_empty_labels: bool,
+    validation_slice_str: str,
+    cut_validation_from_train: bool,
+    seed: Optional[int],
+) -> Tuple[DatasetDict, Dataset]:
     """Loads single or multiple datasets, preprocess, and merge them."""
     if datasets_creation_config_path is not None:
         dataset = load_multiple_datasets(
@@ -421,13 +525,19 @@ def get_dataset(
             global_audio_column=audio_column,
             global_train_split=train_split,
             global_validation_split=validation_split,
+            split_long_segments_to_chunks=split_long_segments_to_chunks,
+            filter_empty_labels=filter_empty_labels,
         )
     else:
         with DistributedContext() as context:
             context.wait_before()
             if dataset_config is not None:
                 dataset = load_dataset(
-                    dataset_name, dataset_config, keep_in_memory=False, num_proc=preprocessing_num_workers
+                    dataset_name,
+                    dataset_config,
+                    keep_in_memory=False,
+                    num_proc=preprocessing_num_workers,
+                    writer_batch_size=writer_batch_size,
                 )
             else:
                 dataset = load_from_disk(dataset_name, keep_in_memory=False)
@@ -447,6 +557,8 @@ def get_dataset(
             max_input_len=max_input_len,
             min_input_len=min_input_len,
             text_transformations=text_transformations,
+            split_long_segments_to_chunks=split_long_segments_to_chunks,
+            filter_empty_labels=filter_empty_labels,
         )
 
     # Filter samples shorter than 0.1s - {MIN_INPUT_LEN},
@@ -465,5 +577,19 @@ def get_dataset(
             fn_kwargs={"max_input_len": np.finfo(np.float32).max, "min_input_len": MIN_INPUT_LEN},
             desc="Filter samples that the model is not able to process due to the conv subsampling.",
         )
+    train_eval_split = get_eval_split(
+        dataset, train_split, validation_split, validation_slice_str, cut_validation_from_train, seed
+    )
+    return dataset, train_eval_split
 
-    return dataset
+
+def extract_num_samples(dataset: Dataset, data_slice: str) -> int:
+    if data_slice.isnumeric():
+        data_slice = int(data_slice)
+    else:
+        data_slice = data_slice.replace("%", "")
+        if data_slice.isnumeric():
+            data_slice = int(float(data_slice) * len(dataset) / 100)
+        else:
+            raise ValueError(f"Invalid slice value: {data_slice}, must be number or percentage")
+    return data_slice

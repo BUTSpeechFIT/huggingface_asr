@@ -6,7 +6,6 @@ from typing import Dict
 import torch
 from transformers import (
     AutoConfig,
-    AutoModelForPreTraining,
     AutoModelForSpeechSeq2Seq,
     PretrainedConfig,
     PreTrainedModel,
@@ -17,12 +16,14 @@ from transformers import (
 )
 from transformers.utils import logging
 
-from models.auto_wrappers import CustomAutoModelForCTC
+from models.auto_wrappers import CustomAutoModelForCTC, CustomAutoModelForPretraining
 from models.ctc_encoder_plus_autoregressive_decoder import (
     JointCTCAttentionEncoderDecoder,
     JointCTCAttentionEncoderDecoderConfig,
 )
 from models.encoders.e_branchformer import (
+    BestRQEBranchformerConfig,
+    BestRQEBranchformerForPreTraining,
     Wav2Vec2EBranchformerConfig,
     Wav2Vec2EBranchformerForCTC,
     Wav2Vec2EBranchformerForPreTraining,
@@ -37,7 +38,10 @@ AutoModelForSpeechSeq2Seq.register(JointCTCAttentionEncoderDecoderConfig, JointC
 
 AutoConfig.register("wav2vec2-ebranchformer", Wav2Vec2EBranchformerConfig)
 CustomAutoModelForCTC.register(Wav2Vec2EBranchformerConfig, Wav2Vec2EBranchformerForCTC)
-AutoModelForPreTraining.register(Wav2Vec2EBranchformerConfig, Wav2Vec2EBranchformerForPreTraining)
+CustomAutoModelForPretraining.register(Wav2Vec2EBranchformerConfig, Wav2Vec2EBranchformerForPreTraining)
+
+AutoConfig.register("bestrq-ebranchformer", BestRQEBranchformerConfig)
+CustomAutoModelForPretraining.register(BestRQEBranchformerConfig, BestRQEBranchformerForPreTraining)
 
 
 def average_checkpoints(experiment_dir: str) -> str:
@@ -101,6 +105,12 @@ def instantiate_ctc_model(
     else:
         config = AutoConfig.from_pretrained(model_args.base_encoder_model)
         config.update(base_model_config)
+
+        if model_args.config_overrides is not None:
+            logger.info(f"Overriding config: {model_args.config_overrides}")
+            parsed_dict = dict(x.split("=") for x in model_args.config_overrides.split(","))
+            config.update(parsed_dict)
+
         model = CustomAutoModelForCTC.from_config(config)
 
     return model
@@ -166,9 +176,12 @@ def instantiate_speech_encoder_model(
         model_path = model_args.from_pretrained
         if model_args.average_checkpoints:
             model_path = average_checkpoints(model_path)
-        model = AutoModelForPreTraining.from_pretrained(model_path, config=config)
+        model = CustomAutoModelForPretraining.from_pretrained(model_path, config=config)
     else:
         config = AutoConfig.from_pretrained(model_args.base_encoder_model)
         config.update(base_model_config)
-        model = AutoModelForPreTraining.from_config(config)
+        if model_args.config_overrides is not None:
+            logger.info(f"Overriding config: {model_args.config_overrides}")
+            config.update_from_string(model_args.config_overrides)
+        model = CustomAutoModelForPretraining.from_config(config)
     return model

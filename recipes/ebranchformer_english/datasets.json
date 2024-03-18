@@ -6,7 +6,7 @@
     "train_splits": [
       "train"
     ],
-    "dev_splits": [
+    "validation_splits": [
       "dev_dt_20",
       "dev_dt_05"
     ],
@@ -33,7 +33,7 @@
     "train_splits": [
       "train"
     ],
-    "dev_splits": [
+    "validation_splits": [
       "dev"
     ],
     "test_splits": [
@@ -59,7 +59,7 @@
     "train_splits": [
       "train"
     ],
-    "dev_splits": [
+    "validation_splits": [
       "validation"
     ],
     "test_splits": [
@@ -84,7 +84,7 @@
     "train_splits": [
       "train"
     ],
-    "dev_splits": [
+    "validation_splits": [
       "validation"
     ],
     "test_splits": [
@@ -111,7 +111,7 @@
       "train.clean.360",
       "train.other.500"
     ],
-    "dev_splits": [
+    "validation_splits": [
       "validation.clean",
       "validation.other"
     ],
@@ -138,7 +138,7 @@
     "train_splits": [
       "train"
     ],
-    "dev_splits": [
+    "validation_splits": [
       "validation"
     ],
     "test_splits": [
@@ -162,7 +162,7 @@
     "load_from_disk": false,
     "train_splits": [
     ],
-    "dev_splits": [
+    "validation_splits": [
       "validation"
     ],
     "test_splits": [

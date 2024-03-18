@@ -1,18 +1,22 @@
 [
   {
-    "dataset_name": "google/fleurs",
-    "dataset_id": "fleurs",
+    "dataset_name": "librispeech_asr",
+    "dataset_id": "librispeech",
     "load_from_disk": false,
     "train_splits": [
-      "train"
+      "train.clean.100",
+      "train.clean.360",
+      "train.other.500"
     ],
     "validation_splits": [
-      "validation"
+      "validation.clean",
+      "validation.other"
     ],
     "test_splits": [
-      "test"
+      "test.clean",
+      "test.other"
     ],
-    "text_column_name": "transcription",
+    "text_column_name": "text",
     "audio_column_name": "audio",
     "length_column_name": "input_len",
     "text_transformations": [
@@ -21,7 +25,7 @@
       "transforms_unfinished_words_to_unks_train"
     ],
     "additional_args": {
-      "name": "en_us"
+      "name": "all"
     }
   }
 ]

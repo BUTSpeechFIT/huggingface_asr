@@ -1,10 +1,10 @@
 #!/usr/bin/bash
-#!/usr/bin/bash
 #SBATCH --job-name TED
-#SBATCH --account OPEN-28-57
-#SBATCH --partition qcpu
+#SBATCH --account OPEN-28-5
+#SBATCH --gpus 8
+#SBATCH --partition qgpu
 #SBATCH --nodes 1
-#SBATCH --time 24:00:00
+#SBATCH --time 1-24:00:00
 #SBATCH --output=/mnt/proj1/open-28-58/lakoc/huggingface_asr/outputs/ebranchformer_english_tokenizer.out
 
 #unset PYTHONPATH
@@ -79,7 +79,7 @@ args=(
   --min_duration_in_seconds="0.2"
   --length_column_name="input_len"
   --remove_unused_columns="False"
-  --preprocessing_num_workers="64"
+  --preprocessing_num_workers="32"
   --datasets_creation_config="${RECIPE_DIR}/datasets_ssl.json"
   #--datasets_creation_config="${RECIPE_DIR}/testing_dataset.json"
   --writer_batch_size="1000"
@@ -92,13 +92,13 @@ args=(
 
   # Model related arguments
   --from_encoder_decoder_config
-  --tokenizer_name="Lakoc/english_corpus_uni5000"
+  #--tokenizer_name="Lakoc/english_corpus_uni5000"
   --feature_extractor_name="Lakoc/log_80mel_extractor_16k"
   --base_encoder_model="Lakoc/fisher_ebranchformer_enc_12_layers_fixed"
-  --base_decoder_model="Lakoc/gpt2_256h_8l_add_head6_03"
-  --ctc_weight="0.3"
-  --decoder_pos_emb_fixed
-  --expect_2d_input
+  #--base_decoder_model="Lakoc/gpt2_256h_8l_add_head6_03"
+  #--ctc_weight="0.3"
+  #--decoder_pos_emb_fixed
+  #--expect_2d_input
 
   # Generation related arguments
   --num_beams="1"
@@ -108,5 +108,5 @@ args=(
   #--eval_beam_factor="1"
 )
 
-#torchrun --standalone --nnodes=1 --nproc-per-node=1 src/trainers/train_enc_dec_asr.py "${args[@]}"
-python src/trainers/train_enc_dec_asr.py "${args[@]}"
+#torchrun --standalone --nnodes=1 --nproc-per-node=8 src/trainers/train_enc_dec_asr.py "${args[@]}"
+python src/trainers/pretrain_wav2vec2.py "${args[@]}"

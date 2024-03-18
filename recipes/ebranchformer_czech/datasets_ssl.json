@@ -1,0 +1,235 @@
+[
+  {
+    "dataset_name": "/mnt/proj1/open-28-57/szoke/huggingface_asr/src/dataset_builders/audio_folder_vad",
+    "dataset_id": "CS00CMDT0000",
+    "load_from_disk": false,
+    "train_splits": [
+      "train"
+    ],
+    "dev_splits": [
+    ],
+    "test_splits": [
+    ],
+    "audio_column_name": "audio",
+    "length_column_name": "input_len",
+    "additional_args": {
+      "data_files": {"train": "/scratch/project/open-28-57/szoke/huggingface_asr/metadata_dirs/ssl/CS00CMDT0000/*"}
+    }
+  },
+  {
+    "dataset_name": "/mnt/proj1/open-28-57/szoke/huggingface_asr/src/dataset_builders/audio_folder_vad",
+    "dataset_id": "CSVDSPCN0000",
+    "load_from_disk": false,
+    "train_splits": [
+      "train"
+    ],
+    "dev_splits": [
+    ],
+    "test_splits": [
+    ],
+    "audio_column_name": "audio",
+    "length_column_name": "input_len",
+    "additional_args": {
+      "data_dir": "/scratch/project/open-28-57/szoke/huggingface_asr/metadata_dirs/ssl/CSVDSPCN0000"
+    }
+  },
+  {
+    "dataset_name": "/mnt/proj1/open-28-57/szoke/huggingface_asr/src/dataset_builders/audio_folder_vad",
+    "dataset_id": "CSVDTMIC0000",
+    "load_from_disk": false,
+    "train_splits": [
+      "train"
+    ],
+    "dev_splits": [
+    ],
+    "test_splits": [
+    ],
+    "audio_column_name": "audio",
+    "length_column_name": "input_len",
+    "additional_args": {
+      "data_dir": "/scratch/project/open-28-57/szoke/huggingface_asr/metadata_dirs/ssl/CSVDTMIC0000"
+    }
+  },
+  {
+    "dataset_name": "/mnt/proj1/open-28-57/szoke/huggingface_asr/src/dataset_builders/audio_folder_vad",
+    "dataset_id": "EuropeanParliament",
+    "load_from_disk": false,
+    "train_splits": [
+      "train"
+    ],
+    "dev_splits": [
+    ],
+    "test_splits": [
+    ],
+    "audio_column_name": "audio",
+    "length_column_name": "input_len",
+    "additional_args": {
+      "data_dir": "/scratch/project/open-28-57/szoke/huggingface_asr/metadata_dirs/ssl/EuropeanParliament"
+    }
+  },
+  {
+    "dataset_name": "/mnt/proj1/open-28-57/szoke/huggingface_asr/src/dataset_builders/audio_folder_vad",
+    "dataset_id": "LKKU",
+    "load_from_disk": false,
+    "train_splits": [
+      "train"
+    ],
+    "dev_splits": [
+    ],
+    "test_splits": [
+    ],
+    "audio_column_name": "audio",
+    "length_column_name": "input_len",
+    "additional_args": {
+      "data_dir": "/scratch/project/open-28-57/szoke/huggingface_asr/metadata_dirs/ssl/LKKU"
+    }
+  },
+  {
+    "dataset_name": "/mnt/proj1/open-28-57/szoke/huggingface_asr/src/dataset_builders/audio_folder_vad",
+    "dataset_id": "MOMV",
+    "load_from_disk": false,
+    "train_splits": [
+      "train"
+    ],
+    "dev_splits": [
+    ],
+    "test_splits": [
+    ],
+    "audio_column_name": "audio",
+    "length_column_name": "input_len",
+    "additional_args": {
+      "data_files": {"train": ["/scratch/project/open-28-57/szoke/huggingface_asr/metadata_dirs/ssl/MO_E1/*",
+        "/scratch/project/open-28-57/szoke/huggingface_asr/metadata_dirs/ssl/MO_E2/*",
+        "/scratch/project/open-28-57/szoke/huggingface_asr/metadata_dirs/ssl/MO_E3/*",
+        "/scratch/project/open-28-57/szoke/huggingface_asr/metadata_dirs/ssl/MO_E7/*",
+      "/scratch/project/open-28-57/szoke/huggingface_asr/metadata_dirs/ssl/MO_E8/*",
+      "/scratch/project/open-28-57/szoke/huggingface_asr/metadata_dirs/ssl/MO_ER/*",
+      "/scratch/project/open-28-57/szoke/huggingface_asr/metadata_dirs/ssl/MO_EX/*",
+      "/scratch/project/open-28-57/szoke/huggingface_asr/metadata_dirs/ssl/MO_EX2/*",
+      "/scratch/project/open-28-57/szoke/huggingface_asr/metadata_dirs/ssl/MV_EV/*",
+      "/scratch/project/open-28-57/szoke/huggingface_asr/metadata_dirs/ssl/TUL_EL/*",
+      "/scratch/project/open-28-57/szoke/huggingface_asr/metadata_dirs/ssl/ZCU_BH_AM/*",
+      "/scratch/project/open-28-57/szoke/huggingface_asr/metadata_dirs/ssl/ZCU_EP/*"]
+      }
+    }
+  },
+  {
+    "dataset_name": "/mnt/proj1/open-28-57/szoke/huggingface_asr/src/dataset_builders/audio_folder_vad",
+    "dataset_id": "ces_municipality",
+    "load_from_disk": false,
+    "train_splits": [
+      "train"
+    ],
+    "dev_splits": [
+    ],
+    "test_splits": [
+    ],
+    "audio_column_name": "audio",
+    "length_column_name": "input_len",
+    "additional_args": {
+      "data_dir": "/scratch/project/open-28-57/szoke/huggingface_asr/metadata_dirs/ssl/ces_municipality"
+    }
+  },
+  {
+    "dataset_name": "/mnt/proj1/open-28-57/szoke/huggingface_asr/src/dataset_builders/audio_folder_vad",
+    "dataset_id": "OVM",
+    "load_from_disk": false,
+    "train_splits": [
+      "train"
+    ],
+    "dev_splits": [
+    ],
+    "test_splits": [
+    ],
+    "audio_column_name": "audio",
+    "length_column_name": "input_len",
+    "additional_args": {
+      "data_dir": "/scratch/project/open-28-57/szoke/huggingface_asr/metadata_dirs/ssl/OVM"
+    }
+  },
+  {
+    "dataset_name": "/mnt/proj1/open-28-57/szoke/huggingface_asr/src/dataset_builders/audio_folder_vad",
+    "dataset_id": "oral2013",
+    "load_from_disk": false,
+    "train_splits": [
+      "train"
+    ],
+    "dev_splits": [
+    ],
+    "test_splits": [
+    ],
+    "audio_column_name": "audio",
+    "length_column_name": "input_len",
+    "additional_args": {
+      "data_dir": "/scratch/project/open-28-57/szoke/huggingface_asr/metadata_dirs/ssl/oral2013"
+    }
+  },
+  {
+    "dataset_name": "/mnt/proj1/open-28-57/szoke/huggingface_asr/src/dataset_builders/audio_folder_vad",
+    "dataset_id": "vystadial_cz_2013",
+    "load_from_disk": false,
+    "train_splits": [
+      "train"
+    ],
+    "dev_splits": [
+    ],
+    "test_splits": [
+    ],
+    "audio_column_name": "audio",
+    "length_column_name": "input_len",
+    "additional_args": {
+      "data_dir": "/scratch/project/open-28-57/szoke/huggingface_asr/metadata_dirs/ssl/vystadial_cz_2013"
+    }
+  },
+  {
+    "dataset_name": "/mnt/proj1/open-28-57/szoke/huggingface_asr/src/dataset_builders/audio_folder_vad",
+    "dataset_id": "vystadial_cz_2016",
+    "load_from_disk": false,
+    "train_splits": [
+      "train"
+    ],
+    "dev_splits": [
+    ],
+    "test_splits": [
+    ],
+    "audio_column_name": "audio",
+    "length_column_name": "input_len",
+    "additional_args": {
+      "data_dir": "/scratch/project/open-28-57/szoke/huggingface_asr/metadata_dirs/ssl/vystadial_cz_2016"
+    }
+  },
+  {
+    "dataset_name": "mozilla-foundation/common_voice_16_0",
+    "dataset_id": "commonvoice_cz",
+    "load_from_disk": false,
+    "train_splits": [
+      "train"
+    ],
+    "dev_splits": [
+    ],
+    "test_splits": [
+    ],
+    "audio_column_name": "audio",
+    "length_column_name": "input_len",
+    "additional_args": {
+      "name": "cs"
+    }
+  },
+  {
+    "dataset_name": "facebook/voxpopuli",
+    "dataset_id": "voxpopuli",
+    "load_from_disk": false,
+    "train_splits": [
+      "train"
+    ],
+    "dev_splits": [
+    ],
+    "test_splits": [
+    ],
+    "audio_column_name": "audio",
+    "length_column_name": "input_len",
+    "additional_args": {
+      "name": "cs"
+    }
+  }
+]

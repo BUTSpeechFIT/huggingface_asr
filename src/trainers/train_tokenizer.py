@@ -2,14 +2,7 @@ import sys
 
 from datasets import load_dataset
 from huggingface_hub import repo_exists
-from tokenizers import (
-    Tokenizer,
-    decoders,
-    normalizers,
-    pre_tokenizers,
-    processors,
-    trainers,
-)
+from tokenizers import Tokenizer, decoders, pre_tokenizers, processors, trainers
 from tokenizers.models import BPE, Unigram
 from transformers import HfArgumentParser, PreTrainedTokenizerFast
 from transformers.utils import logging
@@ -104,7 +97,7 @@ if __name__ == "__main__":
         sys.exit(0)
 
     # 1. Collect, preprocess dataset and extract evaluation dataset
-    dataset = get_dataset(
+    dataset, _ = get_dataset(
         datasets_creation_config_path=data_args.datasets_creation_config,
         dataset_name=data_args.dataset_name,
         dataset_config=data_args.dataset_config,
@@ -119,6 +112,11 @@ if __name__ == "__main__":
         train_split=data_args.train_split,
         validation_split=data_args.validation_split,
         text_transformations=data_args.text_transformations,
+        split_long_segments_to_chunks=data_args.split_long_segments_to_chunks,
+        filter_empty_labels=data_args.filter_empty_labels,
+        validation_slice_str=data_args.validation_slice,
+        cut_validation_from_train=data_args.cut_validation_from_train,
+        seed=data_args.validation_slice_seed,
     )
 
     logger.info(f"Dataset processed successfully.{dataset}")
