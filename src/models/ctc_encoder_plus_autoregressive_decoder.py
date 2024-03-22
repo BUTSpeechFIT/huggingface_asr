@@ -6,7 +6,6 @@ from torch import nn
 from torch.nn import CrossEntropyLoss
 from transformers import (
     AutoConfig,
-    AutoModelForCausalLM,
     GenerationConfig,
     PretrainedConfig,
     PreTrainedModel,
@@ -22,18 +21,19 @@ from transformers.models.speech_encoder_decoder.modeling_speech_encoder_decoder 
 )
 from transformers.utils import logging
 
-from decoding.ctc_scorer import (
-    CTCRescorerLogitsProcessor,
-    GenerationConfigWithCTC,
-    LogSoftmaxProcessor,
-)
-from models.auto_wrappers import CustomAutoModelForCTC
+from decoding.config import GenerationConfigCustom
+from decoding.ctc_scorer import CTCRescorerLogitsProcessor, LogSoftmaxProcessor
+from decoding.shallow_fussion import LMRescorerLogitsProcessor
+from models.auto_wrappers import CustomAutoModelForCTC, CustomModelForCausalLM
 from models.decoders.multi_head_gpt2 import GPT2LMMultiHeadModel, GPT2MultiHeadConfig
+from models.decoders.multi_head_gpt2_mixing import (
+    GPT2LMMultiHeadModelMixing,
+    GPT2MultiHeadMixingConfig,
+)
 from models.decoders.residual_clasiffier_gpt2 import (
     GPT2ResidualsLMHeadConfig,
     GPT2ResidualsLMHeadModel,
 )
-from models.embeddings import AdaptiveEmbedding, PositionalEmbedding
 from models.encoders.e_branchformer import (
     Wav2Vec2EBranchformerConfig,
     Wav2Vec2EBranchformerForCTC,
@@ -42,10 +42,13 @@ from models.encoders.e_branchformer import (
 logger = logging.get_logger("transformers")
 
 AutoConfig.register("gpt2-multi-head", GPT2MultiHeadConfig)
-AutoModelForCausalLM.register(GPT2MultiHeadConfig, GPT2LMMultiHeadModel)
+CustomModelForCausalLM.register(GPT2MultiHeadConfig, GPT2LMMultiHeadModel)
+
+AutoConfig.register("gpt2-multi-head-mixing", GPT2MultiHeadMixingConfig)
+CustomModelForCausalLM.register(GPT2MultiHeadMixingConfig, GPT2LMMultiHeadModelMixing)
 
 AutoConfig.register("gpt2-residuals-head", GPT2ResidualsLMHeadConfig)
-AutoModelForCausalLM.register(GPT2ResidualsLMHeadConfig, GPT2ResidualsLMHeadModel)
+CustomModelForCausalLM.register(GPT2ResidualsLMHeadConfig, GPT2ResidualsLMHeadModel)
 
 AutoConfig.register("wav2vec2-ebranchformer", Wav2Vec2EBranchformerConfig)
 CustomAutoModelForCTC.register(Wav2Vec2EBranchformerConfig, Wav2Vec2EBranchformerForCTC)
@@ -111,7 +114,7 @@ class JointCTCAttentionEncoderDecoder(SpeechEncoderDecoderModel):
             encoder.register_forward_hook(wav2vec2_for_ctc_forward_hook)
             encoder.register_forward_pre_hook(wav2vec2_forward_hidden_return_hook, with_kwargs=True)
         if decoder is None:
-            decoder = AutoModelForCausalLM.from_config(config.decoder)
+            decoder = CustomModelForCausalLM.from_config(config.decoder)
 
         self.encoder = encoder
         self.decoder = decoder
@@ -151,18 +154,6 @@ class JointCTCAttentionEncoderDecoder(SpeechEncoderDecoderModel):
 
         if config.shared_lm_head:
             self.encoder.lm_head.weight = self.decoder.lm_head.weight
-
-        if (hasattr(config, "decoder_pos_emb_fixed") and config.decoder_pos_emb_fixed) or (
-            hasattr(config.decoder, "pos_emb_fixed") and config.decoder.pos_emb_fixed
-        ):
-            self.decoder.transformer.wte = AdaptiveEmbedding(
-                n_token=config.decoder.vocab_size,
-                d_embed=config.decoder.hidden_size,
-                d_proj=config.decoder.hidden_size,
-                cutoffs=[],
-            )
-            self.decoder.transformer.wpe = PositionalEmbedding(demb=config.decoder.hidden_size)
-            self.decoder.post_init()
 
         self.encoder_logits = None
         self.encoder_output_lens = None
@@ -255,7 +246,7 @@ class JointCTCAttentionEncoderDecoder(SpeechEncoderDecoderModel):
                     "`decoder_config` to `.from_encoder_decoder_pretrained(...)`"
                 )
 
-            decoder = AutoModelForCausalLM.from_pretrained(decoder_pretrained_model_name_or_path, **kwargs_decoder)
+            decoder = CustomModelForCausalLM.from_pretrained(decoder_pretrained_model_name_or_path, **kwargs_decoder)
 
         # instantiate config with corresponding kwargs
         config = JointCTCAttentionEncoderDecoderConfig.from_encoder_decoder_configs(
@@ -358,28 +349,8 @@ class JointCTCAttentionEncoderDecoder(SpeechEncoderDecoderModel):
         if labels is not None:
             loss_fct = CrossEntropyLoss(label_smoothing=self.lsm_factor)
             enc_loss = encoder_outputs.loss if return_dict else encoder_outputs[0]
-            if isinstance(self.decoder, GPT2LMMultiHeadModel) and len(self.decoder.head_weights) > 1:
-                dec_loss = torch.zeros_like(enc_loss)
-                lm_logits_per_layer = []
-                for index, lm_head, lm_weight in zip(
-                    [*self.decoder.head_locations, -1],
-                    [*self.decoder.additional_lm_heads, self.decoder.lm_head],
-                    self.decoder.head_weights,
-                ):
-                    lm_logits = lm_head(decoder_outputs.hidden_states[index])
-                    dec_loss += lm_weight * loss_fct(
-                        lm_logits.reshape(-1, self.decoder.config.vocab_size), labels.reshape(-1)
-                    )
-                    lm_logits_per_layer.append(lm_logits)
-                if self.decoder.config.average_logits:
-                    decoder_outputs.logits = torch.matmul(
-                        torch.stack(lm_logits_per_layer).T,
-                        torch.tensor(self.decoder.head_weights, device=lm_logits_per_layer[-1].device),
-                    ).T
-
-            else:
-                dec_logits = decoder_outputs.logits if return_dict else decoder_outputs[0]
-                dec_loss = loss_fct(dec_logits.reshape(-1, self.decoder.config.vocab_size), labels.reshape(-1))
+            dec_logits = decoder_outputs.logits if return_dict else decoder_outputs[0]
+            dec_loss = loss_fct(dec_logits.reshape(-1, self.decoder.config.vocab_size), labels.reshape(-1))
             loss = self.enc_loss_weight * enc_loss + self.dec_loss_weight * dec_loss
 
         if not return_dict:
@@ -405,7 +376,7 @@ class JointCTCAttentionEncoderDecoder(SpeechEncoderDecoderModel):
 
     def _get_logits_processor(
         self,
-        generation_config: GenerationConfigWithCTC,
+        generation_config: GenerationConfigCustom,
         input_ids_seq_length: int,
         encoder_input_ids: torch.LongTensor,
         prefix_allowed_tokens_fn: Callable[[int, torch.Tensor], List[int]],
@@ -427,8 +398,17 @@ class JointCTCAttentionEncoderDecoder(SpeechEncoderDecoderModel):
                 self.generation_config.ctc_margin,
                 self.generation_config.ctc_weight,
                 self.generation_config.num_beams,
+                self.generation_config.space_token_id,
+                self.generation_config.apply_eos_space_trick,
+                self.generation_config.eos_space_trick_weight,
             )
             processors.append(self.ctc_rescorer)
+        if hasattr(generation_config, "lm_weight") and generation_config.lm_weight > 0:
+            if not hasattr(generation_config, "lm_model"):
+                raise ValueError("If `lm_weight` is specified, make sure that `lm_model` is defined.")
+            processors.append(
+                LMRescorerLogitsProcessor(generation_config.lm_weight, generation_config.lm_model, device=self.device)
+            )
         return processors
 
     def _prepare_encoder_decoder_kwargs_for_generation(

@@ -32,12 +32,14 @@ class Conv2dFeatureExtractor(nn.Module):
                 )
             ],
         )
-        linear_in_dim = config.conv_dim[-1] * calculate_output_size_multilayer(
-            config.second_dim_input_size,
-            [
-                (conv_kernel, conv_stride, 0, 0)
-                for conv_kernel, conv_stride in zip(config.conv_kernel, config.conv_stride)
-            ],
+        linear_in_dim = config.conv_dim[-1] * int(
+            calculate_output_size_multilayer(
+                config.second_dim_input_size,
+                [
+                    (conv_kernel, conv_stride, 0, 0)
+                    for conv_kernel, conv_stride in zip(config.conv_kernel, config.conv_stride)
+                ],
+            )
         )
         self.out = torch.nn.Linear(linear_in_dim, config.hidden_size, bias=True)
 

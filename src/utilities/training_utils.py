@@ -8,12 +8,6 @@ from transformers import BatchFeature, Seq2SeqTrainer, Trainer
 from transformers.data.data_collator import DataCollator
 from transformers.deepspeed import deepspeed_init
 from transformers.dependency_versions_check import dep_version_check
-
-# Integrations must be imported before ML frameworks:
-# isort: off
-from transformers.integrations import (
-    is_fairscale_available,
-)
 from transformers.modeling_utils import PreTrainedModel
 
 # Integrations must be imported before ML frameworks:
@@ -74,8 +68,6 @@ if is_torch_tpu_available(check_device=False):
     # pylint: disable=import-error
     import torch_xla.core.xla_model as xm
 
-if is_fairscale_available():
-    dep_version_check("fairscale")
 
 if is_sagemaker_mp_enabled():
     # pylint: disable=import-error
@@ -97,8 +89,6 @@ if is_torch_tpu_available(check_device=False):
     # pylint: disable=import-error
     import torch_xla.core.xla_model as xm
 
-if is_fairscale_available():
-    dep_version_check("fairscale")
 
 if is_sagemaker_mp_enabled():
     # pylint: disable=import-error
@@ -185,6 +175,11 @@ class MetadataTensor(torch.Tensor):
         result = super(MetadataTensor, self).__getitem__(index)
         metadata_result = {key: self.metadata[key][index] for key in self.metadata.keys()}
         return MetadataTensor(result, metadata_result)
+
+    def detach(self):
+        result = super(MetadataTensor, self).detach()
+        result.metadata = self.metadata
+        return result
 
     @classmethod
     def __torch_function__(cls, func, types, args=(), kwargs=None):
@@ -415,7 +410,7 @@ class SSLTrainer(Trainer):
             grad_norm = _grad_norm.item() if _grad_norm is not None else None
         loss.metadata["gradient_norm"] = torch.tensor(grad_norm, device=loss.device)
 
-        return loss
+        return loss.detach()
 
     def _maybe_log_save_evaluate(self, tr_loss, model, trial, epoch, ignore_keys_for_eval):
         if self.control.should_log:

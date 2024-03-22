@@ -1,4 +1,5 @@
 import glob
+import json
 import os
 import shutil
 from typing import Dict
@@ -13,13 +14,25 @@ from transformers import (
     SequenceFeatureExtractor,
     Speech2TextFeatureExtractor,
     SpeechEncoderDecoderModel,
+    WhisperForConditionalGeneration,
+    WhisperTokenizer,
 )
 from transformers.utils import logging
 
-from models.auto_wrappers import CustomAutoModelForCTC, CustomAutoModelForPretraining
+from decoding.config import GenerationConfigCustom
+from models.auto_wrappers import (
+    CustomAutoModelForCTC,
+    CustomAutoModelForPretraining,
+    CustomModelForCausalLM,
+)
 from models.ctc_encoder_plus_autoregressive_decoder import (
     JointCTCAttentionEncoderDecoder,
     JointCTCAttentionEncoderDecoderConfig,
+)
+from models.decoders.multi_head_gpt2 import GPT2LMMultiHeadModel, GPT2MultiHeadConfig
+from models.decoders.multi_head_gpt2_mixing import (
+    GPT2LMMultiHeadModelMixing,
+    GPT2MultiHeadMixingConfig,
 )
 from models.encoders.e_branchformer import (
     BestRQEBranchformerConfig,
@@ -58,27 +71,52 @@ def average_checkpoints(experiment_dir: str) -> str:
     return dst_path
 
 
-def fetch_config(
-    enc_config_path: str, dec_config_path: str, base_config: Dict, config_overrides: str
-) -> PretrainedConfig:
-    enc_config = AutoConfig.from_pretrained(enc_config_path)
-    dec_config = AutoConfig.from_pretrained(dec_config_path)
-    config = JointCTCAttentionEncoderDecoderConfig.from_encoder_decoder_configs(enc_config, dec_config)
+def fetch_config(config: PretrainedConfig, base_config: Dict, config_overrides: str) -> PretrainedConfig:
     if config_overrides is not None:
         logger.info(f"Overriding config: {config_overrides}")
-        parsed_dict = dict(x.split("=") for x in config_overrides.split(","))
-        base_config.update(parsed_dict)
-    kwargs_encoder = {
-        argument[len("encoder_") :]: value for argument, value in base_config.items() if argument.startswith("encoder_")
-    }
-    kwargs_decoder = {
-        argument[len("decoder_") :]: value
-        for argument, value in base_config.items()
-        if argument.startswith("decoder_") and argument != "decoder_start_token_id"
-    }
-    config.encoder.update(kwargs_encoder)
-    config.decoder.update(kwargs_decoder)
-    config.update(base_config)
+        parsed_dict = base_config | dict(x.split("=") for x in config_overrides.split(";"))
+    else:
+        parsed_dict = base_config
+    for k_orig, v in parsed_dict.items():
+        if k_orig.startswith("encoder_"):
+            config_local = config.encoder
+            k = k_orig[len("encoder_") :]
+        elif k_orig.startswith("decoder_") and k_orig != "decoder_start_token_id":
+            config_local = config.decoder
+            k = k_orig[len("decoder_") :]
+        else:
+            config_local = config
+            k = k_orig
+        if not hasattr(config_local, k):
+            if k_orig in base_config:
+                setattr(config_local, k, type(base_config[k_orig])(v))
+            else:
+                raise ValueError(f"key {k} isn't in the original config dict")
+
+        old_v = getattr(config_local, k)
+        if isinstance(old_v, bool):
+            if isinstance(v, bool):
+                setattr(config_local, k, v)
+                continue
+            if v.lower() in ["true", "1", "y", "yes"]:
+                v = True
+            elif v.lower() in ["false", "0", "n", "no"]:
+                v = False
+            else:
+                raise ValueError(f"can't derive true or false from {v} (key {k})")
+        elif isinstance(old_v, int):
+            v = int(v)
+        elif isinstance(old_v, float):
+            v = float(v)
+        elif isinstance(old_v, list):
+            v = json.loads(v)
+        elif old_v is None:
+            pass
+        elif not isinstance(old_v, str):
+            raise ValueError(
+                f"You can only update int, float, bool or string values in the config, got {v} for key {k}"
+            )
+        setattr(config_local, k, v)
     return config
 
 
@@ -139,15 +177,17 @@ def instantiate_aed_model(
     # 4. Initialize seq2seq model
     if model_args.from_pretrained:
         config = AutoConfig.from_pretrained(model_args.from_pretrained)
-        config.update(base_model_config)
+        config = fetch_config(config, base_model_config, model_args.config_overrides)
         model_path = model_args.from_pretrained
         if model_args.average_checkpoints:
             model_path = average_checkpoints(model_path)
         model = AutoModelForSpeechSeq2Seq.from_pretrained(model_path, config=config)
     elif model_args.from_encoder_decoder_config:
+        enc_config = AutoConfig.from_pretrained(model_args.base_encoder_model)
+        dec_config = AutoConfig.from_pretrained(model_args.base_decoder_model)
+        config = JointCTCAttentionEncoderDecoderConfig.from_encoder_decoder_configs(enc_config, dec_config)
         config = fetch_config(
-            model_args.base_encoder_model,
-            model_args.base_decoder_model,
+            config,
             base_model_config,
             model_args.config_overrides,
         )
@@ -158,6 +198,20 @@ def instantiate_aed_model(
             decoder_pretrained_model_name_or_path=model_args.base_decoder_model,
             **base_model_config,
         )
+    if model_args.finetune_mixing_mechanism:
+        if not isinstance(model.decoder, GPT2LMMultiHeadModel):
+            raise ValueError("The model decoder must be an instance of GPT2LMMultiHeadModel")
+        old_config = model.decoder.config
+        new_config = GPT2MultiHeadMixingConfig(**old_config.to_dict(), mixing_mode=model_args.finetune_mixing_mechanism)
+        new_decoder = CustomModelForCausalLM.from_config(new_config)
+        new_decoder.load_state_dict(model.decoder.state_dict(), strict=False)
+
+        model.decoder = new_decoder
+        # Freeze the weights of the model decoder, except for the mixing mechanism
+        for name, param in model.named_parameters():
+            if "lm_mixing" not in name:
+                param.requires_grad = False
+        logger.info("Reinstantiating the model decoder with the model with the model supporting mixing mechanism.")
     return model
 
 
@@ -185,3 +239,18 @@ def instantiate_speech_encoder_model(
             config.update_from_string(model_args.config_overrides)
         model = CustomAutoModelForPretraining.from_config(config)
     return model
+
+
+def handle_whisper_generation_config(
+    model_args: ModelArguments,
+    model: WhisperForConditionalGeneration,
+    tokenizer: WhisperTokenizer,
+    gen_config: GenerationConfigCustom,
+):
+    if model_args.whisper_task and model_args.whisper_language:
+        gen_config.suppress_tokens = []
+        gen_config.forced_decoder_ids = tokenizer.get_decoder_prompt_ids(
+            language=model_args.whisper_language, task=model_args.whisper_task
+        )
+    gen_config.max_length = model.generation_config.max_length
+    gen_config.decoder_start_token_id = model.generation_config.decoder_start_token_id

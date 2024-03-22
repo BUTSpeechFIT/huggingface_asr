@@ -15,6 +15,7 @@ from transformers import (
 from transformers.generation.utils import BeamSearchOutput
 from transformers.utils import logging
 
+import utilities.data_utils as data_utils
 from utilities.generation_utils import save_nbests, save_predictions
 from utilities.training_arguments import (
     DataTrainingArguments,
@@ -52,6 +53,22 @@ class FunctionReturnWrapper:
                 raise ValueError("Invalid return configuration. Use a list of integers/strings.")
         else:
             raise ValueError("Invalid return configuration. Use None or a list of integers/strings.")
+
+
+def function_aggregator(fun_list):
+    def wrapper(arg):
+        for fun in reversed(fun_list):
+            arg = fun(arg)
+        return arg
+
+    return wrapper
+
+
+def text_transform_partial(f):
+    def wrapped(*args2, **kwargs2):
+        return f(*args2, **kwargs2, label_column="aux")["aux"]
+
+    return wrapped
 
 
 def resolve_attribute_from_nested_class(obj: Any, attr_spec: str) -> Any:
@@ -131,10 +148,24 @@ def do_evaluate(
                 dataset[split],
             )
         logger.info(f"Metrics for {split} split: {predictions.metrics}")
+
+        if gen_args.post_process_predicitons and data_args.text_transformations is not None:
+            callable_transform = function_aggregator(
+                [
+                    text_transform_partial(
+                        getattr(data_utils, transform_name, lambda x, label_column: {label_column: x})
+                    )
+                    for transform_name in data_args.text_transformations
+                ]
+            )
+        else:
+            callable_transform = None
+
         save_predictions(
             tokenizer,
             predictions,
             f"{training_args.output_dir}/" f'predictions_{split}_wer{100 * predictions.metrics["test_wer"]:.2f}.csv',
+            callable_transform,
         )
 
 

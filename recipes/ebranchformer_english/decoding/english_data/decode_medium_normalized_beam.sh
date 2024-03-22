@@ -1,13 +1,13 @@
 #!/usr/bin/bash
 #SBATCH --job-name TED
 #SBATCH --account OPEN-28-57
-#SBATCH --partition qgpu
+#SBATCH --partition qgpu_exp
+#SBATCH --time 01:00:00
 #SBATCH --nodes=1
-#SBATCH --gpus=1
-#SBATCH --time 10:00:00
-#SBATCH --output=/mnt/proj1/open-28-58/lakoc/huggingface_asr/outputs/english_model_decode.out
+#SBATCH --gpus=4
+#SBATCH --output=/mnt/proj1/open-28-58/lakoc/huggingface_asr/outputs/english_model_medium_normalized_beam_decode_no_filer.out
 
-EXPERIMENT="english_model_decode"
+EXPERIMENT="english_model_medium_normalized_beam_decode_no_filer"
 PROJECT="regularizations_english_corpus"
 WORK_DIR="/mnt/proj1/open-28-58/lakoc/huggingface_asr"
 RECIPE_DIR="${WORK_DIR}/recipes/ebranchformer_english"
@@ -31,36 +31,9 @@ cd $WORK_DIR
 args=(
   # General training arguments
   --output_dir=$EXPERIMENT_PATH
-  --per_device_train_batch_size="32"
-  --per_device_eval_batch_size="2"
+  --per_device_eval_batch_size="16"
   --dataloader_num_workers="24"
-  --num_train_epochs="100"
-  --group_by_length="True"
-  --bf16
   --do_evaluate
-  --joint_decoding_during_training
-  --load_best_model_at_end
-
-  # Optimizer related arguments
-  --optim="adamw_torch"
-  --learning_rate="1e-3"
-  --warmup_steps="40000"
-  --early_stopping_patience="5"
-  --weight_decay="1e-6"
-  --max_grad_norm="0.5"
-  --lsm_factor="0.1"
-  --mask_unks
-  --gradient_accumulation_steps="1"
-
-  # Logging, saving and evaluation related arguments
-  --report_to="none"
-  --logging_steps="10"
-  --save_strategy="epoch"
-  --evaluation_strategy="epoch"
-  --wandb_predictions_to_save=500
-  --greater_is_better="False"
-  --save_total_limit="5"
-  --track_ctc_loss
 
   # Data related arguments
   --max_duration_in_seconds="20.0"
@@ -68,27 +41,25 @@ args=(
   --length_column_name="input_len"
   --remove_unused_columns="False"
   --preprocessing_num_workers="32"
-  --datasets_creation_config="${RECIPE_DIR}/datasets_decoding_test.json"
+  --dataset_name="/scratch/project/open-28-57/lakoc/processed_dataset_full"
   --writer_batch_size="500"
-  --test_splits voxpopuli_test
+  --test_splits commonvoice_en_test fleurs_test
 
   # Preprocessing related arguments
   --data_preprocessing_config="${RECIPE_DIR}/data_preprocessing.json"
 
   # Model related arguments
-  --from_encoder_decoder_config
   --tokenizer_name="Lakoc/english_corpus_uni5000_normalized"
   --feature_extractor_name="Lakoc/log_80mel_extractor_16k"
-  --from_pretrained="/mnt/proj1/open-28-58/lakoc/huggingface_asr/experiments/ebranchformer_english_medium_regularized_normalized/checkpoint-378950"
-  --ctc_weight="0.3"
-  --decoder_pos_emb_fixed
+  --from_pretrained="/mnt/proj1/open-28-58/lakoc/huggingface_asr/experiments/ebranchformer_english_medium_normalized/checkpoint-238400"
   --expect_2d_input
 
   # Generation related arguments
-  --num_beams="5"
+  --filter_empty_labels
+  --num_beams="10"
   --max_length="512"
   --predict_with_generate
-  --decoding_ctc_weight="0.3"
+  --decoding_ctc_weight="0"
 )
 
-python src/trainers/train_enc_dec_asr.py "${args[@]}"
+torchrun --standalone --nnodes=1 --nproc-per-node=$SLURM_GPUS_ON_NODE src/trainers/train_enc_dec_asr.py "${args[@]}"

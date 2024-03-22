@@ -42,6 +42,11 @@ class ModelArguments:
     whisper_language: Optional[str] = field(default=None, metadata={"help": "Language of the model."})
     whisper_task: Optional[str] = field(default=None, metadata={"help": "Task of the model."})
 
+    """Token mixing specific arguments."""
+    finetune_mixing_mechanism: Optional[str] = field(
+        default=None, metadata={"help": "Type of mixing mechanism to use for finetuning."}
+    )
+
 
 @dataclass
 class GeneralTrainingArguments(Seq2SeqTrainingArguments):
@@ -101,8 +106,8 @@ class GenerationArguments:
     """Joint decoding related arguments."""
     decoding_ctc_weight: Optional[float] = field(default=0.0, metadata={"help": "CTC weight to bias hypothesis."})
     ctc_margin: Optional[float] = field(default=0, metadata={"help": "Margin to stop generation."})
-    external_lm: Optional[str] = field(default=None, metadata={"help": "Path to external LM."})
-    external_lm_weight: Optional[float] = field(default=0.0, metadata={"help": "Weight of external LM."})
+    lm_model: Optional[str] = field(default=None, metadata={"help": "Path to external LM."})
+    lm_weight: Optional[float] = field(default=0.0, metadata={"help": "Weight of external LM."})
     """Generation logging related arguments."""
     wandb_predictions_to_save: Optional[int] = field(
         default=100, metadata={"help": "Number of predictions to save to wandb."}
@@ -110,6 +115,12 @@ class GenerationArguments:
     num_predictions_to_return: Optional[int] = field(default=1, metadata={"help": "Number of predictions to return."})
     nbest_path_to_save: Optional[str] = field(default="nbests", metadata={"help": "Path to save nbest hypotheses."})
     save_output_states: Optional[bool] = field(default=False, metadata={"help": "Whether to save output states."})
+    post_process_predicitons: Optional[bool] = field(
+        default=False, metadata={"help": "Whether to post process predictions."}
+    )
+    apply_eos_space_trick: Optional[bool] = field(default=False, metadata={"help": "Whether to apply eos space trick."})
+    eos_space_trick_weight: Optional[float] = field(default=0.0, metadata={"help": "Weight of eos space trick."})
+    space_token_id: Optional[int] = field(default=-1, metadata={"help": "Space token id."})
 
 
 @dataclass
@@ -166,14 +177,14 @@ class DataTrainingArguments:
     split_long_segments_to_chunks: Optional[bool] = field(
         default=False, metadata={"help": "Whether to split long segments to chunks."}
     )
-    filter_empty_labels: Optional[bool] = field(
-        default=False, metadata={"help": "Whether to filter out samples with empty labels."}
-    )
     cut_validation_from_train: Optional[bool] = field(
         default=False, metadata={"help": "Whether to cut validation split from train split."}
     )
     validation_slice_seed: Optional[int] = field(
         default=None, metadata={"help": "Seed to use for splitting validation slice."}
+    )
+    reshuffle_at_start: Optional[bool] = field(
+        default=False, metadata={"help": "Whether to reshuffle the dataset at the start of preprocessing."}
     )
 
 
