@@ -1,5 +1,6 @@
 """Utilities for data loading and preprocessing."""
 import json
+import os
 import re
 from typing import Dict, List, Optional, Tuple, Union
 
@@ -42,6 +43,13 @@ tokens_escaped_regex = re.compile("|".join([r"\s" + re.escape(token) for token i
 MIN_INPUT_LEN = 0.1
 
 
+def get_local_rank():
+    if "LOCAL_RANK" in os.environ:
+        return int(os.environ["LOCAL_RANK"])
+    else:
+        return torch.distributed.get_rank()
+
+
 class DistributedContext:
     """Context manager for distributed training."""
 
@@ -53,10 +61,12 @@ class DistributedContext:
     def __enter__(self):
         """Initializes distributed context."""
         if torch.distributed.is_available() and torch.distributed.is_initialized():
-            self.local_rank = torch.distributed.get_rank()
+            self.local_rank = get_local_rank()
+            self.global_rank = torch.distributed.get_rank()
             self.world_size = torch.distributed.get_world_size()
         else:
             self.local_rank = 0
+            self.global_rank = 0
             self.world_size = 1
         return self
 
@@ -68,13 +78,13 @@ class DistributedContext:
     def wait_before(self):
         if self.world_size > 1:
             if self.local_rank > 0:
-                logger.info(f"Rank {self.local_rank}: Waiting for main process to perform the mapping")
+                logger.info(f"Rank {self.global_rank}: Waiting for main process to perform operation.")
                 torch.distributed.barrier()
 
     def wait_after(self):
         if self.world_size > 1:
             if self.local_rank == 0:
-                logger.info(f"Rank {self.local_rank}: Waiting for other processes to finish")
+                logger.info(f"Rank {self.global_rank}: Waiting for other processes to finish operation.")
                 torch.distributed.barrier()
 
 
@@ -99,6 +109,11 @@ def do_lower_case(example: str, label_column: str) -> Dict[str, str]:
     return {label_column: example.lower()}
 
 
+def remove_punctuation(example: str, label_column: str) -> Dict[str, str]:
+    """Removes punctuation."""
+    return {label_column: re.sub(r"[!\"#$%&\'()*+,.\/\\:;<=>?@^_`{|}~]", "", example)}
+
+
 def remove_multiple_whitespaces_and_strip(example: str, label_column: str) -> Dict[str, str]:
     """Removes multiple whitespaces from batch."""
     return {label_column: re.sub(r"\s+", " ", example).strip()}
@@ -114,9 +129,23 @@ def transforms_unfinished_words_to_unks(example: str, label_column: str) -> Dict
     return {label_column: re.sub(r"\(?\w+-\)?", "([unk])", example)}
 
 
+tedlium_contractions = [" 's", " 't", " 're", " 've", " 'm", " 'll", " 'd", " 'clock", " 'all"]
+
+
+def fix_tedlium_apostrophes(example: str, label_column: str) -> Dict[str, str]:
+    for contraction in tedlium_contractions:
+        example = example.replace(contraction, contraction[1:])
+    return {label_column: example.replace(r"\s+ '", r" '")}
+
+
 def filter_empty_transcriptions(example: str) -> bool:
     """Filters out empty transcriptions."""
     return example != ""
+
+
+def filter_tedlium_empty_labels(example: str) -> bool:
+    """Filters out empty transcriptions."""
+    return example != "ignore_time_segment_in_scoring"
 
 
 def whisper_normalize_english(example: str, label_column: str) -> Dict[str, str]:
@@ -192,14 +221,20 @@ def prepare_dataset(
     preprocessing_num_workers: int,
     writer_batch_size: int,
     train_split: str,
-    text_transformations: List[str],
+    text_transformations: Optional[List[str]],
     split_long_segments_to_chunks: bool,
-    filter_empty_labels: bool,
     sampling_rate: int,
     max_input_len: float,
     min_input_len: float,
+    reshuffle_at_start: bool,
 ) -> DatasetDict:
     """Preprocesses dataset."""
+    if reshuffle_at_start:
+        with DistributedContext() as context:
+            context.wait_before()
+            dataset = dataset.shuffle(seed=42)
+            context.wait_after()
+
     if audio_column_name is not None and split_long_segments_to_chunks:
         if length_column_name is not None and length_column_name not in set().union(*dataset.column_names.values()):
             dataset = distributed_process(
@@ -265,46 +300,56 @@ def prepare_dataset(
             desc="Filtering out too long and too short sequences",
         )
 
+    # Filter samples shorter than 0.1s - {MIN_INPUT_LEN},
+    # due to the conv subsampling and mel fbank extraction in model encoder
+    for split in list(dataset.keys()):
+        if split != train_split:
+            dataset[split] = distributed_process(
+                dataset[split],
+                process_by="filter",
+                function=filter_sequences_in_range_batched,
+                batched=True,
+                input_columns=[length_column_name],
+                num_proc=preprocessing_num_workers,
+                writer_batch_size=writer_batch_size,
+                fn_kwargs={"max_input_len": np.finfo(np.float32).max, "min_input_len": MIN_INPUT_LEN},
+                desc="Filter samples that the model is not able to process due to the conv subsampling.",
+            )
+
     # 2. Preprocess label columns
-    if text_column_name is not None:
+    if text_column_name is not None and text_transformations is not None:
         for transformation_name in text_transformations:
+            if transformation_name.startswith("filter_"):
+                process_by = "filter"
+                fn_kwargs = {}
+            else:
+                process_by = "map"
+                fn_kwargs = {"label_column": text_column_name}
             if transformation_name.endswith("_train"):
                 if train_split is not None:
                     transformation = globals()[re.sub("_train", "", transformation_name)]
                     dataset[train_split] = distributed_process(
                         dataset[train_split],
-                        process_by="map",
+                        process_by=process_by,
                         function=transformation,
                         input_columns=[text_column_name],
                         num_proc=preprocessing_num_workers,
                         writer_batch_size=writer_batch_size,
-                        fn_kwargs={"label_column": text_column_name},
+                        fn_kwargs=fn_kwargs,
                         desc=f"Applying {transformation_name} transformation",
                     )
             else:
                 transformation = globals()[transformation_name]
                 dataset = distributed_process(
                     dataset,
-                    process_by="map",
+                    process_by=process_by,
                     function=transformation,
                     input_columns=[text_column_name],
                     num_proc=preprocessing_num_workers,
                     writer_batch_size=writer_batch_size,
-                    fn_kwargs={"label_column": text_column_name},
+                    fn_kwargs=fn_kwargs,
                     desc=f"Applying {transformation_name} transformation",
                 )
-
-        # 3. Remove segments with empty annotations
-        if filter_empty_labels:
-            dataset = distributed_process(
-                dataset,
-                process_by="filter",
-                function=filter_empty_transcriptions,
-                input_columns=[text_column_name],
-                writer_batch_size=writer_batch_size,
-                num_proc=preprocessing_num_workers,
-                desc="Filtering out empty transcriptions",
-            )
 
     logger.info("Casting audio column to Audio, and length column to float32")
     feature_types = dataset[list(dataset.keys())[0]].features
@@ -375,7 +420,6 @@ def load_multiple_datasets(
     global_train_split: str,
     global_validation_split: str,
     split_long_segments_to_chunks: bool,
-    filter_empty_labels: bool,
 ) -> DatasetDict:
     """Loads multiple datasets, preprocess them and join to single dataset instance."""
     with open(config_path) as config_handle:
@@ -426,7 +470,7 @@ def load_multiple_datasets(
             max_input_len=max_input_len,
             min_input_len=min_input_len,
             split_long_segments_to_chunks=split_long_segments_to_chunks,
-            filter_empty_labels=filter_empty_labels,
+            reshuffle_at_start=dataset_config.get("reshuffle_at_start", False),
         )
 
         for column, global_column in [
@@ -504,12 +548,12 @@ def get_dataset(
     audio_column: str,
     train_split: str,
     validation_split: str,
-    text_transformations: List[str],
+    text_transformations: Optional[List[str]],
     split_long_segments_to_chunks: bool,
-    filter_empty_labels: bool,
     validation_slice_str: str,
     cut_validation_from_train: bool,
     seed: Optional[int],
+    reshuffle_at_start: bool,
 ) -> Tuple[DatasetDict, Dataset]:
     """Loads single or multiple datasets, preprocess, and merge them."""
     if datasets_creation_config_path is not None:
@@ -526,7 +570,6 @@ def get_dataset(
             global_train_split=train_split,
             global_validation_split=validation_split,
             split_long_segments_to_chunks=split_long_segments_to_chunks,
-            filter_empty_labels=filter_empty_labels,
         )
     else:
         with DistributedContext() as context:
@@ -558,25 +601,9 @@ def get_dataset(
             min_input_len=min_input_len,
             text_transformations=text_transformations,
             split_long_segments_to_chunks=split_long_segments_to_chunks,
-            filter_empty_labels=filter_empty_labels,
+            reshuffle_at_start=reshuffle_at_start,
         )
 
-    # Filter samples shorter than 0.1s - {MIN_INPUT_LEN},
-    # due to the conv subsampling and mel fbank extraction in model encoder
-    dataset_splits = list(dataset.keys())
-    dataset_splits.remove(train_split)
-    for split in dataset_splits:
-        dataset[split] = distributed_process(
-            dataset[split],
-            process_by="filter",
-            function=filter_sequences_in_range_batched,
-            batched=True,
-            input_columns=[len_column],
-            num_proc=preprocessing_num_workers,
-            writer_batch_size=writer_batch_size,
-            fn_kwargs={"max_input_len": np.finfo(np.float32).max, "min_input_len": MIN_INPUT_LEN},
-            desc="Filter samples that the model is not able to process due to the conv subsampling.",
-        )
     train_eval_split = get_eval_split(
         dataset, train_split, validation_split, validation_slice_str, cut_validation_from_train, seed
     )

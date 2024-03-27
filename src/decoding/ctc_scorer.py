@@ -1,14 +1,7 @@
 # pylint: skip-file
 # Copied from: https://github.com/espnet/espnet/blob/master/espnet/nets/ctc_prefix_score.py
 import torch
-from transformers import GenerationConfig, LogitsProcessor
-
-
-class GenerationConfigWithCTC(GenerationConfig):
-    def __init__(self, ctc_weight=0.0, ctc_margin=0, **kwargs):
-        super().__init__(**kwargs)
-        self.ctc_weight = ctc_weight
-        self.ctc_margin = ctc_margin
+from transformers import LogitsProcessor
 
 
 class CTCPrefixScoreTH(object):
@@ -93,7 +86,7 @@ class CTCPrefixScoreTH(object):
         else:
             r_prev, s_prev, f_min_prev, f_max_prev = state
 
-        # select input dimensions for scoring
+        # select input dimensions for decred_scoring
         if self.scoring_num > 0:
             scoring_idmap = torch.full((n_bh, self.odim), -1, dtype=torch.long, device=self.device)
             snum = self.scoring_num
@@ -173,8 +166,8 @@ class CTCPrefixScoreTH(object):
                 dim=0,
             )
 
-        for si in range(n_bh):
-            log_psi[si, self.eos] = max(log_psi[si, self.eos], r_sum[self.end_frames[si // n_hyps], si])
+        # for si in range(n_bh):
+        #     log_psi[si, self.eos] = r_sum[self.end_frames[si // n_hyps], si]
 
         # exclude blank probs
         log_psi[:, self.blank] = self.logzero
@@ -273,8 +266,14 @@ class CTCRescorerLogitsProcessor(LogitsProcessor):
         ctc_margin: int,
         ctc_weight: float,
         num_beams: int,
+        space_token_id: int,
+        apply_eos_space_trick: bool,
+        eos_space_trick_weight: float,
+        debug: bool = False,
     ):
         super().__init__()
+        # reduce_lens_by = (encoder_logits.argmax(dim=-1) == eos_token_id).sum(dim=-1)
+        # encoder_output_lens = encoder_output_lens - reduce_lens_by
         self.pad_token_id = pad_token_id
         self.ctc_prefix_scorer = CTCPrefixScoreTH(
             torch.nn.functional.log_softmax(encoder_logits, dim=-1),
@@ -286,6 +285,41 @@ class CTCRescorerLogitsProcessor(LogitsProcessor):
         self.ctc_weight = ctc_weight
         self.ctc_states = None
         self.num_beams = num_beams
+        self.eos_token_id = eos_token_id
+        self.apply_eos_space_trick = apply_eos_space_trick
+        self.space_token_id = space_token_id
+        self.eos_space_trick_weight = eos_space_trick_weight
+        self.debug = debug
+
+    @staticmethod
+    def analyze_predictions(
+        scores, ctc_scores, next_token_scores, input_ids, k=10, tokenizer="Lakoc/english_corpus_uni5000_normalized"
+    ):
+        from transformers import AutoTokenizer
+
+        tokenizer = AutoTokenizer.from_pretrained(tokenizer)
+        best_att_ids = scores.topk(k=k, dim=1)
+        best_ctc_ids = ctc_scores.topk(k=k, dim=1)
+        best_ids = next_token_scores.topk(k=k, dim=1)
+
+        def print_prediction(best_ids, name):
+            new_tensor = torch.zeros((best_ids.indices.shape[0], best_ids.indices.shape[1] * 2), dtype=torch.long)
+            new_tensor[:, 0::2] = best_ids.indices
+            new_tensor[:, 1::2] = 4976
+            print(f"{name}:")
+            for index, (next_ids, scores) in enumerate(zip(tokenizer.batch_decode(new_tensor), best_ids.values)):
+                print(f"HYP {index}:\n{next_ids} {scores}")
+
+        print(f"PREFIX:")
+        for index, prefix in enumerate(tokenizer.batch_decode(input_ids)):
+            print(f"HYP {index}:\n{prefix}")
+        print_prediction(best_att_ids, "ATT_SCORES")
+        print()
+        print_prediction(best_ctc_ids, "CTC_SCORES")
+        print()
+        print(f"CTC_EOS: {ctc_scores[:, 1]}")
+        print_prediction(best_ids, "NEXT_TOKEN_SCORES")
+        print()
 
     def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor) -> torch.FloatTensor:
         scores[:, self.pad_token_id] = self.ctc_prefix_scorer.logzero
@@ -296,7 +330,27 @@ class CTCRescorerLogitsProcessor(LogitsProcessor):
         ctc_scores, ctc_states = self.ctc_prefix_scorer(input_ids, self.ctc_states)
         self.ctc_states = ctc_states
         next_token_scores = (1 - self.ctc_weight) * scores + self.ctc_weight * ctc_scores
-        # return scores
+        if self.apply_eos_space_trick:
+            space_eos_conflict = torch.logical_and(
+                scores.argmax(dim=1) == self.eos_token_id, ctc_scores.argmax(dim=1) == self.space_token_id
+            )
+            if space_eos_conflict.any():
+                apply_trick_on = torch.logical_and(
+                    torch.logical_and(
+                        space_eos_conflict,
+                        next_token_scores[:, self.eos_token_id] < next_token_scores[:, self.space_token_id],
+                    ),
+                    self.eos_space_trick_weight * next_token_scores[:, self.eos_token_id]
+                    > next_token_scores[:, self.space_token_id],
+                )
+                if apply_trick_on.any():
+                    next_token_scores[apply_trick_on, self.eos_token_id] = (
+                        next_token_scores[apply_trick_on, self.eos_token_id] * self.eos_space_trick_weight
+                    )
+
+        if self.debug:
+            self.analyze_predictions(scores, ctc_scores, next_token_scores, input_ids)
+
         return next_token_scores
 
 

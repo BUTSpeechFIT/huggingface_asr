@@ -1,0 +1,178 @@
+[
+  {
+    "dataset_name": "/mnt/proj1/open-28-58/lakoc/huggingface_asr/src/dataset_builders/kaldi_dataset",
+    "dataset_id": "wsj",
+    "load_from_disk": false,
+    "train_splits": [
+      "train"
+    ],
+    "validation_splits": [
+      "dev_dt_20",
+      "dev_dt_05"
+    ],
+    "test_splits": [
+      "test"
+    ],
+    "text_column_name": "labels",
+    "audio_column_name": "audio",
+    "length_column_name": "input_len",
+    "text_transformations": [
+      "remove_punctuation",
+      "do_lower_case"
+    ],
+    "additional_args": {
+      "data_dir": "/mnt/matylda5/ipoloka/projects/huggingface_asr/metadata_dirs/wsj",
+      "splits": []
+    }
+  },
+  {
+    "dataset_name": "/mnt/proj1/open-28-58/lakoc/huggingface_asr/src/dataset_builders/kaldi_dataset",
+    "dataset_id": "fisher_swbd",
+    "load_from_disk": false,
+    "train_splits": [
+      "train"
+    ],
+    "validation_splits": [
+      "test"
+    ],
+    "test_splits": [
+      "dev"
+    ],
+    "text_column_name": "labels",
+    "audio_column_name": "audio",
+    "length_column_name": "input_len",
+    "text_transformations": [
+      "remove_punctuation",
+      "do_lower_case"
+    ],
+    "additional_args": {
+      "data_dir": "/mnt/matylda5/ipoloka/projects/huggingface_asr/metadata_dirs/fisher_swbd",
+      "splits": []
+    }
+  },
+  {
+    "dataset_name": "facebook/voxpopuli",
+    "dataset_id": "voxpopuli",
+    "load_from_disk": false,
+    "train_splits": [
+      "train"
+    ],
+    "validation_splits": [
+      "validation"
+    ],
+    "test_splits": [
+      "test"
+    ],
+    "text_column_name": "normalized_text",
+    "audio_column_name": "audio",
+    "length_column_name": "input_len",
+    "text_transformations": [
+      "remove_punctuation",
+      "do_lower_case"
+    ],
+    "additional_args": {
+      "name": "en"
+    }
+  },
+  {
+    "dataset_name": "LIUM/tedlium",
+    "dataset_id": "tedlium3",
+    "load_from_disk": false,
+    "train_splits": [
+      "train"
+    ],
+    "validation_splits": [
+      "validation"
+    ],
+    "test_splits": [
+      "test"
+    ],
+    "text_column_name": "text",
+    "audio_column_name": "audio",
+    "length_column_name": "input_len",
+    "text_transformations": [
+      "remove_punctuation",
+      "do_lower_case",
+      "fix_tedlium_apostrophes"
+    ],
+    "additional_args": {
+      "name": "release3"
+    }
+  },
+  {
+    "dataset_name": "librispeech_asr",
+    "dataset_id": "librispeech",
+    "load_from_disk": false,
+    "train_splits": [
+      "train.clean.100",
+      "train.clean.360",
+      "train.other.500"
+    ],
+    "validation_splits": [
+      "validation.clean",
+      "validation.other"
+    ],
+    "test_splits": [
+      "test.clean",
+      "test.other"
+    ],
+    "text_column_name": "text",
+    "audio_column_name": "audio",
+    "length_column_name": "input_len",
+    "text_transformations": [
+      "remove_punctuation",
+      "do_lower_case"
+    ],
+    "additional_args": {
+      "name": "all"
+    }
+  },
+  {
+    "dataset_name": "mozilla-foundation/common_voice_13_0",
+    "dataset_id": "commonvoice_en",
+    "load_from_disk": false,
+    "train_splits": [
+      "train"
+    ],
+    "validation_splits": [
+      "validation"
+    ],
+    "test_splits": [
+      "test"
+    ],
+    "text_column_name": "sentence",
+    "audio_column_name": "audio",
+    "length_column_name": "input_len",
+    "text_transformations": [
+            "remove_punctuation",
+      "do_lower_case"
+    ],
+    "reshuffle_at_start": true,
+    "additional_args": {
+      "name": "en"
+    }
+  },
+  {
+    "dataset_name": "google/fleurs",
+    "dataset_id": "fleurs",
+    "load_from_disk": false,
+    "train_splits": [
+    ],
+    "validation_splits": [
+      "validation"
+    ],
+    "test_splits": [
+      "test"
+    ],
+    "text_column_name": "transcription",
+    "audio_column_name": "audio",
+    "length_column_name": "input_len",
+    "text_transformations": [
+            "remove_punctuation",
+      "do_lower_case"
+    ],
+    "additional_args": {
+      "name": "en_us"
+    }
+  }
+]

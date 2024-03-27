@@ -34,10 +34,10 @@
       "train"
     ],
     "validation_splits": [
-      "dev"
+      "test"
     ],
     "test_splits": [
-      "test"
+      "dev"
     ],
     "text_column_name": "labels",
     "audio_column_name": "audio",
@@ -152,6 +152,7 @@
       "clean_special_tokens_english_train",
       "transforms_unfinished_words_to_unks_train"
     ],
+    "reshuffle_at_start": true,
     "additional_args": {
       "name": "en"
     }

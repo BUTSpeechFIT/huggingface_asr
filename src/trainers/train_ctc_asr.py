@@ -41,10 +41,10 @@ if __name__ == "__main__":
         validation_split=data_args.validation_split,
         text_transformations=data_args.text_transformations,
         split_long_segments_to_chunks=data_args.split_long_segments_to_chunks,
-        filter_empty_labels=data_args.filter_empty_labels,
         validation_slice_str=data_args.validation_slice,
         cut_validation_from_train=data_args.cut_validation_from_train,
         seed=data_args.validation_slice_seed,
+        reshuffle_at_start=data_args.reshuffle_at_start,
     )
 
     logger.info(f"Dataset processed successfully.{dataset}")
@@ -73,6 +73,7 @@ if __name__ == "__main__":
         text_path=data_args.text_column_name,
         model_input_name=model.main_input_name,
         mask_unks=training_args.mask_unks,
+        pad_to_multiple_of=data_args.pad_to_multiples_of,
     )
 
     trainer = Trainer(

@@ -1,6 +1,7 @@
+"""Utilities for generation."""
 import os
 import pickle  # nosec
-from typing import Dict, List
+from typing import Callable, Dict, List, Optional
 
 import pandas as pd
 import torch
@@ -18,6 +19,7 @@ def save_nbests(
     batch_size: int = 1,
     outputs: List[Dict] = None,
 ):
+    """Save nbests, scores and labels to files."""
     nbests = [tokenizer.decode(elem.tolist(), skip_special_tokens=True) for item in nbests for elem in item.unbind()]
     processed_labels = []
     if outputs is not None:
@@ -46,13 +48,19 @@ def save_nbests(
                     file_handler_3.write(f"{utterance_id} {ref}\n")
 
 
-def save_predictions(tokenizer: PreTrainedTokenizer, predictions: PredictionOutput, path: str):
+def save_predictions(
+    tokenizer: PreTrainedTokenizer, predictions: PredictionOutput, path: str, text_transforms: Optional[Callable] = None
+):
+    """Save predictions to a csv file and sclite files to evaluate wer."""
     pred_ids = predictions.predictions
 
     label_ids = predictions.label_ids
     label_ids[label_ids == -100] = tokenizer.pad_token_id
 
-    pred_str = tokenizer.batch_decode(pred_ids, skip_special_tokens=True)
+    pred_str = [
+        text_transforms(pred) if text_transforms else pred
+        for pred in tokenizer.batch_decode(pred_ids, skip_special_tokens=True)
+    ]
     label_str = [label if label else "-" for label in tokenizer.batch_decode(label_ids, skip_special_tokens=True)]
     df = pd.DataFrame({"label": label_str, "prediction": pred_str})
     df.to_csv(path, index=False)
@@ -64,4 +72,4 @@ def save_predictions(tokenizer: PreTrainedTokenizer, predictions: PredictionOutp
                 file_handler.write(f"{string} (utterance_{index})\n")
 
     # evaluate wer also with sclite
-    os.system(f"sclite -F -D -i wsj -r {sclite_files[1]} trn -h {sclite_files[0]} trn -o snt sum")  # nosec
+    os.system(f"sclite -F -D -i wsj -r {sclite_files[1]} trn -h {sclite_files[0]} trn -o snt sum dtl")  # nosec

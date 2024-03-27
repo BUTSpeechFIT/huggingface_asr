@@ -8,6 +8,7 @@ from transformers import (
     PreTrainedTokenizer,
     Speech2TextFeatureExtractor,
     Wav2Vec2FeatureExtractor,
+    WhisperFeatureExtractor,
 )
 from transformers.models.wav2vec2.modeling_wav2vec2 import (
     _compute_mask_indices,
@@ -46,7 +47,7 @@ class SpeechCollatorWithPadding:
                 /Fine_tuning_Wav2Vec2_for_English_ASR.ipynb
     """
 
-    feature_extractor: Union[Wav2Vec2FeatureExtractor, Speech2TextFeatureExtractor]
+    feature_extractor: Union[Wav2Vec2FeatureExtractor, Speech2TextFeatureExtractor, WhisperFeatureExtractor]
     tokenizer: PreTrainedTokenizer
     padding: Union[bool, str] = True
     max_length: Optional[int] = None
@@ -68,7 +69,6 @@ class SpeechCollatorWithPadding:
             BatchFeature({self.feature_extractor.model_input_names[0]: feature[self.audio_path].squeeze(dim=0)})
             for feature in features
         ]
-        from transformers import GPT2Model
 
         labels = self.tokenizer.batch_encode_plus(
             [feature[self.text_path] for feature in features],
@@ -84,6 +84,11 @@ class SpeechCollatorWithPadding:
             pad_to_multiple_of=self.pad_to_multiple_of,
             return_tensors="pt",
         )
+
+        if isinstance(self.feature_extractor, WhisperFeatureExtractor):
+            batch[self.feature_extractor.model_input_names[0]] = batch[
+                self.feature_extractor.model_input_names[0]
+            ].transpose(-2, -1)
 
         labels = labels["input_ids"].masked_fill(labels.attention_mask.ne(1), -100)
 
