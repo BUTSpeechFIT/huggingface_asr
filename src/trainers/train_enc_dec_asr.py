@@ -54,6 +54,9 @@ if __name__ == "__main__":
         cut_validation_from_train=data_args.cut_validation_from_train,
         seed=data_args.validation_slice_seed,
         reshuffle_at_start=data_args.reshuffle_at_start,
+        dataset_shard_size=data_args.dataset_shard_size,
+        dump_prepared_dataset=data_args.dump_prepared_dataset,
+        load_pure_dataset_only=data_args.load_pure_dataset_only,
     )
 
     logger.info(f"Dataset processed successfully.{dataset}")

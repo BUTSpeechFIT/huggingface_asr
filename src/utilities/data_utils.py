@@ -420,6 +420,7 @@ def load_multiple_datasets(
     global_train_split: str,
     global_validation_split: str,
     split_long_segments_to_chunks: bool,
+    load_pure_dataset_only: bool = False,
 ) -> DatasetDict:
     """Loads multiple datasets, preprocess them and join to single dataset instance."""
     with open(config_path) as config_handle:
@@ -456,6 +457,8 @@ def load_multiple_datasets(
                 del dataset[split]
 
         logger.info(f"Preprocessing dataset {dataset_config['dataset_name']}")
+        if load_pure_dataset_only:
+            return dataset
         dataset_processed = prepare_dataset(
             dataset=dataset,
             dataset_name=dataset_config["dataset_name"],
@@ -554,6 +557,9 @@ def get_dataset(
     cut_validation_from_train: bool,
     seed: Optional[int],
     reshuffle_at_start: bool,
+    dump_prepared_dataset: Optional[str] = None,
+    dataset_shard_size: Optional[str] = None,
+    load_pure_dataset_only: bool = False,
 ) -> Tuple[DatasetDict, Dataset]:
     """Loads single or multiple datasets, preprocess, and merge them."""
     if datasets_creation_config_path is not None:
@@ -570,6 +576,7 @@ def get_dataset(
             global_train_split=train_split,
             global_validation_split=validation_split,
             split_long_segments_to_chunks=split_long_segments_to_chunks,
+            load_pure_dataset_only=load_pure_dataset_only,
         )
     else:
         with DistributedContext() as context:
@@ -587,26 +594,36 @@ def get_dataset(
             context.wait_after()
 
         # 3. Preprocess dataset
-        dataset = prepare_dataset(
-            dataset=dataset,
-            dataset_name=dataset_name,
-            length_column_name=len_column,
-            text_column_name=text_column,
-            audio_column_name=audio_column,
-            preprocessing_num_workers=preprocessing_num_workers,
-            writer_batch_size=writer_batch_size,
-            train_split=train_split,
-            sampling_rate=sampling_rate,
-            max_input_len=max_input_len,
-            min_input_len=min_input_len,
-            text_transformations=text_transformations,
-            split_long_segments_to_chunks=split_long_segments_to_chunks,
-            reshuffle_at_start=reshuffle_at_start,
+        if not load_pure_dataset_only:
+            dataset = prepare_dataset(
+                dataset=dataset,
+                dataset_name=dataset_name,
+                length_column_name=len_column,
+                text_column_name=text_column,
+                audio_column_name=audio_column,
+                preprocessing_num_workers=preprocessing_num_workers,
+                writer_batch_size=writer_batch_size,
+                train_split=train_split,
+                sampling_rate=sampling_rate,
+                max_input_len=max_input_len,
+                min_input_len=min_input_len,
+                text_transformations=text_transformations,
+                split_long_segments_to_chunks=split_long_segments_to_chunks,
+                reshuffle_at_start=reshuffle_at_start,
+            )
+
+    if dump_prepared_dataset is not None:
+        logger.info("Dumping prepared datasets to %s", dump_prepared_dataset)
+        dataset.save_to_disk(
+            dataset_dict_path=dump_prepared_dataset,
+            num_proc=preprocessing_num_workers,
+            max_shard_size=dataset_shard_size,
         )
 
     train_eval_split = get_eval_split(
         dataset, train_split, validation_split, validation_slice_str, cut_validation_from_train, seed
     )
+
     return dataset, train_eval_split
 
 

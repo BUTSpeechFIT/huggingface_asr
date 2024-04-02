@@ -3,7 +3,6 @@ from dataclasses import dataclass, field
 from typing import List, Optional, Union
 
 import multiprocess
-import torch
 from transformers import Seq2SeqTrainingArguments
 
 
@@ -28,7 +27,7 @@ class ModelArguments:
         metadata={
             "help": (
                 "Override some existing default config settings when a model is trained from scratch. Example: "
-                "n_embd=10,resid_pdrop=0.2,scale_attn_weights=false,summary_type=cls_index"
+                "n_embd=10;resid_pdrop=0.2;scale_attn_weights=false;summary_type=cls_index"
             )
         },
     )
@@ -136,6 +135,10 @@ class GenerationArguments:
     apply_eos_space_trick: Optional[bool] = field(default=False, metadata={"help": "Whether to apply eos space trick."})
     eos_space_trick_weight: Optional[float] = field(default=0.0, metadata={"help": "Weight of eos space trick."})
     space_token_id: Optional[int] = field(default=-1, metadata={"help": "Space token id."})
+    override_for_evaluation: Optional[str] = field(
+        default=None,
+        metadata={"help": "Arguments to override for evaluation. Example: " "decoding_ctc_weight=0.3;lm_model=gpt2"},
+    )
 
 
 @dataclass
@@ -203,6 +206,16 @@ class DataTrainingArguments:
     )
     pad_to_multiples_of: Optional[int] = field(
         default=None, metadata={"help": "Used in collator to pad to the multiples of x."}
+    )
+    dump_prepared_dataset: Optional[str] = field(
+        default=None,
+        metadata={"help": "Path where to dump prepared datasets so it may be read preprocessed from single location."},
+    )
+    dataset_shard_size: Optional[str] = field(
+        default=None, metadata={"help": "Size of the dataset shard to dump to disk."}
+    )
+    load_pure_dataset_only: Optional[bool] = field(
+        default=False, metadata={"help": "Whether to load only the pure dataset without any preprocessing."}
     )
 
 
