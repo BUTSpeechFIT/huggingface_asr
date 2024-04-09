@@ -84,6 +84,7 @@ if __name__ == "__main__":
         model=model,
         audio_path=data_args.audio_column_name,
         model_input_name=model.main_input_name,
+        pad_to_multiple_of=data_args.pad_to_multiples_of,
     )
 
     # 7. Initialize trainer

@@ -39,6 +39,7 @@ from transformers.utils import (
     is_in_notebook,
     is_sagemaker_mp_enabled,
     is_torch_tpu_available,
+    is_torch_xla_available,
     logging,
 )
 
@@ -382,9 +383,7 @@ class SSLTrainer(Trainer):
         loss = MetadataTensor(loss, metadata=additional_stats)
         num_losses = loss.metadata["num_losses"]
 
-        if self.do_grad_scaling:
-            self.scaler.scale(loss).backward()
-        elif self.use_apex:
+        if self.use_apex:
             with amp.scale_loss(loss, self.optimizer) as scaled_loss:
                 scaled_loss.backward()
         else:
@@ -412,9 +411,9 @@ class SSLTrainer(Trainer):
 
         return loss.detach()
 
-    def _maybe_log_save_evaluate(self, tr_loss, model, trial, epoch, ignore_keys_for_eval):
-        if self.control.should_log:
-            if is_torch_tpu_available():
+    def _maybe_log_save_evaluate(self, tr_loss, grad_norm, model, trial, epoch, ignore_keys_for_eval):
+        if self.control.should_log and self.state.global_step > self._globalstep_last_logged:
+            if is_torch_xla_available():
                 xm.mark_step()
 
             logs: Dict[str, float] = {}
@@ -423,13 +422,12 @@ class SSLTrainer(Trainer):
                 item_scalar = self._nested_gather(tr_loss.metadata[item]).sum().item()
                 tr_loss.metadata[item] -= tr_loss.metadata[item]
                 logs[item] = item_scalar
+
             # all_gather + mean() to get average loss over all processes
-            tr_loss_scalar = self._nested_gather(tr_loss).sum().item()
+            tr_loss_scalar = self._nested_gather(tr_loss).mean().item()
 
             # reset tr_loss to zero
             tr_loss -= tr_loss
-
-            logs["loss"] = tr_loss_scalar
             logs = self.normalize_additional_logs(
                 # pylint: disable=no-member
                 logs,
@@ -446,17 +444,7 @@ class SSLTrainer(Trainer):
 
         metrics = None
         if self.control.should_evaluate:
-            if isinstance(self.eval_dataset, dict):
-                metrics = {}
-                for eval_dataset_name, eval_dataset in self.eval_dataset.items():
-                    dataset_metrics = self.evaluate(
-                        eval_dataset=eval_dataset,
-                        ignore_keys=ignore_keys_for_eval,
-                        metric_key_prefix=f"eval_{eval_dataset_name}",
-                    )
-                    metrics.update(dataset_metrics)
-            else:
-                metrics = self.evaluate(ignore_keys=ignore_keys_for_eval)
+            metrics = self.evaluate(ignore_keys=ignore_keys_for_eval)
             self._report_to_hp_search(trial, self.state.global_step, metrics)
 
             # Run delayed LR scheduler now that metrics are populated

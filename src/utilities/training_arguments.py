@@ -1,6 +1,9 @@
+import multiprocessing
 from dataclasses import dataclass, field
 from typing import List, Optional, Union
 
+import multiprocess
+import torch
 from transformers import Seq2SeqTrainingArguments
 
 
@@ -25,7 +28,7 @@ class ModelArguments:
         metadata={
             "help": (
                 "Override some existing default config settings when a model is trained from scratch. Example: "
-                "n_embd=10,resid_pdrop=0.2,scale_attn_weights=false,summary_type=cls_index"
+                "n_embd=10;resid_pdrop=0.2;scale_attn_weights=false;summary_type=cls_index"
             )
         },
     )
@@ -83,6 +86,18 @@ class GeneralTrainingArguments(Seq2SeqTrainingArguments):
     dump_prepared_dataset: Optional[str] = field(
         default=None, metadata={"help": "Path where to dump prepared datasets so they do not be created again."}
     )
+    use_start_method_spawn: Optional[bool] = field(
+        default=False, metadata={"help": "Whether multiprocessing should be started by spawn"}
+    )
+
+    def __post_init__(self):
+        super().__post_init__()
+        if self.use_start_method_spawn:
+            multiprocessing.set_start_method("spawn", force=True)
+            # pylint: disable=no-member
+            multiprocess.set_start_method("spawn", force=True)
+            self.dataloader_persistent_workers = True
+            super().__post_init__()
 
 
 @dataclass
@@ -124,6 +139,10 @@ class GenerationArguments:
     apply_eos_space_trick: Optional[bool] = field(default=False, metadata={"help": "Whether to apply eos space trick."})
     eos_space_trick_weight: Optional[float] = field(default=0.0, metadata={"help": "Weight of eos space trick."})
     space_token_id: Optional[int] = field(default=-1, metadata={"help": "Space token id."})
+    override_for_evaluation: Optional[str] = field(
+        default=False,
+        metadata={"help": "Arguments to override for evaluation. Example: " "decoding_ctc_weight=0.3;lm_model=gpt2"},
+    )
 
 
 @dataclass
@@ -188,6 +207,9 @@ class DataTrainingArguments:
     )
     reshuffle_at_start: Optional[bool] = field(
         default=False, metadata={"help": "Whether to reshuffle the dataset at the start of preprocessing."}
+    )
+    pad_to_multiples_of: Optional[int] = field(
+        default=None, metadata={"help": "Used in collator to pad to the multiples of x."}
     )
 
 

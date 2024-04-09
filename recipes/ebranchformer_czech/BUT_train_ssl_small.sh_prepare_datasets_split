@@ -29,7 +29,7 @@ RECIPE_DIR="${WORK_DIR}/recipes/ebranchformer_czech"
 EXPERIMENT="ebranchformer_czech_small_v1" #wandb, dirname
 PROJECT="czech_ssl" #wandb
 
-export HF_HOME="/mnt/matylda6/szoke/CZECH/big-model/huggingface_cache" # do not forget to set the HF token in this cache!
+export HF_HOME="/mnt/matylda6/szoke/CZECH/big-model/huggingface_cache-newjarin" # do not forget to set the HF token in this cache!
 export PYTHONPATH="${PYTHONPATH}:${WORK_DIR}/src"
 export OMP_NUM_THREADS=64
 export WANDB_PROJECT=$PROJECT

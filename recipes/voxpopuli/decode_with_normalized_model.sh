@@ -55,7 +55,6 @@ args=(
   --expect_2d_input
 
   # Generation related arguments
-  --filter_empty_labels
   --num_beams="4"
   --max_length="512"
   --predict_with_generate

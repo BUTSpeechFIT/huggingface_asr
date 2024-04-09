@@ -86,7 +86,7 @@ class CTCPrefixScoreTH(object):
         else:
             r_prev, s_prev, f_min_prev, f_max_prev = state
 
-        # select input dimensions for scoring
+        # select input dimensions for decred_scoring
         if self.scoring_num > 0:
             scoring_idmap = torch.full((n_bh, self.odim), -1, dtype=torch.long, device=self.device)
             snum = self.scoring_num

@@ -81,9 +81,8 @@ if __name__ == "__main__":
         sys.exit(0)
 
     # 2. Instantiate model
-    mp.set_start_method("spawn", force=True)
     device = "cuda" if torch.cuda.is_available() else "cpu"
-    pipeline = Speech2Text.from_pretrained(model_args.from_pretrained, lang_sym="<en>", beam_size=1, device=device)
+    pipeline = Speech2Text.from_pretrained(model_args.from_pretrained, lang_sym="<eng>", beam_size=1, device=device)
 
     # 3. Init callable transformation
     if gen_args.post_process_predicitons and data_args.text_transformations is not None:
@@ -97,40 +96,19 @@ if __name__ == "__main__":
         callable_transform = None
 
     # 4. Generate predictions for each split
-    manager = mp.Manager()
     for split_name in data_args.test_splits:
         pred_str = []
         label_str = []
         logger.info(f"Generating predictions for split: {split_name}")
         split = dataset[split_name]
 
-        # 4a. Init array to store predictions and labels and manager
-        hyp_list = manager.list()
-        label_list = manager.list()
-        # pylint: disable=not-callable
-        pool = mp.Pool(gen_args.num_workers)
+        for sample in tqdm(split):
+            hyp, ref = process_sample(
+                sample, pipeline=pipeline, callable_transform=callable_transform, text_column=data_args.text_column_name
+            )
+            pred_str.append(hyp)
+            label_str.append(ref)
 
-        # 4b. Process samples in parallel
-        for result in tqdm(
-            pool.imap(
-                partial(
-                    process_sample,
-                    pipeline=pipeline,
-                    callable_transform=callable_transform,
-                    text_column=data_args.text_column_name,
-                ),
-                split,
-            ),
-            total=len(split),
-            desc=f"Processing samples in {split_name} dataset",
-        ):
-            hyp, label = result
-            hyp_list.append(hyp)
-            label_list.append(label)
-        pool.close()
-        pool.join()
-
-        # 4c. Parse results
         out_path = (
             f"{training_args.output_dir}/"
             f"predictions_{split_name}_{model_args.from_pretrained.replace('/', '_')}.csv"

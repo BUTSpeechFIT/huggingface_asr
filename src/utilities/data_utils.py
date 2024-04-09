@@ -84,7 +84,7 @@ class DistributedContext:
     def wait_after(self):
         if self.world_size > 1:
             if self.local_rank == 0:
-                logger.info(f"Rank {self.local_rank}: Waiting for other processes to finish operation.")
+                logger.info(f"Rank {self.global_rank}: Waiting for other processes to finish operation.")
                 torch.distributed.barrier()
 
 
@@ -111,7 +111,7 @@ def do_lower_case(example: str, label_column: str) -> Dict[str, str]:
 
 def remove_punctuation(example: str, label_column: str) -> Dict[str, str]:
     """Removes punctuation."""
-    return {label_column: re.sub(r"[!\"#$%&\'()*+,.\/\\:;<=>?@\[\]^_`{|}~]", "", example)}
+    return {label_column: re.sub(r"[!\"#$%&\'()*+,.\/\\:;<=>?@^_`{|}~]", "", example)}
 
 
 def remove_multiple_whitespaces_and_strip(example: str, label_column: str) -> Dict[str, str]:
@@ -299,6 +299,22 @@ def prepare_dataset(
             fn_kwargs={"max_input_len": max_input_len, "min_input_len": min_input_len},
             desc="Filtering out too long and too short sequences",
         )
+
+    # Filter samples shorter than 0.1s - {MIN_INPUT_LEN},
+    # due to the conv subsampling and mel fbank extraction in model encoder
+    for split in list(dataset.keys()):
+        if split != train_split:
+            dataset[split] = distributed_process(
+                dataset[split],
+                process_by="filter",
+                function=filter_sequences_in_range_batched,
+                batched=True,
+                input_columns=[length_column_name],
+                num_proc=preprocessing_num_workers,
+                writer_batch_size=writer_batch_size,
+                fn_kwargs={"max_input_len": np.finfo(np.float32).max, "min_input_len": MIN_INPUT_LEN},
+                desc="Filter samples that the model is not able to process due to the conv subsampling.",
+            )
 
     # 2. Preprocess label columns
     if text_column_name is not None and text_transformations is not None:
@@ -588,22 +604,6 @@ def get_dataset(
             reshuffle_at_start=reshuffle_at_start,
         )
 
-    # Filter samples shorter than 0.1s - {MIN_INPUT_LEN},
-    # due to the conv subsampling and mel fbank extraction in model encoder
-    dataset_splits = list(dataset.keys())
-    dataset_splits.remove(train_split)
-    for split in dataset_splits:
-        dataset[split] = distributed_process(
-            dataset[split],
-            process_by="filter",
-            function=filter_sequences_in_range_batched,
-            batched=True,
-            input_columns=[len_column],
-            num_proc=preprocessing_num_workers,
-            writer_batch_size=writer_batch_size,
-            fn_kwargs={"max_input_len": np.finfo(np.float32).max, "min_input_len": MIN_INPUT_LEN},
-            desc="Filter samples that the model is not able to process due to the conv subsampling.",
-        )
     train_eval_split = get_eval_split(
         dataset, train_split, validation_split, validation_slice_str, cut_validation_from_train, seed
     )

@@ -21,7 +21,6 @@ from transformers.models.speech_encoder_decoder.modeling_speech_encoder_decoder 
 )
 from transformers.utils import logging
 
-from decoding.config import GenerationConfigCustom
 from decoding.ctc_scorer import CTCRescorerLogitsProcessor, LogSoftmaxProcessor
 from decoding.shallow_fussion import LMRescorerLogitsProcessor
 from models.auto_wrappers import CustomAutoModelForCTC, CustomModelForCausalLM
@@ -376,16 +375,25 @@ class JointCTCAttentionEncoderDecoder(SpeechEncoderDecoderModel):
 
     def _get_logits_processor(
         self,
-        generation_config: GenerationConfigCustom,
+        generation_config: GenerationConfig,
         input_ids_seq_length: int,
         encoder_input_ids: torch.LongTensor,
         prefix_allowed_tokens_fn: Callable[[int, torch.Tensor], List[int]],
         logits_processor: Optional[LogitsProcessorList],
+        model_kwargs: Optional[Dict[str, Any]] = None,
+        negative_prompt_ids: Optional[torch.Tensor] = None,
+        negative_prompt_attention_mask: Optional[torch.Tensor] = None,
     ) -> LogitsProcessorList:
-
         # pylint: disable=no-member
         processors = super()._get_logits_processor(
-            generation_config, input_ids_seq_length, encoder_input_ids, prefix_allowed_tokens_fn, logits_processor
+            generation_config,
+            input_ids_seq_length,
+            encoder_input_ids,
+            prefix_allowed_tokens_fn,
+            logits_processor,
+            model_kwargs,
+            negative_prompt_ids,
+            negative_prompt_attention_mask,
         )
         if hasattr(generation_config, "ctc_weight") and generation_config.ctc_weight > 0:
             if generation_config.num_beams <= 1:

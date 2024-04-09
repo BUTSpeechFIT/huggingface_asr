@@ -15,9 +15,9 @@ def calculate_output_size(input_size, kernel_size, stride, left_padding=0, right
     Returns:
     - Output size
     """
-    return torch.tensor(
-        ((input_size + left_padding + right_padding - dilation * (kernel_size - 1) - 1) / stride) + 1
-    ).floor()
+    if not isinstance(input_size, torch.Tensor):
+        input_size = torch.tensor(input_size)
+    return (((input_size + left_padding + right_padding - dilation * (kernel_size - 1) - 1) / stride) + 1).floor()
 
 
 def calculate_output_size_multilayer(input_size, layers):

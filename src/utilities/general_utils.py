@@ -132,16 +132,18 @@ def do_evaluate(
 ):
     if data_args.test_splits is None:
         return
-    if isinstance(trainer, Seq2SeqTrainer) and isinstance(model, SpeechEncoderDecoderModel):
-        trainer.args.per_device_eval_batch_size = math.ceil(
-            trainer.args.per_device_eval_batch_size / gen_args.eval_beam_factor
-        )
+    if gen_args.override_for_evaluation is not None:
+        num_beams_orig = model.generation_config.num_beams
+        model.generation_config.update_from_string(gen_args.override_for_evaluation)
+        if model.generation_config.num_beams != num_beams_orig:
+            trainer.args.per_device_eval_batch_size = math.ceil(
+                trainer.args.per_device_eval_batch_size / (model.generation_config.num_beams / num_beams_orig)
+            )
     for split in data_args.test_splits:
         if isinstance(trainer, Seq2SeqTrainer):
             predictions = trainer.predict(
                 dataset[split],
                 output_hidden_states=True,
-                num_beams=model.generation_config.num_beams * gen_args.eval_beam_factor,
             )
         else:
             predictions = trainer.predict(
