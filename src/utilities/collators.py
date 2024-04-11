@@ -147,7 +147,8 @@ class DataCollatorForWav2Vec2Pretraining:
     mask_time_length: Optional[int] = 10
     sampling_rate: Optional[int] = 16_000
     audio_path: str = None
-    model_input_name: str = True
+    model_input_name: str = ""
+    min_masks: int = 1
 
     def __post_init__(self):
         if not isinstance(self.feature_extractor, (Wav2Vec2FeatureExtractor, Speech2TextFeatureExtractor)):
@@ -199,6 +200,7 @@ class DataCollatorForWav2Vec2Pretraining:
             self.mask_time_prob,
             self.mask_time_length,
             attention_mask=batch.get("sub_attention_mask"),
+            min_masks=self.min_masks,
         )
 
         # sample negative indices
