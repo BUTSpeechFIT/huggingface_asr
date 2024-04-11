@@ -18,6 +18,7 @@ from datasets import (
 from transformers.utils import logging
 
 from utilities.english_normalizer import EnglishNormalizer
+from utilities.training_arguments import DataTrainingArguments
 
 logger = logging.get_logger("transformers")
 
@@ -111,7 +112,7 @@ def do_lower_case(example: str, label_column: str) -> Dict[str, str]:
 
 def remove_punctuation(example: str, label_column: str) -> Dict[str, str]:
     """Removes punctuation."""
-    return {label_column: re.sub(r"[!\"#$%&\'()*+,.\/\\:;<=>?@^_`{|}~]", "", example)}
+    return {label_column: re.sub(r"[!\"#$%&\'()*+,./\\:;<=>?@^_`{|}~]", "", example)}
 
 
 def remove_multiple_whitespaces_and_strip(example: str, label_column: str) -> Dict[str, str]:
@@ -538,90 +539,79 @@ def get_eval_split(
 
 
 def get_dataset(
-    datasets_creation_config_path: str,
-    dataset_name: str,
-    dataset_config: str,
-    preprocessing_num_workers: int,
-    writer_batch_size: int,
-    sampling_rate: int,
-    max_input_len: float,
-    min_input_len: float,
+    data_args: DataTrainingArguments,
     len_column: str,
-    text_column: str,
-    audio_column: str,
-    train_split: str,
-    validation_split: str,
-    text_transformations: Optional[List[str]],
-    split_long_segments_to_chunks: bool,
-    validation_slice_str: str,
-    cut_validation_from_train: bool,
-    seed: Optional[int],
-    reshuffle_at_start: bool,
-    dump_prepared_dataset: Optional[str] = None,
-    dataset_shard_size: Optional[str] = None,
-    load_pure_dataset_only: bool = False,
 ) -> Tuple[DatasetDict, Dataset]:
     """Loads single or multiple datasets, preprocess, and merge them."""
-    if datasets_creation_config_path is not None:
+    if data_args.datasets_creation_config is not None:
         dataset = load_multiple_datasets(
-            config_path=datasets_creation_config_path,
-            num_proc=preprocessing_num_workers,
-            writer_batch_size=writer_batch_size,
-            sampling_rate=sampling_rate,
-            max_input_len=max_input_len,
-            min_input_len=min_input_len,
+            config_path=data_args.datasets_creation_config,
+            num_proc=data_args.preprocessing_num_workers,
+            writer_batch_size=data_args.writer_batch_size,
+            sampling_rate=data_args.sampling_rate,
+            max_input_len=data_args.max_duration_in_seconds,
+            min_input_len=data_args.min_duration_in_seconds,
             global_len_column=len_column,
-            global_text_column=text_column,
-            global_audio_column=audio_column,
-            global_train_split=train_split,
-            global_validation_split=validation_split,
-            split_long_segments_to_chunks=split_long_segments_to_chunks,
-            load_pure_dataset_only=load_pure_dataset_only,
+            global_text_column=data_args.text_column_name,
+            global_audio_column=data_args.audio_column_name,
+            global_train_split=data_args.train_split,
+            global_validation_split=data_args.validation_split,
+            split_long_segments_to_chunks=data_args.split_long_segments_to_chunks,
+            load_pure_dataset_only=data_args.load_pure_dataset_only,
         )
     else:
         with DistributedContext() as context:
             context.wait_before()
-            if dataset_config is not None:
+            if data_args.dataset_config is not None:
                 dataset = load_dataset(
-                    dataset_name,
-                    dataset_config,
+                    data_args.dataset_name,
+                    data_args.dataset_config,
                     keep_in_memory=False,
-                    num_proc=preprocessing_num_workers,
-                    writer_batch_size=writer_batch_size,
+                    num_proc=data_args.preprocessing_num_workers,
+                    writer_batch_size=data_args.writer_batch_size,
                 )
             else:
-                dataset = load_from_disk(dataset_name, keep_in_memory=False)
+                dataset = load_from_disk(data_args.dataset_name, keep_in_memory=False)
             context.wait_after()
 
         # 3. Preprocess dataset
-        if not load_pure_dataset_only:
+        if not data_args.load_pure_dataset_only:
             dataset = prepare_dataset(
                 dataset=dataset,
-                dataset_name=dataset_name,
+                dataset_name=data_args.dataset_name,
                 length_column_name=len_column,
-                text_column_name=text_column,
-                audio_column_name=audio_column,
-                preprocessing_num_workers=preprocessing_num_workers,
-                writer_batch_size=writer_batch_size,
-                train_split=train_split,
-                sampling_rate=sampling_rate,
-                max_input_len=max_input_len,
-                min_input_len=min_input_len,
-                text_transformations=text_transformations,
-                split_long_segments_to_chunks=split_long_segments_to_chunks,
-                reshuffle_at_start=reshuffle_at_start,
+                text_column_name=data_args.text_column_name,
+                audio_column_name=data_args.audio_column_name,
+                preprocessing_num_workers=data_args.preprocessing_num_workers,
+                writer_batch_size=data_args.writer_batch_size,
+                train_split=data_args.train_split,
+                sampling_rate=data_args.sampling_rate,
+                max_input_len=data_args.max_duration_in_seconds,
+                min_input_len=data_args.min_duration_in_seconds,
+                text_transformations=data_args.text_transformations,
+                split_long_segments_to_chunks=data_args.split_long_segments_to_chunks,
+                reshuffle_at_start=data_args.reshuffle_at_start,
             )
 
-    if dump_prepared_dataset is not None:
-        logger.info("Dumping prepared datasets to %s", dump_prepared_dataset)
+    if data_args.dump_prepared_dataset is not None:
+        logger.info("Dumping prepared datasets to %s", data_args.dump_prepared_dataset)
+
+        if data_args.concatenate_splits_before_dumping:
+            dataset = concatenate_datasets([dataset[split] for split in dataset.keys()])
+
         dataset.save_to_disk(
-            dataset_dict_path=dump_prepared_dataset,
-            num_proc=preprocessing_num_workers,
-            max_shard_size=dataset_shard_size,
+            dataset_dict_path=data_args.dump_prepared_dataset,
+            num_proc=data_args.preprocessing_num_workers,
+            max_shard_size=data_args.dataset_shard_size,
         )
 
     train_eval_split = get_eval_split(
-        dataset, train_split, validation_split, validation_slice_str, cut_validation_from_train, seed
+        dataset,
+        data_args.train_split,
+        data_args.validation_split,
+        data_args.validation_slice,
+        data_args.cut_validation_from_train,
+        data_args.validation_slice_seed,
     )
 
     return dataset, train_eval_split

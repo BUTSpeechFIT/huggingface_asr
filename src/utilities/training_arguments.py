@@ -211,6 +211,9 @@ class DataTrainingArguments:
         default=None,
         metadata={"help": "Path where to dump prepared datasets so it may be read preprocessed from single location."},
     )
+    concatenate_splits_before_dumping: Optional[bool] = field(
+        default=False, metadata={"help": "Whether to concatenate splits before dumping to disk."}
+    )
     dataset_shard_size: Optional[str] = field(
         default=None, metadata={"help": "Size of the dataset shard to dump to disk."}
     )
