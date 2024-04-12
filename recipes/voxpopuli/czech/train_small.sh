@@ -70,7 +70,7 @@ args=(
 
   # Logging, saving and evaluation related arguments
   --report_to="wandb"
-  --logging_steps="1"
+  --logging_steps="10"
   --save_strategy="epoch"
   --evaluation_strategy="epoch"
   --eval_delay="10"
