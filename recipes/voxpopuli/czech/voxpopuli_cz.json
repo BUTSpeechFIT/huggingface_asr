@@ -16,6 +16,8 @@
     "audio_column_name": "audio",
     "length_column_name": "input_len",
     "text_transformations": [
+      "remove_punctuation",
+      "do_lower_case"
     ],
     "additional_args": {
       "name": "cs"
