@@ -207,7 +207,7 @@ class DataTrainingArguments:
     pad_to_multiples_of: Optional[int] = field(
         default=None, metadata={"help": "Used in collator to pad to the multiples of x."}
     )
-    dump_prepared_dataset: Optional[str] = field(
+    dump_prepared_dataset_to: Optional[str] = field(
         default=None,
         metadata={"help": "Path where to dump prepared datasets so it may be read preprocessed from single location."},
     )

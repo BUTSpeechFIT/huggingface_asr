@@ -593,14 +593,16 @@ def get_dataset(
                 reshuffle_at_start=data_args.reshuffle_at_start,
             )
 
-    if data_args.dump_prepared_dataset is not None:
-        logger.info("Dumping prepared datasets to %s", data_args.dump_prepared_dataset)
+    if data_args.dump_prepared_dataset_to is not None:
+        logger.info("Dumping prepared datasets to %s", data_args.dump_prepared_dataset_to)
 
         if data_args.concatenate_splits_before_dumping:
-            dataset = concatenate_datasets([dataset[split] for split in dataset.keys()])
+            dataset = DatasetDict(
+                {data_args.train_split: concatenate_datasets([dataset[split] for split in dataset.keys()])}
+            )
 
         dataset.save_to_disk(
-            dataset_dict_path=data_args.dump_prepared_dataset,
+            dataset_dict_path=data_args.dump_prepared_dataset_to,
             num_proc=data_args.preprocessing_num_workers,
             max_shard_size=data_args.dataset_shard_size,
         )
