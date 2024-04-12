@@ -53,7 +53,7 @@ if __name__ == "__main__":
         dataset.save_to_disk(
             training_args.dump_prepared_dataset,
             num_proc=data_args.preprocessing_num_workers,
-            max_shard_size="2GB",
+            max_shard_size="20GB",
         )
 
     if training_args.preprocess_dataset_only:

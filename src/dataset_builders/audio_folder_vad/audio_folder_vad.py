@@ -40,7 +40,7 @@ class AudioFolderVAD(folder_based_builder.FolderBasedBuilder):
         self,
         *args,
         vad_model: str = "pyannote/segmentation-3.0",
-        vad_device: str = "cpu",
+        vad_device: str = "cuda",
         vad_batch_size: int = 1024,
         vad_min_duration_on: float = 0.0,
         vad_min_duration_off: float = 0.0,
