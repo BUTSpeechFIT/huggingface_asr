@@ -34,7 +34,7 @@ export SINGULARITYENV_LD_LIBRARY_PATH=/usr/local/lib:/opt/cray/libfabric/1.15.2.
 
 export HF_HOME="/flash/${EC_PROJECT}/ipoloka/huggingface_cache"
 export PYTHONPATH="${PYTHONPATH}:${SRC_DIR}/src"
-export WANDB_PROJECT="voxpopuli_czech"
+export WANDB_PROJECT="voxpopuli_czech2"
 export WANDB_RUN_ID="${EXPERIMENT}"
 export WANDB_ENTITY="butspeechfit"
 
@@ -52,16 +52,16 @@ args=(
   --do_train
   --do_evaluate
   --load_best_model_at_end
+  --ddp_find_unused_parameters="False"
 
    # Data loader params
   --dataloader_num_workers="6"
-  --dataloader_persistent_workers="True"
   --dataloader_pin_memory="True"
 
   # Optimizer related arguments
   --optim="adamw_torch"
   --learning_rate="2e-3"
-  --warmup_steps="15000"
+  --warmup_steps="100"
   --early_stopping_patience="10"
   --weight_decay="1e-6"
   --max_grad_norm="1.0"
@@ -105,5 +105,5 @@ args=(
   --predict_with_generate
 )
 
-srun --unbuffered --kill-on-bad-exit singularity exec --bind /usr:/usr $SIFPYTORCH \
+srun --unbuffered --kill-on-bad-exit singularity exec --bind /usr/sbin:/usr/sbin $SIFPYTORCH \
 "${SRC_DIR}/cluster_utilities/LUMI/start_multinode_job_inside_env.sh"  src/trainers/train_ctc_asr.py "${args[@]}"

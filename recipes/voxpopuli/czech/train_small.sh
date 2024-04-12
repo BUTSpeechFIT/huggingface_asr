@@ -5,7 +5,7 @@
 #SBATCH --cpus-per-task=14
 #SBATCH --output="outputs/voxpopuli_czech/output_%x_%j.txt"
 #SBATCH --partition=small-g
-#SBATCH --mem=80G
+#SBATCH --mem=120G
 #SBATCH --time=3:00:00
 
 EXPERIMENT="ebranchformer_small"
@@ -16,6 +16,7 @@ EXPERIMENT_PATH="${WORK_DIR}/experiments/${EXPERIMENT}"
 
 module load LUMI partition/G PyTorch/2.2.0-rocm-5.6.1-python-3.10-singularity-20240209
 
+export OMP_NUM_THREADS=8
 export MPICH_GPU_SUPPORT_ENABLED=1
 export NCCL_SOCKET_IFNAME=hsn
 export NCCL_NET_GDR_LEVEL=3
@@ -34,7 +35,7 @@ export SINGULARITYENV_LD_LIBRARY_PATH=/usr/local/lib:/opt/cray/libfabric/1.15.2.
 
 export HF_HOME="/flash/${EC_PROJECT}/ipoloka/huggingface_cache"
 export PYTHONPATH="${PYTHONPATH}:${SRC_DIR}/src"
-export WANDB_PROJECT="voxpopuli_czech"
+export WANDB_PROJECT="voxpopuli_czech2"
 export WANDB_RUN_ID="${EXPERIMENT}"
 export WANDB_ENTITY="butspeechfit"
 
@@ -52,16 +53,16 @@ args=(
   --do_train
   --do_evaluate
   --load_best_model_at_end
+  --ddp_find_unused_parameters="False"
 
    # Data loader params
   --dataloader_num_workers="6"
-  --dataloader_persistent_workers="True"
   --dataloader_pin_memory="True"
 
   # Optimizer related arguments
   --optim="adamw_torch"
   --learning_rate="2e-3"
-  --warmup_steps="15000"
+  --warmup_steps="100"
   --early_stopping_patience="10"
   --weight_decay="1e-6"
   --max_grad_norm="1.0"
@@ -104,5 +105,5 @@ args=(
   --predict_with_generate
 )
 
-srun --unbuffered --kill-on-bad-exit singularity exec --bind /usr:/usr $SIFPYTORCH \
+srun --unbuffered --kill-on-bad-exit singularity exec --bind /usr/sbin:/usr/sbin $SIFPYTORCH \
 "${SRC_DIR}/cluster_utilities/LUMI/start_multinode_job_inside_env.sh"  src/trainers/train_ctc_asr.py "${args[@]}"
