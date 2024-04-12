@@ -16,7 +16,7 @@ $WITH_CONDA
 export MASTER_ADDR=$(/runscripts/get-master "$SLURM_NODELIST")
 export CUDA_VISIBLE_DEVICES=$ROCR_VISIBLE_DEVICES
 export NODENAME=$(cat /proc/sys/kernel/hostname)
-export MASTER_PORT=$(comm -23 <(seq 49152 65535) <(ss -tan | awk '{print $4}' | cut -d':' -f2 | grep "[0-9]\{1,5\}" | sort | uniq) | shuf | head -n 1)
+export MASTER_PORT=$(comm -23 <(seq 49152 65535) <(/usr/sbin/ss -tan | awk '{print $4}' | cut -d':' -f2 | grep "[0-9]\{1,5\}" | sort | uniq) | shuf | head -n 1)
 export WORLD_SIZE=$SLURM_NTASKS
 export RANK=$SLURM_PROCID
 export FS_LOCAL_RANK=$SLURM_PROCID
