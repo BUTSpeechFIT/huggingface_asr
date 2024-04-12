@@ -1,11 +1,11 @@
 #!/usr/bin/bash
 #SBATCH --nodes=1
 #SBATCH --gpus-per-node=2
-#SBATCH --tasks-per-node=2
-#SBATCH --cpus-per-task=7
+#SBATCH --tasks-per-node=1
+#SBATCH --cpus-per-task=14
 #SBATCH --output="outputs/voxpopuli_czech/output_%x_%j.txt"
 #SBATCH --partition=small-g
-#SBATCH --mem=120G
+#SBATCH --mem=80G
 #SBATCH --time=3:00:00
 
 EXPERIMENT="ebranchformer_small"
@@ -105,11 +105,5 @@ args=(
   --predict_with_generate
 )
 
-python  src/trainers/train_ctc_asr.py "${args[@]}"
-
-c=fe
-MYMASKS="0x${c}000000000000,0x${c}00000000000000,0x${c}0000,0x${c}000000,0x${c},0x${c}00,0x${c}00000000,0x${c}0000000000"
-
-
 srun --unbuffered --kill-on-bad-exit  singularity exec $SIFPYTORCH \
-"${SRC_DIR}/cluster_utilities/LUMI/start_multinode_job_inside_env_pure_python.sh" src/trainers/train_ctc_asr.py "${args[@]}"
+"${SRC_DIR}/cluster_utilities/LUMI/start_multinode_job_inside_env.sh" src/trainers/train_ctc_asr.py "${args[@]}"
