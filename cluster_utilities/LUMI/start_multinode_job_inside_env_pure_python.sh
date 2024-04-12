@@ -21,9 +21,28 @@ $WITH_CONDA
 
 set -euo pipefail
 
-export NODENAME=$(hostname -s)
+export NODENAME=$(cat /proc/sys/kernel/hostname)
 export MASTER_ADDR=$(/runscripts/get-master "$SLURM_NODELIST")
-export MASTER_PORT=39591
+
+port_in_use() {
+    lsof -i :$1 > /dev/null
+}
+MASTER_PORT=30000
+STOP_CONDITION=40000
+# Loop until the condition is met
+while [ "$MASTER_PORT" -lt "$STOP_CONDITION" ]; do
+    # Check if the port is in use
+    if port_in_use "$MASTER_PORT"; then
+        echo "Port $MASTER_PORT is already in use. Trying next port."
+        MASTER_PORT=$((MASTER_PORT + 1))
+    else
+        # Port is not in use, export it and exit the loop
+        export MASTER_PORT
+        echo "Using MASTER_PORT: $MASTER_PORT"
+        break
+    fi
+done
+
 export WORLD_SIZE=$SLURM_NTASKS
 export RANK=$SLURM_PROCID
 export FS_LOCAL_RANK=$SLURM_PROCID
