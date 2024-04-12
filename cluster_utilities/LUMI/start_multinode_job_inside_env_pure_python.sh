@@ -24,24 +24,7 @@ set -euo pipefail
 export NODENAME=$(cat /proc/sys/kernel/hostname)
 export MASTER_ADDR=$(/runscripts/get-master "$SLURM_NODELIST")
 
-port_in_use() {
-    lsof -i :$1 > /dev/null
-}
-MASTER_PORT=30000
-STOP_CONDITION=40000
-# Loop until the condition is met
-while [ "$MASTER_PORT" -lt "$STOP_CONDITION" ]; do
-    # Check if the port is in use
-    if port_in_use "$MASTER_PORT"; then
-        echo "Port $MASTER_PORT is already in use. Trying next port."
-        MASTER_PORT=$((MASTER_PORT + 1))
-    else
-        # Port is not in use, export it and exit the loop
-        export MASTER_PORT
-        echo "Using MASTER_PORT: $MASTER_PORT"
-        break
-    fi
-done
+export MASTER_PORT=$(comm -23 <(seq 49152 65535) <(ss -tan | awk '{print $4}' | cut -d':' -f2 | grep "[0-9]\{1,5\}" | sort | uniq) | shuf | head -n 1)
 
 export WORLD_SIZE=$SLURM_NTASKS
 export RANK=$SLURM_PROCID
