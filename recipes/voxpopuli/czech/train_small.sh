@@ -44,8 +44,8 @@ cd $SRC_DIR || exit
 args=(
   # General training arguments
   --output_dir="${EXPERIMENT_PATH}"
-  --per_device_train_batch_size="128"
-  --per_device_eval_batch_size="256"
+  --per_device_train_batch_size="96"
+  --per_device_eval_batch_size="128"
   --num_train_epochs="50"
   --group_by_length="True"
   --bf16
@@ -73,7 +73,6 @@ args=(
   --logging_steps="10"
   --save_strategy="epoch"
   --evaluation_strategy="epoch"
-  --eval_delay="10"
   --wandb_predictions_to_save="500"
   --greater_is_better="False"
   --save_total_limit="5"
@@ -105,5 +104,5 @@ args=(
   --predict_with_generate
 )
 
-srun --unbuffered --kill-on-bad-exit  singularity exec $SIFPYTORCH \
-"${SRC_DIR}/cluster_utilities/LUMI/start_multinode_job_inside_env.sh" src/trainers/train_ctc_asr.py "${args[@]}"
+srun --unbuffered --kill-on-bad-exit  singularity exec $SIFPYTORCH --bind /usr:/usr \
+"${SRC_DIR}/cluster_utilities/LUMI/start_multinode_job_inside_env.sh"  src/trainers/train_ctc_asr.py "${args[@]}"
