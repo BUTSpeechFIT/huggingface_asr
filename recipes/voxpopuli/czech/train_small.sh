@@ -104,5 +104,5 @@ args=(
   --predict_with_generate
 )
 
-srun --unbuffered --kill-on-bad-exit  singularity exec $SIFPYTORCH --bind /usr:/usr \
+srun --unbuffered --kill-on-bad-exit singularity --bind /usr:/usr exec $SIFPYTORCH \
 "${SRC_DIR}/cluster_utilities/LUMI/start_multinode_job_inside_env.sh"  src/trainers/train_ctc_asr.py "${args[@]}"
