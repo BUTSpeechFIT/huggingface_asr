@@ -1,16 +1,14 @@
 #!/usr/bin/bash
 #SBATCH --nodes=1
-#SBATCH --gpus-per-node=4
-#SBATCH --tasks-per-node=4
+#SBATCH --gpus-per-node=2
+#SBATCH --tasks-per-node=2
 #SBATCH --cpus-per-task=7
 #SBATCH --output="outputs/voxpopuli_czech/output_%x_%j.txt"
-#SBATCH --partition=ju-standard-g
-#SBATCH --mem=0G
-#SBATCH --exclusive
-#SBATCH --time=2-00:00:00
+#SBATCH --partition=small-g
+#SBATCH --mem=120G
+#SBATCH --time=3:00:00
 
-EXPERIMENT="ebranchformer_voxpopuli_czech"
-PROJECT="VoxPopuli"
+EXPERIMENT="ebranchformer_small"
 SRC_DIR="/project/${EC_PROJECT}/ipoloka/huggingface_asr"
 WORK_DIR="/scratch/${EC_PROJECT}/ipoloka/huggingface_asr"
 RECIPE_DIR="${SRC_DIR}/recipes/voxpopuli/czech"
@@ -36,34 +34,17 @@ export SINGULARITYENV_LD_LIBRARY_PATH=/usr/local/lib:/opt/cray/libfabric/1.15.2.
 
 export HF_HOME="/flash/${EC_PROJECT}/ipoloka/huggingface_cache"
 export PYTHONPATH="${PYTHONPATH}:${SRC_DIR}/src"
-export WANDB_PROJECT=$PROJECT
+export WANDB_PROJECT="voxpopuli_czech"
 export WANDB_RUN_ID="${EXPERIMENT}"
+export WANDB_ENTITY="butspeechfit"
 
 
 cd $SRC_DIR || exit
 
-
-
-python src/trainers/train_tokenizer.py \
-  --output_dir=$EXPERIMENT_PATH \
-  --preprocessing_num_workers="128" \
-  --datasets_creation_config="${RECIPE_DIR}/voxpopuli_cz.json" \
-  --writer_batch_size="200" \
-  --tokenizer_name="Lakoc/voxpopuli_uni500_cz" \
-  --vocab_size=500 \
-  --tokenizer_type="unigram" \
-  --text_column_name="text" \
-  --train_split="train" \
-  --pad_token="([pad])" \
-  --unk_token="([unk])" \
-  --bos_token="([bos])" \
-  --eos_token="([eos])" \
-  --mask_token="([mask])"
-
 args=(
   # General training arguments
   --output_dir="${EXPERIMENT_PATH}"
-  --per_device_train_batch_size="96"
+  --per_device_train_batch_size="128"
   --per_device_eval_batch_size="256"
   --num_train_epochs="50"
   --group_by_length="True"
@@ -89,7 +70,7 @@ args=(
 
   # Logging, saving and evaluation related arguments
   --report_to="wandb"
-  --logging_steps="10"
+  --logging_steps="1"
   --save_strategy="epoch"
   --evaluation_strategy="epoch"
   --eval_delay="10"
@@ -103,7 +84,7 @@ args=(
   --min_duration_in_seconds="0.2"
   --length_column_name="input_len"
   --remove_unused_columns="False"
-  --preprocessing_num_workers="32"
+  --preprocessing_num_workers="8"
   --datasets_creation_config="${RECIPE_DIR}/voxpopuli_cz.json"
   --writer_batch_size="200"
   --test_splits voxpopuli_test
@@ -113,27 +94,22 @@ args=(
   --data_preprocessing_config="${RECIPE_DIR}/data_preprocessing.json"
 
   # Model related arguments
-  --from_encoder_decoder_config
   --tokenizer_name="Lakoc/voxpopuli_uni500_cz"
   --feature_extractor_name="Lakoc/log_80mel_extractor_16k"
-  --base_encoder_model="Lakoc/fisher_ebranchformer_enc_12_layers_fixed"
-  --base_decoder_model="Lakoc/gpt2_tiny_decoder_6_layers"
-  --ctc_weight="0.3"
-  --decoder_pos_emb_fixed
+  --base_encoder_model="iszoke/ebranchformer_12_256h_2D"
   --expect_2d_input
-
 
   # Generation related arguments
   --num_beams="4"
   --max_length="512"
   --predict_with_generate
-  --decoding_ctc_weight="0.3"
-  --override_for_evaluation="ctc_weight=0.3;num_beams=10"
 )
+
+python  src/trainers/train_ctc_asr.py "${args[@]}"
 
 c=fe
 MYMASKS="0x${c}000000000000,0x${c}00000000000000,0x${c}0000,0x${c}000000,0x${c},0x${c}00,0x${c}00000000,0x${c}0000000000"
 
 
 srun --unbuffered --kill-on-bad-exit  singularity exec $SIFPYTORCH \
-"${SRC_DIR}/cluster_utilities/LUMI/start_multinode_job_inside_env_pure_python.sh" src/trainers/train_enc_dec_asr.py "${args[@]}"
+"${SRC_DIR}/cluster_utilities/LUMI/start_multinode_job_inside_env_pure_python.sh" src/trainers/train_ctc_asr.py "${args[@]}"
