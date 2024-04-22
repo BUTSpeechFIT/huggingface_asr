@@ -58,7 +58,7 @@ args=(
    # Data loader params
   --dataloader_num_workers="6"
   --dataloader_pin_memory="True"
-  --datloader_persistent_workers="True"
+  --dataloader_persistent_workers="True"
 
   # Optimizer related arguments
   --optim="adamw_torch"
