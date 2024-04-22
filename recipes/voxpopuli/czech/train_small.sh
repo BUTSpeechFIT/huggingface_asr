@@ -8,7 +8,7 @@
 #SBATCH --mem=120G
 #SBATCH --time=3:00:00
 
-EXPERIMENT="ebranchformer_small"
+EXPERIMENT="ebranchformer_small_lre-5v4"
 SRC_DIR="/project/${EC_PROJECT}/ipoloka/huggingface_asr"
 WORK_DIR="/scratch/${EC_PROJECT}/ipoloka/huggingface_asr"
 RECIPE_DIR="${SRC_DIR}/recipes/voxpopuli/czech"
@@ -47,7 +47,7 @@ args=(
   --output_dir="${EXPERIMENT_PATH}"
   --per_device_train_batch_size="96"
   --per_device_eval_batch_size="128"
-  --num_train_epochs="50"
+  --num_train_epochs="200"
   --group_by_length="True"
   --bf16
   --do_train
@@ -61,8 +61,8 @@ args=(
 
   # Optimizer related arguments
   --optim="adamw_torch"
-  --learning_rate="2e-3"
-  --warmup_steps="100"
+  --learning_rate="2e-5"
+  --warmup_steps="2000"
   --early_stopping_patience="10"
   --weight_decay="1e-6"
   --max_grad_norm="1.0"
@@ -94,7 +94,7 @@ args=(
   --data_preprocessing_config="${RECIPE_DIR}/data_preprocessing.json"
 
   # Model related arguments
-  --tokenizer_name="Lakoc/voxpopuli_uni500_cz"
+  --tokenizer_name="Lakoc/voxpopuli_uni50_cz"
   --feature_extractor_name="Lakoc/log_80mel_extractor_16k"
   --base_encoder_model="iszoke/ebranchformer_12_256h_2D"
   --expect_2d_input

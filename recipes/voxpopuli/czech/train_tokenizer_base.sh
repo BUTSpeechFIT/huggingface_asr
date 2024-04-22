@@ -39,13 +39,13 @@ export PYTHONPATH="${PYTHONPATH}:${SRC_DIR}/src"
 cd $SRC_DIR || exit
 
 srun --unbuffered --kill-on-bad-exit  singularity exec $SIFPYTORCH \
-/runscripts/conda-python-simple python src/trainers/train_tokenizer.py \
+/runscripts/conda-python-simple src/trainers/train_tokenizer.py \
   --output_dir=$EXPERIMENT_PATH \
   --preprocessing_num_workers="8" \
   --datasets_creation_config="${RECIPE_DIR}/voxpopuli_cz.json" \
   --writer_batch_size="200" \
-  --tokenizer_name="Lakoc/voxpopuli_uni500_cz" \
-  --vocab_size=500 \
+  --tokenizer_name="Lakoc/voxpopuli_uni50_cz" \
+  --vocab_size=50 \
   --tokenizer_type="unigram" \
   --text_column_name="text" \
   --train_split="train" \
