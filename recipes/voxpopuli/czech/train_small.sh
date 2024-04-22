@@ -54,6 +54,7 @@ args=(
   --do_evaluate
   --load_best_model_at_end
   --ddp_find_unused_parameters="False"
+  --eval_delay="10"
 
    # Data loader params
   --dataloader_num_workers="6"
@@ -63,7 +64,7 @@ args=(
   # Optimizer related arguments
   --optim="adamw_torch"
   --learning_rate="2e-5"
-  --warmup_steps="2000"
+  --warmup_steps="1000"
   --early_stopping_patience="10"
   --weight_decay="1e-6"
   --max_grad_norm="1.0"
@@ -105,10 +106,10 @@ args=(
   --config_overrides="decoder_ignore_mismatched_sizes=True"
 
   # Generation related arguments
-  --num_beams="4"
+  --num_beams="1"
   --max_length="512"
   --predict_with_generate
-  --decoding_ctc_weight="0.3"
+  --decoding_ctc_weight="0"
   --override_for_evaluation="ctc_weight=0.3;num_beams=10"
 
 )
