@@ -102,6 +102,7 @@ args=(
   --ctc_weight="0.3"
   --decoder_pos_emb_fixed
   --expect_2d_input
+  --config_overrides="decoder_ignore_mismatched_sizes=True"
 
   # Generation related arguments
   --num_beams="4"

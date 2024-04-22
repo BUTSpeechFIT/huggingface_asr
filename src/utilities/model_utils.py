@@ -195,6 +195,8 @@ def instantiate_aed_model(
     else:
         if model_args.config_overrides:
             parsed_dict = dict(x.split("=") for x in model_args.config_overrides.split(";"))
+        else:
+            parsed_dict = {}
         model = JointCTCAttentionEncoderDecoder.from_encoder_decoder_pretrained(
             encoder_pretrained_model_name_or_path=model_args.base_encoder_model,
             decoder_pretrained_model_name_or_path=model_args.base_decoder_model,
