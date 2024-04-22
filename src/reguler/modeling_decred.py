@@ -8,7 +8,6 @@ from transformers import (
     AutoConfig,
     AutoModelForCausalLM,
     AutoModelForSpeechSeq2Seq,
-    GenerationConfig,
     LogitsProcessor,
     PretrainedConfig,
     PreTrainedModel,
@@ -28,6 +27,7 @@ from .auto_wrappers import CustomAutoModelForCTC
 from .configuration_decred import JointCTCAttentionEncoderDecoderConfig
 from .ctc_scorer import CTCRescorerLogitsProcessor, LogSoftmaxProcessor
 from .embeddings import AdaptiveEmbedding, PositionalEmbedding
+from .generation import GenerationConfigCustom
 from .multi_head_gpt2 import GPT2LMMultiHeadModel
 
 logger = logging.get_logger("transformers")
@@ -433,7 +433,7 @@ class JointCTCAttentionEncoderDecoder(SpeechEncoderDecoderModel):
 
     def _get_logits_processor(
         self,
-        generation_config: GenerationConfig,
+        generation_config: GenerationConfigCustom,
         input_ids_seq_length: int,
         encoder_input_ids: torch.LongTensor,
         prefix_allowed_tokens_fn: Callable[[int, torch.Tensor], List[int]],
@@ -464,9 +464,13 @@ class JointCTCAttentionEncoderDecoder(SpeechEncoderDecoderModel):
                 self.generation_config.ctc_margin,
                 self.generation_config.ctc_weight,
                 self.generation_config.num_beams,
-                self.generation_config.space_token_id,
-                self.generation_config.apply_eos_space_trick,
-                self.generation_config.eos_space_trick_weight,
+                self.generation_config.space_token_id if hasattr(self.generation_config, "space_token_id") else None,
+                self.generation_config.apply_eos_space_trick
+                if hasattr(self.generation_config, "apply_eos_space_trick")
+                else False,
+                self.generation_config.eos_space_trick_weight
+                if hasattr(self.generation_config, "eos_space_trick_weight")
+                else 0.0,
             )
             processors.append(self.ctc_rescorer)
         if hasattr(generation_config, "lm_weight") and generation_config.lm_weight > 0:
@@ -524,7 +528,7 @@ class JointCTCAttentionEncoderDecoder(SpeechEncoderDecoderModel):
     def generate(
         self,
         inputs: Optional[torch.Tensor] = None,
-        generation_config: Optional[GenerationConfig] = None,
+        generation_config: Optional[GenerationConfigCustom] = None,
         logits_processor: Optional[LogitsProcessorList] = None,
         stopping_criteria: Optional[StoppingCriteriaList] = None,
         prefix_allowed_tokens_fn: Optional[Callable[[int, torch.Tensor], List[int]]] = None,
