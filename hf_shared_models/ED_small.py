@@ -21,7 +21,7 @@ if __name__ == "__main__":
     generation_config.num_beams = 5
     generation_config.ctc_margin = 0
 
-    generation_config.push_to_hub("BUT-FIT/DeCRED-small", private=True)
-    feature_extractor.push_to_hub("BUT-FIT/DeCRED-small", private=True)
-    tokenizer.push_to_hub("BUT-FIT/DeCRED-small", private=True)
-    model.push_to_hub("BUT-FIT/DeCRED-small", private=True)
+    generation_config.push_to_hub("BUT-FIT/ED-small", private=True)
+    feature_extractor.push_to_hub("BUT-FIT/ED-small", private=True)
+    tokenizer.push_to_hub("BUT-FIT/ED-small", private=True)
+    model.push_to_hub("BUT-FIT/ED-small", private=True)
