@@ -8,7 +8,7 @@
 #SBATCH --mem=120G
 #SBATCH --time=3:00:00
 
-EXPERIMENT="ebranchformer_small_enc_dec"
+EXPERIMENT="ebranchformer_small_enc_dec_v2"
 SRC_DIR="/project/${EC_PROJECT}/ipoloka/huggingface_asr"
 WORK_DIR="/scratch/${EC_PROJECT}/ipoloka/huggingface_asr"
 RECIPE_DIR="${SRC_DIR}/recipes/voxpopuli/czech"
