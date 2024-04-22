@@ -29,7 +29,15 @@ class FeatureExtractionInitModifier(type):
 
         # Modify the __init__ method dynamically
         def new_init(self, *args, **kwargs):
+
+            expect_2d_input = kwargs.pop("expect_2d_input", None)
+            second_dim_input_size = kwargs.pop("second_dim_input_size", None)
+
             original_init(self, *args, **kwargs)
+            if expect_2d_input:
+                self.config.expect_2d_input = True
+            if second_dim_input_size:
+                self.config.second_dim_input_size = second_dim_input_size
             if hasattr(self.config, "num_mel_bins"):
                 if not hasattr(self.config, "expect_2d_input"):
                     self.config.expect_2d_input = True

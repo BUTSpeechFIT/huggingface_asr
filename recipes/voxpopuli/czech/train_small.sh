@@ -8,7 +8,7 @@
 #SBATCH --mem=120G
 #SBATCH --time=3:00:00
 
-EXPERIMENT="ebranchformer_small_lre-5v4"
+EXPERIMENT="ebranchformer_small_enc_dec"
 SRC_DIR="/project/${EC_PROJECT}/ipoloka/huggingface_asr"
 WORK_DIR="/scratch/${EC_PROJECT}/ipoloka/huggingface_asr"
 RECIPE_DIR="${SRC_DIR}/recipes/voxpopuli/czech"
@@ -58,6 +58,7 @@ args=(
    # Data loader params
   --dataloader_num_workers="6"
   --dataloader_pin_memory="True"
+  --datloader_persistent_workers="True"
 
   # Optimizer related arguments
   --optim="adamw_torch"
@@ -94,16 +95,22 @@ args=(
   --data_preprocessing_config="${RECIPE_DIR}/data_preprocessing.json"
 
   # Model related arguments
-  --tokenizer_name="Lakoc/voxpopuli_uni50_cz"
+  --tokenizer_name="Lakoc/voxpopuli_uni500_cz"
   --feature_extractor_name="Lakoc/log_80mel_extractor_16k"
-  --base_encoder_model="iszoke/ebranchformer_12_256h_2D"
+  --base_encoder_model="Lakoc/dummy_encoder_12l_256h"
+  --base_decoder_model="Lakoc/asr_decoder_6l_256h"
+  --ctc_weight="0.3"
+  --decoder_pos_emb_fixed
   --expect_2d_input
 
   # Generation related arguments
   --num_beams="4"
   --max_length="512"
   --predict_with_generate
+  --decoding_ctc_weight="0.3"
+  --override_for_evaluation="ctc_weight=0.3;num_beams=10"
+
 )
 
 srun --unbuffered --kill-on-bad-exit singularity exec --bind /usr/sbin:/usr/sbin $SIFPYTORCH \
-"${SRC_DIR}/cluster_utilities/LUMI/start_multinode_job_inside_env.sh"  src/trainers/train_ctc_asr.py "${args[@]}"
+"${SRC_DIR}/cluster_utilities/LUMI/start_multinode_job_inside_env.sh"  src/trainers/train_enc_dec_asr.py "${args[@]}"
