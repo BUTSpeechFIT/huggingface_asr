@@ -32,11 +32,6 @@ if __name__ == "__main__":
     logger.info(f"Dataset processed successfully.{dataset}")
 
     if training_args.preprocess_dataset_only:
-        dataset.save_to_disk(
-            "/scratch/project/open-28-57/szoke/huggingface_asr/preprocesed",
-            num_proc=data_args.preprocessing_num_workers,
-            max_shard_size="10GB",
-        )
         logger.info("Finished preprocessing dataset.")
         sys.exit(0)
 
