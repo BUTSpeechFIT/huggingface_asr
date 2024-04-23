@@ -2,7 +2,7 @@
 
 # Source bash profile
 # shellcheck disable=SC1090
-source ~/.bash_profile
+#source ~/.bash_profile
 
 # Make sure GPUs are up
 if [ "$SLURM_LOCALID" -eq 0 ] ; then
