@@ -124,6 +124,10 @@ def instantiate_ctc_model(
     model_args: ModelArguments, tokenizer: PreTrainedTokenizer, feature_extractor: SequenceFeatureExtractor
 ) -> PreTrainedModel:
     base_model_config = {
+        "pad_token_id": tokenizer.pad_token_id,
+        "eos_token_id": tokenizer.eos_token_id,
+        "bos_token_id": tokenizer.bos_token_id,
+        "mask_token_id": tokenizer.mask_token_id,
         "layerdrop": 0.0,
         "ctc_weight": model_args.ctc_weight,
         "ctc_loss_reduction": "mean",
@@ -170,6 +174,9 @@ def instantiate_aed_model(
         "encoder_expect_2d_input": model_args.expect_2d_input,
         "decoder_start_token_id": tokenizer.bos_token_id,
         "decoder_pos_emb_fixed": model_args.decoder_pos_emb_fixed,
+        "eos_token_id": tokenizer.eos_token_id,
+        "bos_token_id": tokenizer.bos_token_id,
+        "mask_token_id": tokenizer.mask_token_id,
     }
     if base_model_config["encoder_expect_2d_input"] and isinstance(feature_extractor, Speech2TextFeatureExtractor):
         base_model_config["encoder_second_dim_input_size"] = feature_extractor.num_mel_bins
