@@ -3,7 +3,7 @@
 #SBATCH --gpus-per-node=2
 #SBATCH --tasks-per-node=1
 #SBATCH --cpus-per-task=14
-#SBATCH --output="outputs/voxpopuli_czech/output_%x_%j.txt"
+#SBATCH --output="outputs/common_voice_cz/output_%x_%j.txt"
 #SBATCH --partition=small-g
 #SBATCH --mem=120G
 #SBATCH --time=3:00:00
@@ -87,9 +87,9 @@ args=(
   --length_column_name="input_len"
   --remove_unused_columns="False"
   --preprocessing_num_workers="8"
-  --datasets_creation_config="${RECIPE_DIR}/voxpopuli_cz.json"
+  --datasets_creation_config="${RECIPE_DIR}/common_voice_cz.json"
   --writer_batch_size="200"
-  --test_splits voxpopuli_test
+  --test_splits common_voice_16_1_cs_test
   --pad_to_multiples_of="100"
 
   # Preprocessing related arguments
