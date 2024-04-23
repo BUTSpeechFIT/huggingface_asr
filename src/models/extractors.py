@@ -18,7 +18,7 @@ class Conv2dFeatureExtractor(nn.Module):
                         kernel_size=(conv_kernel, conv_kernel),
                         stride=(conv_stride, conv_stride),
                     )
-                    if config.is_causal
+                    if hasattr(config, "is_causal") and config.is_causal
                     else nn.Conv2d(
                         conv_in,
                         out_channels=conv_out,

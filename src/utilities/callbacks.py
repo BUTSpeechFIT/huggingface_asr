@@ -1,11 +1,13 @@
 import importlib
 import json
+from ctypes import c_bool
 from dataclasses import field, make_dataclass
 from functools import partial
 from typing import Dict, List, Tuple, Union
 
 import numpy as np
 import torch
+import torch.multiprocessing as mp
 from datasets import DatasetDict
 from transformers import (
     EarlyStoppingCallback,
@@ -51,15 +53,15 @@ class DelayedStartWrapper:
     def __init__(self, callback: FunctionReturnWrapper, delay_steps: int):
         self.callback = callback
         self.start_at = delay_steps
-        self.active = False
+        self.active = mp.Value(c_bool, False)
 
     def new_step(self, step: int):
-        if step >= self.start_at and not self.active:
+        if step >= self.start_at and not self.active.value:
             logger.info(f"Activated preprocessing function: {str(self.callback.func)}")
-            self.active = True
+            self.active.value = True
 
     def __call__(self, *args, **kwargs):
-        if self.active:
+        if self.active.value:
             return self.callback(*args, **kwargs)
         return args[0]
 
@@ -111,6 +113,11 @@ class DataPreprocessingManagerCallback(TrainerCallback):
             ]
         }
 
+    def propagate_state_to_transforms(self, state: TrainerState):
+        for split_transforms in self.transforms.values():
+            for transform in split_transforms:
+                transform[0].new_step(state.global_step)
+
     def on_init_end(self, args: TrainingArguments, state: TrainerState, control: TrainerControl, **kwargs):
         for split in self.dataset.keys():
             transform_key = "default_preprocessing" if split not in self.transforms else split
@@ -119,14 +126,14 @@ class DataPreprocessingManagerCallback(TrainerCallback):
                 columns=[self.audio_column_name],
                 output_all_columns=True,
             )
-        for split_transforms in self.transforms.values():
-            for transform in split_transforms:
-                transform[0].new_step(state.global_step)
+        self.propagate_state_to_transforms(state)
+
+    def on_train_begin(self, args: TrainingArguments, state: TrainerState, control: TrainerControl, **kwargs):
+        """This ensures that the preprocessing functions are aware of the correct step even when restarting."""
+        self.propagate_state_to_transforms(state)
 
     def on_step_begin(self, args: TrainingArguments, state: TrainerState, control: TrainerControl, **kwargs):
-        for split_transforms in self.transforms.values():
-            for transform in split_transforms:
-                transform[0].new_step(state.global_step)
+        self.propagate_state_to_transforms(state)
 
 
 class AdditionalLossPrinterCallback(TrainerCallback):

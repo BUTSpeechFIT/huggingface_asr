@@ -135,6 +135,7 @@ def do_evaluate(
     if gen_args.override_for_evaluation is not None:
         num_beams_orig = model.generation_config.num_beams
         model.generation_config.update_from_string(gen_args.override_for_evaluation)
+        trainer.args.generation_num_beams = model.generation_config.num_beams
         if model.generation_config.num_beams != num_beams_orig:
             trainer.args.per_device_eval_batch_size = math.ceil(
                 trainer.args.per_device_eval_batch_size / (model.generation_config.num_beams / num_beams_orig)

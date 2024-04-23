@@ -8,7 +8,7 @@ from transformers import (
     AutoConfig,
     AutoModelForCausalLM,
     AutoModelForSpeechSeq2Seq,
-    GenerationConfig,
+    LogitsProcessor,
     PretrainedConfig,
     PreTrainedModel,
     SpeechEncoderDecoderConfig,
@@ -24,16 +24,64 @@ from transformers.models.speech_encoder_decoder.modeling_speech_encoder_decoder 
 from transformers.utils import logging
 
 from .auto_wrappers import CustomAutoModelForCTC
-from .configuration_reguler import JointCTCAttentionEncoderDecoderConfig
-from .ctc_scorer import (
-    CTCRescorerLogitsProcessor,
-    GenerationConfigWithCTC,
-    LogSoftmaxProcessor,
-)
+from .configuration_decred import JointCTCAttentionEncoderDecoderConfig
+from .ctc_scorer import CTCRescorerLogitsProcessor, LogSoftmaxProcessor
 from .embeddings import AdaptiveEmbedding, PositionalEmbedding
+from .generation import GenerationConfigCustom
 from .multi_head_gpt2 import GPT2LMMultiHeadModel
 
 logger = logging.get_logger("transformers")
+
+
+class LMRescorerLogitsProcessor(LogitsProcessor):
+    """Logits Processor to rescore the next token scores with a language model."""
+
+    def __init__(self, lm_weight: float, lm_model: PreTrainedModel, device: torch.device):
+        super().__init__()
+        self.lm_model = lm_model.to(device)
+        self.lm_weight = lm_weight
+        # self.past_key_values = None
+
+    @staticmethod
+    def analyze_predictions(scores, lm_scores, next_token_scores, input_ids, k=10, tokenizer="Lakoc/ted_uni500"):
+        from transformers import AutoTokenizer
+
+        tokenizer = AutoTokenizer.from_pretrained(tokenizer)
+        best_att_ids = scores.topk(k=k, dim=1)
+        best_ctc_ids = lm_scores.topk(k=k, dim=1)
+        best_ids = next_token_scores.topk(k=k, dim=1)
+
+        def print_prediction(best_ids, name):
+            new_tensor = torch.zeros((best_ids.indices.shape[0], best_ids.indices.shape[1] * 2), dtype=torch.long)
+            new_tensor[:, 0::2] = best_ids.indices
+            new_tensor[:, 1::2] = 1
+            print(f"{name}:")
+            for index, (next_ids, scores) in enumerate(zip(tokenizer.batch_decode(new_tensor), best_ids.values)):
+                print(f"HYP {index}:\n{next_ids} {scores}")
+
+        print(f"PREFIX:")
+        for index, prefix in enumerate(tokenizer.batch_decode(input_ids)):
+            print(f"HYP {index}:\n{prefix}")
+        print_prediction(best_att_ids, "ACCUSTIC_SCORES")
+        print()
+        print_prediction(best_ctc_ids, "LM_SCORES")
+        print()
+        print_prediction(best_ids, "NEXT_TOKEN_SCORES")
+        print()
+
+    def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor) -> torch.FloatTensor:
+        # TODO: KarelB: Can you implement the past_key_values logic?
+        outputs = self.lm_model(
+            input_ids,
+            # input_ids[:, -1]
+            # past_key_values=self.past_key_values,
+            # use_cache=True
+        )
+        # self.past_key_values = outputs.past_key_values
+        lm_scores = torch.nn.functional.log_softmax(outputs.logits[:, -1, :], dim=-1)
+        next_token_scores = scores + self.lm_weight * lm_scores
+        # self.analyze_predictions(scores, lm_scores, next_token_scores, input_ids)
+        return next_token_scores
 
 
 def wav2vec2_forward_hidden_return_hook(_: PreTrainedModel, __: Any, kwargs):
@@ -385,15 +433,25 @@ class JointCTCAttentionEncoderDecoder(SpeechEncoderDecoderModel):
 
     def _get_logits_processor(
         self,
-        generation_config: GenerationConfigWithCTC,
+        generation_config: GenerationConfigCustom,
         input_ids_seq_length: int,
         encoder_input_ids: torch.LongTensor,
         prefix_allowed_tokens_fn: Callable[[int, torch.Tensor], List[int]],
         logits_processor: Optional[LogitsProcessorList],
+        model_kwargs: Optional[Dict[str, Any]] = None,
+        negative_prompt_ids: Optional[torch.Tensor] = None,
+        negative_prompt_attention_mask: Optional[torch.Tensor] = None,
     ) -> LogitsProcessorList:
-        # pylint: disable=E1101
+        # pylint: disable=no-member
         processors = super()._get_logits_processor(
-            generation_config, input_ids_seq_length, encoder_input_ids, prefix_allowed_tokens_fn, logits_processor
+            generation_config,
+            input_ids_seq_length,
+            encoder_input_ids,
+            prefix_allowed_tokens_fn,
+            logits_processor,
+            model_kwargs,
+            negative_prompt_ids,
+            negative_prompt_attention_mask,
         )
         if hasattr(generation_config, "ctc_weight") and generation_config.ctc_weight > 0:
             if generation_config.num_beams <= 1:
@@ -406,8 +464,21 @@ class JointCTCAttentionEncoderDecoder(SpeechEncoderDecoderModel):
                 self.generation_config.ctc_margin,
                 self.generation_config.ctc_weight,
                 self.generation_config.num_beams,
+                self.generation_config.space_token_id if hasattr(self.generation_config, "space_token_id") else None,
+                self.generation_config.apply_eos_space_trick
+                if hasattr(self.generation_config, "apply_eos_space_trick")
+                else False,
+                self.generation_config.eos_space_trick_weight
+                if hasattr(self.generation_config, "eos_space_trick_weight")
+                else 0.0,
             )
             processors.append(self.ctc_rescorer)
+        if hasattr(generation_config, "lm_weight") and generation_config.lm_weight > 0:
+            if not hasattr(generation_config, "lm_model"):
+                raise ValueError("If `lm_weight` is specified, make sure that `lm_model` is defined.")
+            processors.append(
+                LMRescorerLogitsProcessor(generation_config.lm_weight, generation_config.lm_model, device=self.device)
+            )
         return processors
 
     def _prepare_encoder_decoder_kwargs_for_generation(
@@ -457,7 +528,7 @@ class JointCTCAttentionEncoderDecoder(SpeechEncoderDecoderModel):
     def generate(
         self,
         inputs: Optional[torch.Tensor] = None,
-        generation_config: Optional[GenerationConfig] = None,
+        generation_config: Optional[GenerationConfigCustom] = None,
         logits_processor: Optional[LogitsProcessorList] = None,
         stopping_criteria: Optional[StoppingCriteriaList] = None,
         prefix_allowed_tokens_fn: Optional[Callable[[int, torch.Tensor], List[int]]] = None,

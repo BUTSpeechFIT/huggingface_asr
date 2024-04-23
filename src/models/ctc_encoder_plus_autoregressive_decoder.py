@@ -110,8 +110,8 @@ class JointCTCAttentionEncoderDecoder(SpeechEncoderDecoderModel):
 
         if encoder is None:
             encoder = CustomAutoModelForCTC.from_config(config.encoder)
-            encoder.register_forward_hook(wav2vec2_for_ctc_forward_hook)
-            encoder.register_forward_pre_hook(wav2vec2_forward_hidden_return_hook, with_kwargs=True)
+        encoder.register_forward_hook(wav2vec2_for_ctc_forward_hook)
+        encoder.register_forward_pre_hook(wav2vec2_forward_hidden_return_hook, with_kwargs=True)
         if decoder is None:
             decoder = CustomModelForCausalLM.from_config(config.decoder)
 

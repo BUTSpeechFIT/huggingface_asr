@@ -1,4 +1,4 @@
-torch>=2.0.0
+torch
 transformers
 audiomentations
 kaldiio
@@ -7,3 +7,12 @@ sentencepiece
 datasets
 wandb
 accelerate
+evaluate
+tokenizers
+multiprocess
+tqdm
+numpy
+packaging
+pandas
+librosa
+torchaudio

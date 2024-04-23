@@ -25,28 +25,8 @@ if __name__ == "__main__":
 
     # 1. Collect, preprocess dataset and extract evaluation dataset
     dataset, training_eval_dataset = get_dataset(
-        datasets_creation_config_path=data_args.datasets_creation_config,
-        dataset_name=data_args.dataset_name,
-        dataset_config=data_args.dataset_config,
-        preprocessing_num_workers=data_args.preprocessing_num_workers,
-        writer_batch_size=data_args.writer_batch_size,
-        sampling_rate=data_args.sampling_rate,
-        max_input_len=data_args.max_duration_in_seconds,
-        min_input_len=data_args.min_duration_in_seconds,
+        data_args=data_args,
         len_column=training_args.length_column_name,
-        text_column=data_args.text_column_name,
-        audio_column=data_args.audio_column_name,
-        train_split=data_args.train_split,
-        validation_split=data_args.validation_split,
-        text_transformations=data_args.text_transformations,
-        split_long_segments_to_chunks=data_args.split_long_segments_to_chunks,
-        validation_slice_str=data_args.validation_slice,
-        cut_validation_from_train=data_args.cut_validation_from_train,
-        seed=data_args.validation_slice_seed,
-        reshuffle_at_start=data_args.reshuffle_at_start,
-        dataset_shard_size=data_args.dataset_shard_size,
-        dump_prepared_dataset=data_args.dump_prepared_dataset,
-        load_pure_dataset_only=data_args.load_pure_dataset_only,
     )
 
     logger.info(f"Dataset processed successfully.{dataset}")
