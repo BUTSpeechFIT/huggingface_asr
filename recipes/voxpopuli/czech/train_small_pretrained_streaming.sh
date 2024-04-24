@@ -53,7 +53,7 @@ args=(
   --do_train
   --do_evaluate
   --load_best_model_at_end
-  --ddp_find_unused_parameters="False"
+  --ddp_find_unused_parameters="True"
 
    # Data loader params
   --dataloader_num_workers="6"

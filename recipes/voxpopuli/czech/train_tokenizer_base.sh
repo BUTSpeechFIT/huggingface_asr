@@ -31,7 +31,7 @@ export ROCM_PATH=/opt/rocm
 export SINGULARITYENV_LD_LIBRARY_PATH=/usr/local/lib:/opt/cray/libfabric/1.15.2.0/lib64
 
 
-export HF_HOME="/flash/${EC_PROJECT}/ipoloka/huggingface_cache"
+export HF_HOME="/scratch/${EC_PROJECT}/ipoloka/hf_cache"
 export PYTHONPATH="${PYTHONPATH}:${SRC_DIR}/src"
 
 
