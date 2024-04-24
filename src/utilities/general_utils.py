@@ -17,6 +17,7 @@ from transformers import (
     Wav2Vec2CTCTokenizer,
 )
 from transformers.generation.utils import BeamSearchOutput
+from transformers.tokenization_utils_base import AddedToken
 from transformers.utils import logging
 
 import utilities.data_utils as data_utils
@@ -221,26 +222,93 @@ def do_generate(
         )
 
 
-def prepare_tokenizer_for_ctc(tokenizer):
+class CustomWav2Vec2CTCTokenizer(Wav2Vec2CTCTokenizer):  # nosec
+    def __init__(
+        self,
+        vocab_file,
+        bos_token="<s>",
+        eos_token="</s>",
+        unk_token="<unk>",
+        pad_token="<pad>",
+        word_delimiter_token="|",
+        replace_word_delimiter_char=" ",
+        do_lower_case=False,
+        target_lang=None,
+        **kwargs,
+    ):
+        self._word_delimiter_token = word_delimiter_token
+
+        self.do_lower_case = do_lower_case
+        self.replace_word_delimiter_char = replace_word_delimiter_char
+        self.target_lang = target_lang
+
+        with open(vocab_file, encoding="utf-8") as vocab_handle:
+            self.vocab = json.load(vocab_handle)
+
+        # if target lang is defined vocab must be a nested dict
+        # with each target lang being one vocabulary
+        if target_lang is not None:
+            self.encoder = self.vocab[target_lang]
+        else:
+            self.encoder = self.vocab
+
+        self.decoder = {v: k for k, v in self.encoder.items()}
+
+        super(Wav2Vec2CTCTokenizer, self).__init__(
+            unk_token=unk_token,
+            bos_token=bos_token,
+            eos_token=eos_token,
+            pad_token=pad_token,
+            do_lower_case=do_lower_case,
+            word_delimiter_token=word_delimiter_token,
+            replace_word_delimiter_char=replace_word_delimiter_char,
+            target_lang=target_lang,
+            **kwargs,
+        )
+
+        # make sure that tokens made of several
+        # characters are not split at tokenization
+        for token in self.encoder.keys():
+            if len(token) > 1:
+                self.add_tokens(AddedToken(token, rstrip=False, lstrip=False, normalized=False))
+
+    def decode(self, token_ids: Union[int, torch.Tensor], skip_special_tokens: bool = True) -> str:
+        if isinstance(token_ids, torch.Tensor):
+            token_ids = token_ids.tolist()
+        return super().decode(token_ids, skip_special_tokens)
+
+
+def prepare_tokenizer_for_ctc(tokenizer, default_sep_token=" "):  # nosec
     if isinstance(tokenizer, Wav2Vec2CTCTokenizer):
         return tokenizer
+
     if tokenizer.sep_token is None:
         raise ValueError("This tokenizer does not have a separator token which is required for CTC training.")
     vocab = tokenizer.get_vocab()
+
+    # Replace every token with separator by space in vocabulary
+    if tokenizer.sep_token != default_sep_token:
+        vocab_changes = []
+        for token in vocab:
+            if tokenizer.sep_token in token:
+                vocab_changes.append((token, token.replace(tokenizer.sep_token, " ")))
+        for change in vocab_changes:
+            vocab[change[1]] = vocab.pop(change[0])
 
     # Save vocab to tmp file
     with NamedTemporaryFile(mode="w", delete=False) as tmp_file:
         # Write JSON object to the temporary file
         json.dump(vocab, tmp_file)
 
-    wrapped_tokenizer = Wav2Vec2CTCTokenizer(
+    wrapped_tokenizer = CustomWav2Vec2CTCTokenizer(
         tmp_file.name,
         unk_token=tokenizer.unk_token,
         pad_token=tokenizer.pad_token,
-        word_delimiter_token=tokenizer.sep_token,
+        word_delimiter_token=default_sep_token,
         bos_token=tokenizer.bos_token,
         eos_token=tokenizer.eos_token,
     )
+
     os.remove(tmp_file.name)
 
     return wrapped_tokenizer
