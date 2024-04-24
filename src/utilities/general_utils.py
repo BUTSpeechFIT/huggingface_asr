@@ -272,11 +272,6 @@ class CustomWav2Vec2CTCTokenizer(Wav2Vec2CTCTokenizer):  # nosec
             if len(token) > 1:
                 self.add_tokens(AddedToken(token, rstrip=False, lstrip=False, normalized=False))
 
-    def decode(self, token_ids: Union[int, torch.Tensor], skip_special_tokens: bool = True) -> str:
-        if isinstance(token_ids, torch.Tensor):
-            token_ids = token_ids.tolist()
-        return super().decode(token_ids, skip_special_tokens)
-
 
 def prepare_tokenizer_for_ctc(tokenizer, default_sep_token=" "):  # nosec
     if isinstance(tokenizer, Wav2Vec2CTCTokenizer):
