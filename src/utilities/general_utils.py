@@ -1,5 +1,6 @@
 import json
 import math
+import os
 from tempfile import NamedTemporaryFile
 from typing import Any, Callable, Dict, Optional, Tuple, Union
 
@@ -231,7 +232,6 @@ def prepare_tokenizer_for_ctc(tokenizer):
     with NamedTemporaryFile(mode="w", delete=False) as tmp_file:
         # Write JSON object to the temporary file
         json.dump(vocab, tmp_file)
-        tmp_file.close()  # Close the file after writing
 
     wrapped_tokenizer = Wav2Vec2CTCTokenizer(
         tmp_file.name,
@@ -241,4 +241,6 @@ def prepare_tokenizer_for_ctc(tokenizer):
         bos_token=tokenizer.bos_token,
         eos_token=tokenizer.eos_token,
     )
+    os.remove(tmp_file.name)
+
     return wrapped_tokenizer
