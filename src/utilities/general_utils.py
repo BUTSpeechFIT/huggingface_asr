@@ -1,4 +1,6 @@
+import json
 import math
+from tempfile import NamedTemporaryFile
 from typing import Any, Callable, Dict, Optional, Tuple, Union
 
 import torch
@@ -11,6 +13,7 @@ from transformers import (
     Seq2SeqTrainer,
     SpeechEncoderDecoderModel,
     Trainer,
+    Wav2Vec2CTCTokenizer,
 )
 from transformers.generation.utils import BeamSearchOutput
 from transformers.utils import logging
@@ -215,3 +218,27 @@ def do_generate(
             outputs=outputs_agg,
             batch_size=trainer.args.per_device_eval_batch_size,
         )
+
+
+def prepare_tokenizer_for_ctc(tokenizer):
+    if isinstance(tokenizer, Wav2Vec2CTCTokenizer):
+        return tokenizer
+    if tokenizer.sep_token is None:
+        raise ValueError("This tokenizer does not have a separator token which is required for CTC training.")
+    vocab = tokenizer.get_vocab()
+
+    # Save vocab to tmp file
+    with NamedTemporaryFile(mode="w", delete=False) as tmp_file:
+        # Write JSON object to the temporary file
+        json.dump(vocab, tmp_file)
+        tmp_file.close()  # Close the file after writing
+
+    wrapped_tokenizer = Wav2Vec2CTCTokenizer(
+        tmp_file.name,
+        unk_token=tokenizer.unk_token,
+        pad_token=tokenizer.pad_token,
+        word_delimiter_token=tokenizer.sep_token,
+        bos_token=tokenizer.bos_token,
+        eos_token=tokenizer.eos_token,
+    )
+    return wrapped_tokenizer
