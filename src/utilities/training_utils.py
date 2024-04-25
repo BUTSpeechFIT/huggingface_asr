@@ -320,13 +320,14 @@ class SSLTrainer(Trainer):
         )
         percent_masked = num_losses / sub_attention_mask.sum()
 
-        additional_logs["contrastive_loss"] = outputs.contrastive_loss
-        additional_logs["diversity_loss"] = outputs.diversity_loss
+        if outputs.contrastive_loss:
+            additional_logs["contrastive_loss"] = outputs.contrastive_loss
+            additional_logs["diversity_loss"] = outputs.diversity_loss
+            additional_logs["avg_ppl"] = outputs.codevector_perplexity
+            additional_logs["gumbel_temperature"] = torch.tensor(
+                self.gumbel_callback.current_gumbel_temperature, device=inputs["mask_time_indices"].device
+            )
         additional_logs["%_mask_idx"] = percent_masked
-        additional_logs["avg_ppl"] = outputs.codevector_perplexity
-        additional_logs["gumbel_temperature"] = torch.tensor(
-            self.gumbel_callback.current_gumbel_temperature, device=inputs["mask_time_indices"].device
-        )
         additional_logs["num_losses"] = num_losses
 
         for key in additional_logs.keys():
@@ -428,6 +429,8 @@ class SSLTrainer(Trainer):
 
             # reset tr_loss to zero
             tr_loss -= tr_loss
+
+            logs["loss"] = tr_loss_scalar
             logs = self.normalize_additional_logs(
                 # pylint: disable=no-member
                 logs,

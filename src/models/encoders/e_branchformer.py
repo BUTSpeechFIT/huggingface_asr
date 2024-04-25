@@ -7,6 +7,7 @@ import torch
 import torch.utils.checkpoint
 from torch import nn
 from torch.linalg import vector_norm
+from torch.nn.functional import normalize
 from transformers.activations import ACT2FN
 from transformers.models.wav2vec2.modeling_wav2vec2 import (
     Wav2Vec2Config,
@@ -24,6 +25,7 @@ from transformers.models.wav2vec2_conformer.modeling_wav2vec2_conformer import (
 from transformers.models.wav2vec2_conformer.modeling_wav2vec2_conformer import (
     Wav2Vec2ConformerModel,
     Wav2Vec2ConformerSelfAttention,
+    _compute_mask_indices,
 )
 from transformers.utils import logging
 
@@ -387,7 +389,6 @@ class RandomProjectionQuantizer(nn.Module):
             torch.Tensor with shape `(N)`
 
         """
-        from torch.nn.functional import normalize
 
         targets = self.random_projection(input_values).unsqueeze(-2)
 
@@ -399,13 +400,44 @@ class RandomProjectionQuantizer(nn.Module):
         return labels
 
 
+class BestRQModel(Wav2Vec2EBranchformerModel):
+    def __init__(self, config: BestRQEBranchformerConfig):
+        super().__init__(config)
+
+    def _mask_hidden_states(
+        self,
+        hidden_states: torch.FloatTensor,
+        mask_time_indices: Optional[torch.FloatTensor] = None,
+        attention_mask: Optional[torch.LongTensor] = None,
+        std: float = 0.1,
+    ):
+        """
+        Masks extracted features along time axis and/or along feature axis according to
+        [SpecAugment](https://arxiv.org/abs/1904.08779).
+        """
+
+        # `config.apply_spec_augment` can set masking to False
+        if not getattr(self.config, "apply_spec_augment", True):
+            return hidden_states
+
+        # generate indices & apply SpecAugment along time axis
+        batch_size, sequence_length, hidden_size = hidden_states.size()
+
+        if mask_time_indices is not None:
+            # apply SpecAugment along time axis with given mask_time_indices
+            hidden_states[mask_time_indices] = hidden_states[mask_time_indices].normal_(mean=0, std=std)
+        else:
+            raise NotImplementedError("mask_time_indices is required for now")
+        return hidden_states
+
+
 class BestRQEBranchformerForPreTraining(Wav2Vec2ForPreTraining):
     config_class = BestRQEBranchformerConfig
     base_model_prefix = "wav2vec2"
 
     def __init__(self, config: BestRQEBranchformerConfig):
         super().__init__(config)
-        self.wav2vec2 = Wav2Vec2EBranchformerModel(config)
+        self.wav2vec2 = BestRQModel(config)
         self.post_init()
         self.rpqs = nn.ModuleList(RandomProjectionQuantizer(config) for _ in range(config.best_rq_num_books))
         for rpq in self.rpqs:
@@ -442,20 +474,11 @@ class BestRQEBranchformerForPreTraining(Wav2Vec2ForPreTraining):
         last_hidden_states = outputs[0]
 
         loss = None
-        utilization = torch.zeros(1, device=last_hidden_states.device)
         for classifier, rpq in zip(self.classifiers, self.rpqs):
             probs = classifier(last_hidden_states)
             labels = rpq(extract_features)
             # pylint: disable=invalid-unary-operand-type
             labels.masked_fill_(~mask_time_indices, -100)
-
-            valid_elements = labels[labels != -100]
-
-            # Calculate the number of duplicates
-            duplicates_count = len(valid_elements) - len(torch.unique(valid_elements))
-
-            # Calculate utilization
-            utilization += duplicates_count / len(valid_elements)
 
             loss_local = nn.functional.cross_entropy(probs.transpose(1, 2), labels, reduction="sum")
             if loss is None:
@@ -471,9 +494,9 @@ class BestRQEBranchformerForPreTraining(Wav2Vec2ForPreTraining):
         return Wav2Vec2ForPreTrainingOutput(
             loss=loss,
             projected_states=last_hidden_states,
-            codevector_perplexity=utilization / len(self.rpqs),
+            codevector_perplexity=None,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
-            contrastive_loss=torch.zeros(1, device=loss.device),
-            diversity_loss=torch.zeros(1, device=loss.device),
+            contrastive_loss=None,
+            diversity_loss=None,
         )
