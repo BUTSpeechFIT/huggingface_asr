@@ -1,14 +1,14 @@
 #!/usr/bin/bash
 #SBATCH --nodes=1
-#SBATCH --gpus-per-node=2
+#SBATCH --gpus-per-node=4
 #SBATCH --tasks-per-node=1
-#SBATCH --cpus-per-task=14
+#SBATCH --cpus-per-task=28
 #SBATCH --output="outputs/voxpopuli_czech/output_%x_%j.txt"
 #SBATCH --partition=small-g
 #SBATCH --mem=120G
 #SBATCH --time=6:00:00
 
-EXPERIMENT="ebranchformer_small"
+EXPERIMENT="pretrain_ebranchformer_small"
 SRC_DIR="/project/${EC_PROJECT}/ipoloka/huggingface_asr"
 WORK_DIR="/scratch/${EC_PROJECT}/ipoloka/huggingface_asr"
 RECIPE_DIR="${SRC_DIR}/recipes/voxpopuli/czech"
