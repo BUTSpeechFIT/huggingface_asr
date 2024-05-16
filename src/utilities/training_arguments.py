@@ -85,6 +85,9 @@ class GeneralTrainingArguments(Seq2SeqTrainingArguments):
     use_start_method_spawn: Optional[bool] = field(
         default=False, metadata={"help": "Whether multiprocessing should be started by spawn"}
     )
+    save_before_eval: Optional[bool] = field(
+        default=False, metadata={"help": "Whether to save model before evaluation."}
+    )
 
     def __post_init__(self):
         super().__post_init__()

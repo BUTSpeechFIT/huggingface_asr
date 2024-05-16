@@ -498,6 +498,8 @@ class SSLTrainer(Trainer):
 
         metrics = None
         if self.control.should_evaluate:
+            if hasattr(self.args, "save_before_eval") and self.args.save_before_eval:
+                self._save_checkpoint(model, trial, metrics=metrics)
             metrics = self.evaluate(ignore_keys=ignore_keys_for_eval)
             self._report_to_hp_search(trial, self.state.global_step, metrics)
 
