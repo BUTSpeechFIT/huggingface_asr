@@ -8,7 +8,7 @@
 #SBATCH --mem=120G
 #SBATCH --time=6:00:00
 
-EXPERIMENT="ebranchformer_small"
+EXPERIMENT="ebranchformer_small_pretrained"
 SRC_DIR="/project/${EC_PROJECT}/ipoloka/huggingface_asr"
 WORK_DIR="/scratch/${EC_PROJECT}/ipoloka/huggingface_asr"
 RECIPE_DIR="${SRC_DIR}/recipes/voxpopuli/czech"
@@ -96,7 +96,7 @@ args=(
   # Model related arguments
   --tokenizer_name="Lakoc/voxpopuli_unigram_50_cz"
   --feature_extractor_name="Lakoc/log_80mel_extractor_16k"
-  --base_encoder_model="Lakoc/dummy_encoder_12l_256h"
+  --from_pretrained="/scratch/project_465000836/ipoloka/huggingface_asr/experiments/ebranchformer_small/checkpoint-4692"
   --expect_2d_input
 
   # Generation related arguments

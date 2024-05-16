@@ -41,8 +41,11 @@ from transformers.utils import (
     is_torch_tpu_available,
     is_torch_xla_available,
     logging,
+    is_datasets_available,
 )
 
+if is_datasets_available():
+    import datasets
 from models.ctc_encoder_plus_autoregressive_decoder import (
     JointCTCAttentionEncoderDecoder,
 )
@@ -320,13 +323,14 @@ class SSLTrainer(Trainer):
         )
         percent_masked = num_losses / sub_attention_mask.sum()
 
-        additional_logs["contrastive_loss"] = outputs.contrastive_loss
-        additional_logs["diversity_loss"] = outputs.diversity_loss
+        if outputs.contrastive_loss:
+            additional_logs["contrastive_loss"] = outputs.contrastive_loss
+            additional_logs["diversity_loss"] = outputs.diversity_loss
+            additional_logs["avg_ppl"] = outputs.codevector_perplexity
+            additional_logs["gumbel_temperature"] = torch.tensor(
+                self.gumbel_callback.current_gumbel_temperature, device=inputs["mask_time_indices"].device
+            )
         additional_logs["%_mask_idx"] = percent_masked
-        additional_logs["avg_ppl"] = outputs.codevector_perplexity
-        additional_logs["gumbel_temperature"] = torch.tensor(
-            self.gumbel_callback.current_gumbel_temperature, device=inputs["mask_time_indices"].device
-        )
         additional_logs["num_losses"] = num_losses
 
         for key in additional_logs.keys():
@@ -348,6 +352,54 @@ class SSLTrainer(Trainer):
         if "num_losses" in additional_logs.keys():
             del additional_logs["num_losses"]
         return additional_logs
+
+    def get_eval_dataloader(self, eval_dataset: Optional[Dataset] = None) -> DataLoader:
+        """
+        Returns the evaluation [`~torch.utils.data.DataLoader`].
+
+        Subclass and override this method if you want to inject some custom behavior.
+
+        Args:
+            eval_dataset (`torch.utils.data.Dataset`, *optional*):
+                If provided, will override `self.eval_dataset`. If it is a [`~datasets.Dataset`], columns not accepted
+                by the `model.forward()` method are automatically removed. It must implement `__len__`.
+        """
+        if eval_dataset is None and self.eval_dataset is None:
+            raise ValueError("Trainer: evaluation requires an eval_dataset.")
+
+        # If we have persistent workers, don't do a fork bomb especially as eval datasets
+        # don't change during training
+        if hasattr(self, "_eval_dataloader") and self.args.dataloader_persistent_workers:
+            return self._eval_dataloader
+        eval_dataset = eval_dataset if eval_dataset is not None else self.eval_dataset
+        data_collator = self.data_collator
+
+        if is_datasets_available() and isinstance(eval_dataset, datasets.Dataset):
+            eval_dataset = self._remove_unused_columns(eval_dataset, description="evaluation")
+        else:
+            data_collator = self._get_collator_with_removed_columns(data_collator, description="evaluation")
+
+        dataloader_params = {
+            "batch_size": self.args.eval_batch_size,
+            "collate_fn": data_collator,
+            "num_workers": self.args.dataloader_num_workers,
+            "pin_memory": self.args.dataloader_pin_memory,
+            "persistent_workers": self.args.dataloader_persistent_workers,
+        }
+
+        if not isinstance(eval_dataset, torch.utils.data.IterableDataset):
+            dataloader_params["sampler"] = self._get_eval_sampler(eval_dataset)
+            dataloader_params["drop_last"] = self.args.dataloader_drop_last
+            dataloader_params["prefetch_factor"] = self.args.dataloader_prefetch_factor
+
+        # accelerator.free_memory() will destroy the references, so
+        # we need to store the non-prepared version
+        eval_dataloader = DataLoader(eval_dataset, **dataloader_params)
+        if self.args.dataloader_persistent_workers:
+            self._eval_dataloader = self.accelerator.prepare(eval_dataloader)
+            return self._eval_dataloader
+
+        return self.accelerator.prepare(eval_dataloader)
 
     def training_step(
         self, model: nn.Module, inputs: Dict[str, Union[torch.Tensor, Any]]
@@ -428,6 +480,8 @@ class SSLTrainer(Trainer):
 
             # reset tr_loss to zero
             tr_loss -= tr_loss
+
+            logs["loss"] = tr_loss_scalar
             logs = self.normalize_additional_logs(
                 # pylint: disable=no-member
                 logs,

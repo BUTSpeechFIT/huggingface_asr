@@ -458,24 +458,26 @@ def load_multiple_datasets(
                 del dataset[split]
 
         logger.info(f"Preprocessing dataset {dataset_config['dataset_name']}")
-        if load_pure_dataset_only:
-            return dataset
-        dataset_processed = prepare_dataset(
-            dataset=dataset,
-            dataset_name=dataset_config["dataset_name"],
-            length_column_name=dataset_config.get("length_column_name"),
-            text_column_name=dataset_config.get("text_column_name"),
-            audio_column_name=dataset_config.get("audio_column_name"),
-            preprocessing_num_workers=num_proc,
-            writer_batch_size=writer_batch_size,
-            train_split=new_train_split_name,
-            text_transformations=dataset_config.get("text_transformations"),
-            sampling_rate=sampling_rate,
-            max_input_len=max_input_len,
-            min_input_len=min_input_len,
-            split_long_segments_to_chunks=split_long_segments_to_chunks,
-            reshuffle_at_start=dataset_config.get("reshuffle_at_start", False),
-        )
+        if not load_pure_dataset_only:
+            dataset_processed = prepare_dataset(
+                dataset=dataset,
+                dataset_name=dataset_config["dataset_name"],
+                length_column_name=dataset_config.get("length_column_name"),
+                text_column_name=dataset_config.get("text_column_name"),
+                audio_column_name=dataset_config.get("audio_column_name"),
+                preprocessing_num_workers=num_proc,
+                writer_batch_size=writer_batch_size,
+                train_split=new_train_split_name,
+                text_transformations=dataset_config.get("text_transformations"),
+                sampling_rate=sampling_rate,
+                max_input_len=max_input_len,
+                min_input_len=min_input_len,
+                split_long_segments_to_chunks=split_long_segments_to_chunks,
+                reshuffle_at_start=dataset_config.get("reshuffle_at_start", False),
+            )
+        else:
+            logger.info(str(dataset))
+            dataset_processed = dataset
 
         for column, global_column in [
             ("length_column_name", global_len_column),
@@ -619,13 +621,24 @@ def get_dataset(
     return dataset, train_eval_split
 
 
+def is_number(s):
+    try:
+        complex(s)
+    except ValueError:
+        return False
+
+    return True
+
+
 def extract_num_samples(dataset: Dataset, data_slice: str) -> int:
     if data_slice.isnumeric():
         data_slice = int(data_slice)
-    else:
+    elif "%" in data_slice:
         data_slice = data_slice.replace("%", "")
-        if data_slice.isnumeric():
+        if is_number(data_slice):
             data_slice = int(float(data_slice) * len(dataset) / 100)
         else:
             raise ValueError(f"Invalid slice value: {data_slice}, must be number or percentage")
+    else:
+        raise ValueError(f"Invalid slice value: {data_slice}, must be number or percentage")
     return data_slice

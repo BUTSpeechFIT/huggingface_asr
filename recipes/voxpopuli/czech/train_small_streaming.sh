@@ -6,9 +6,9 @@
 #SBATCH --output="outputs/voxpopuli_czech/output_%x_%j.txt"
 #SBATCH --partition=small-g
 #SBATCH --mem=120G
-#SBATCH --time=3:00:00
+#SBATCH --time=6:00:00
 
-EXPERIMENT="ebranchformer_small_streaming_v4"
+EXPERIMENT="ebranchformer_small_streaming"
 SRC_DIR="/project/${EC_PROJECT}/ipoloka/huggingface_asr"
 WORK_DIR="/scratch/${EC_PROJECT}/ipoloka/huggingface_asr"
 RECIPE_DIR="${SRC_DIR}/recipes/voxpopuli/czech"
@@ -27,14 +27,15 @@ export FI_CXI_DISABLE_CQ_HUGETLB=1
 
 # We need to set this to avoid "Cassini Event Queue overflow detected." errors.
 export FI_CXI_DEFAULT_CQ_SIZE=131072
+export OMP_NUM_THREADS=8
 
 export ROCM_PATH=/opt/rocm
 export SINGULARITYENV_LD_LIBRARY_PATH=/usr/local/lib:/opt/cray/libfabric/1.15.2.0/lib64
 
 
-export HF_HOME="/flash/${EC_PROJECT}/ipoloka/huggingface_cache"
+export HF_HOME="/scratch/${EC_PROJECT}/ipoloka/hf_cache"
 export PYTHONPATH="${PYTHONPATH}:${SRC_DIR}/src"
-export WANDB_PROJECT="voxpopuli_czech2"
+export WANDB_PROJECT="voxpopuli_czech3"
 export WANDB_RUN_ID="${EXPERIMENT}"
 export WANDB_ENTITY="butspeechfit"
 
@@ -45,14 +46,14 @@ args=(
   # General training arguments
   --output_dir="${EXPERIMENT_PATH}"
   --per_device_train_batch_size="96"
-  --per_device_eval_batch_size="128"
+  --per_device_eval_batch_size="96"
   --num_train_epochs="200"
   --group_by_length="True"
   --bf16
   --do_train
   --do_evaluate
   --load_best_model_at_end
-  --ddp_find_unused_parameters="False"
+  --ddp_find_unused_parameters="True"
 
    # Data loader params
   --dataloader_num_workers="6"
@@ -60,8 +61,8 @@ args=(
 
   # Optimizer related arguments
   --optim="adamw_torch"
-  --learning_rate="2e-5"
-  --warmup_steps="2000"
+  --learning_rate="2e-3"
+  --warmup_steps="500"
   --early_stopping_patience="10"
   --weight_decay="1e-6"
   --max_grad_norm="1.0"
@@ -93,16 +94,16 @@ args=(
   --data_preprocessing_config="${RECIPE_DIR}/data_preprocessing.json"
 
   # Model related arguments
-  --tokenizer_name="Lakoc/voxpopuli_uni50_cz"
+  --tokenizer_name="Lakoc/voxpopuli_unigram_50_cz"
   --feature_extractor_name="Lakoc/log_80mel_extractor_16k"
   --base_encoder_model="/pfs/lustrep1/projappl/project_465000836/szoke/huggingface_asr/experiments/ebf_cz_small_streaming_wav2vec-obj_v1_lr1e-5_bf16_bs32_mgn05_6gpu/checkpoint-140000"
   --expect_2d_input
 
   # Generation related arguments
-  --num_beams="4"
+  --num_beams="1"
   --max_length="512"
-  --predict_with_generate
 )
+
 
 srun --unbuffered --kill-on-bad-exit singularity exec --bind /usr/sbin:/usr/sbin $SIFPYTORCH \
 "${SRC_DIR}/cluster_utilities/LUMI/start_multinode_job_inside_env.sh"  src/trainers/train_ctc_asr.py "${args[@]}"

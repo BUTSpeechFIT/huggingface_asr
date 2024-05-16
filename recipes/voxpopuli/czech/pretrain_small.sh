@@ -1,14 +1,14 @@
 #!/usr/bin/bash
 #SBATCH --nodes=1
-#SBATCH --gpus-per-node=2
+#SBATCH --gpus-per-node=4
 #SBATCH --tasks-per-node=1
-#SBATCH --cpus-per-task=14
+#SBATCH --cpus-per-task=28
 #SBATCH --output="outputs/voxpopuli_czech/output_%x_%j.txt"
 #SBATCH --partition=small-g
 #SBATCH --mem=120G
 #SBATCH --time=6:00:00
 
-EXPERIMENT="ebranchformer_small"
+EXPERIMENT="pretrain_ebranchformer_small"
 SRC_DIR="/project/${EC_PROJECT}/ipoloka/huggingface_asr"
 WORK_DIR="/scratch/${EC_PROJECT}/ipoloka/huggingface_asr"
 RECIPE_DIR="${SRC_DIR}/recipes/voxpopuli/czech"
@@ -35,7 +35,7 @@ export SINGULARITYENV_LD_LIBRARY_PATH=/usr/local/lib:/opt/cray/libfabric/1.15.2.
 
 export HF_HOME="/scratch/${EC_PROJECT}/ipoloka/hf_cache"
 export PYTHONPATH="${PYTHONPATH}:${SRC_DIR}/src"
-export WANDB_PROJECT="voxpopuli_czech3"
+export WANDB_PROJECT="voxpopuli_czech_ssl"
 export WANDB_RUN_ID="${EXPERIMENT}"
 export WANDB_ENTITY="butspeechfit"
 
@@ -45,8 +45,8 @@ cd $SRC_DIR || exit
 args=(
   # General training arguments
   --output_dir="${EXPERIMENT_PATH}"
-  --per_device_train_batch_size="96"
-  --per_device_eval_batch_size="96"
+  --per_device_train_batch_size="32"
+  --per_device_eval_batch_size="32"
   --num_train_epochs="200"
   --group_by_length="True"
   --bf16
@@ -77,7 +77,7 @@ args=(
   --wandb_predictions_to_save="500"
   --greater_is_better="False"
   --save_total_limit="5"
-  --metric_for_best_model="eval_wer"
+  --metric_for_best_model="eval_loss"
 
   # Data related arguments
   --max_duration_in_seconds="20.0"
@@ -94,15 +94,11 @@ args=(
   --data_preprocessing_config="${RECIPE_DIR}/data_preprocessing.json"
 
   # Model related arguments
-  --tokenizer_name="Lakoc/voxpopuli_unigram_50_cz"
   --feature_extractor_name="Lakoc/log_80mel_extractor_16k"
   --base_encoder_model="Lakoc/dummy_encoder_12l_256h"
   --expect_2d_input
 
-  # Generation related arguments
-  --num_beams="1"
-  --max_length="512"
 )
 
 srun --unbuffered --kill-on-bad-exit singularity exec --bind /usr/sbin:/usr/sbin $SIFPYTORCH \
-"${SRC_DIR}/cluster_utilities/LUMI/start_multinode_job_inside_env.sh"  src/trainers/train_ctc_asr.py "${args[@]}"
+"${SRC_DIR}/cluster_utilities/LUMI/start_multinode_job_inside_env.sh"  src/trainers/pretrain_wav2vec2.py "${args[@]}"

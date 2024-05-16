@@ -1,14 +1,20 @@
 """Main training script for training of CTC ASR models."""
 import sys
 
-from transformers import AutoFeatureExtractor, AutoTokenizer, HfArgumentParser, Trainer
+from transformers import (
+    AutoFeatureExtractor,
+    AutoTokenizer,
+    HfArgumentParser,
+    Trainer,
+    Wav2Vec2CTCTokenizer,
+)
 from transformers.utils import logging
 
 from utilities.callbacks import init_callbacks
 from utilities.collators import SpeechCollatorWithPadding
 from utilities.data_utils import get_dataset
 from utilities.eval_utils import compute_metrics_ctc, get_most_likely_tokens
-from utilities.general_utils import do_evaluate
+from utilities.general_utils import do_evaluate, prepare_tokenizer_for_ctc
 from utilities.model_utils import instantiate_ctc_model
 from utilities.training_arguments import (
     DataTrainingArguments,
@@ -38,7 +44,7 @@ if __name__ == "__main__":
 
     # 2. Create feature extractor and tokenizer
     feature_extractor = AutoFeatureExtractor.from_pretrained(training_args.feature_extractor_name)
-    tokenizer = AutoTokenizer.from_pretrained(training_args.tokenizer_name)
+    tokenizer = prepare_tokenizer_for_ctc(AutoTokenizer.from_pretrained(training_args.tokenizer_name))
 
     # 3. Instantiate model
     model = instantiate_ctc_model(model_args, tokenizer, feature_extractor)
