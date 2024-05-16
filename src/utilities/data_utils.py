@@ -621,13 +621,24 @@ def get_dataset(
     return dataset, train_eval_split
 
 
+def is_number(s):
+    try:
+        complex(s)
+    except ValueError:
+        return False
+
+    return True
+
+
 def extract_num_samples(dataset: Dataset, data_slice: str) -> int:
     if data_slice.isnumeric():
         data_slice = int(data_slice)
-    else:
+    elif "%" in data_slice:
         data_slice = data_slice.replace("%", "")
-        if data_slice.isnumeric():
+        if is_number(data_slice):
             data_slice = int(float(data_slice) * len(dataset) / 100)
         else:
             raise ValueError(f"Invalid slice value: {data_slice}, must be number or percentage")
+    else:
+        raise ValueError(f"Invalid slice value: {data_slice}, must be number or percentage")
     return data_slice
