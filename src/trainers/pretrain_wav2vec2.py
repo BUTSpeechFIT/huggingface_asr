@@ -29,7 +29,15 @@ if __name__ == "__main__":
         len_column=training_args.length_column_name,
     )
 
-    logger.info(f"Dataset processed successfully.{dataset}")
+    logger.info('Dataset "%s" processed successfully.', dataset)
+
+    if training_args.dump_prepared_dataset is not None:
+        logger.info("Dumping prepared datasets to %s", training_args.dump_prepared_dataset)
+        dataset.save_to_disk(
+            training_args.dump_prepared_dataset,
+            num_proc=data_args.preprocessing_num_workers,
+            max_shard_size="20GB",
+        )
 
     if training_args.preprocess_dataset_only:
         logger.info("Finished preprocessing dataset.")

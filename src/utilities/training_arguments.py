@@ -82,6 +82,9 @@ class GeneralTrainingArguments(Seq2SeqTrainingArguments):
     mask_unks: Optional[bool] = field(
         default=False, metadata={"help": "Whether to mask unknown tokens for cross entropy."}
     )
+    dump_prepared_dataset: Optional[str] = field(
+        default=None, metadata={"help": "Path where to dump prepared datasets so they do not be created again."}
+    )
     use_start_method_spawn: Optional[bool] = field(
         default=False, metadata={"help": "Whether multiprocessing should be started by spawn"}
     )
