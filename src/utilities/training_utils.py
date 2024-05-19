@@ -7,7 +7,6 @@ from torch.utils.data import DataLoader, Dataset
 from transformers import BatchFeature, Seq2SeqTrainer, Trainer
 from transformers.data.data_collator import DataCollator
 from transformers.deepspeed import deepspeed_init
-from transformers.dependency_versions_check import dep_version_check
 from transformers.modeling_utils import PreTrainedModel
 
 # Integrations must be imported before ML frameworks:
@@ -72,7 +71,6 @@ if is_torch_tpu_available(check_device=False):
     # pylint: disable=import-error
     import torch_xla.core.xla_model as xm
 
-
 if is_sagemaker_mp_enabled():
     # pylint: disable=import-error
     from smdistributed.modelparallel import __version__ as SMP_VERSION
@@ -92,7 +90,6 @@ if is_in_notebook():
 if is_torch_tpu_available(check_device=False):
     # pylint: disable=import-error
     import torch_xla.core.xla_model as xm
-
 
 if is_sagemaker_mp_enabled():
     # pylint: disable=import-error
@@ -140,10 +137,6 @@ class MetadataTensor(torch.Tensor):
         obj = super(MetadataTensor, cls).__new__(cls, input_tensor)
         obj.metadata = metadata if metadata else {}
         return obj
-
-    def __getattr__(self, attr):
-        # Delegate attribute access to the underlying tensor
-        return getattr(self.data, attr)
 
     def __add__(self, other):
         result = super(MetadataTensor, self).__add__(other)
