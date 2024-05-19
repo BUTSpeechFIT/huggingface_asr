@@ -17,7 +17,6 @@ from transformers import (
     Wav2Vec2CTCTokenizer,
 )
 from transformers.generation.utils import BeamSearchOutput
-from transformers.tokenization_utils_base import AddedToken
 from transformers.utils import logging
 
 import utilities.data_utils as data_utils
@@ -137,7 +136,7 @@ def do_evaluate(
 ):
     if data_args.test_splits is None:
         return
-    if gen_args.override_for_evaluation is not None:
+    if hasattr(gen_args, "override_for_evaluation") and gen_args.override_for_evaluation is not None:
         num_beams_orig = model.generation_config.num_beams
         model.generation_config.update_from_string(gen_args.override_for_evaluation)
         trainer.args.generation_num_beams = model.generation_config.num_beams
@@ -266,19 +265,14 @@ class CustomWav2Vec2CTCTokenizer(Wav2Vec2CTCTokenizer):  # nosec
             **kwargs,
         )
 
-        # make sure that tokens made of several
-        # characters are not split at tokenization
-        for token in self.encoder.keys():
-            if len(token) > 1:
-                self.add_tokens(AddedToken(token, rstrip=False, lstrip=False, normalized=False))
-
 
 def prepare_tokenizer_for_ctc(tokenizer, default_sep_token=" "):  # nosec
     if isinstance(tokenizer, Wav2Vec2CTCTokenizer):
         return tokenizer
 
     if tokenizer.sep_token is None:
-        raise ValueError("This tokenizer does not have a separator token which is required for CTC training.")
+        logger.warning("This tokenizer does not have a separator token which is required for CTC training.")
+        tokenizer.sep_token = default_sep_token
     vocab = tokenizer.get_vocab()
 
     # Replace every token with separator by space in vocabulary

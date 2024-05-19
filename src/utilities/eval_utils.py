@@ -1,6 +1,5 @@
 from typing import Dict, List
 
-import numpy as np
 import torch
 from jiwer import cer, compute_measures
 from transformers import PreTrainedTokenizer
@@ -42,9 +41,14 @@ def compute_metrics_ctc(
 ) -> Dict[str, float]:
     pred.predictions[pred.predictions == -100] = tokenizer.pad_token_id
     pred.label_ids[pred.label_ids == -100] = tokenizer.pad_token_id
-
-    pred_str = tokenizer.batch_decode(pred.predictions, skip_special_tokens=True)
-    label_str = [label if label else "-" for label in tokenizer.batch_decode(pred.label_ids, skip_special_tokens=True)]
+    is_degenerated_vocab = hasattr(tokenizer, "vocab_type") and tokenizer.vocab_type == "degenerated"
+    label_str = [
+        label if label else "-"
+        for label in tokenizer.batch_decode(pred.label_ids, skip_special_tokens=not is_degenerated_vocab)
+    ]
+    pred_str = tokenizer.batch_decode(
+        pred.predictions, skip_special_tokens=not is_degenerated_vocab, group_ctc_tokens=is_degenerated_vocab
+    )
 
     if wandb.run is not None:
         write_wandb_pred(pred_str, label_str, rows_to_log=wandb_pred_to_save)

@@ -357,18 +357,20 @@ class BestRQEBranchformerConfig(Wav2Vec2EBranchformerConfig):
         best_rq_codebook_size=8192,
         best_rq_codebook_dim=16,
         best_rq_num_books=1,
+        best_rq_in_dim=320,
         **kwargs,
     ):
         super().__init__(**kwargs)
         self.best_rq_codebook_size = best_rq_codebook_size
         self.best_rq_codebook_dim = best_rq_codebook_dim
         self.best_rq_num_books = best_rq_num_books
+        self.best_rq_in_dim = best_rq_in_dim
 
 
 class RandomProjectionQuantizer(nn.Module):
     def __init__(self, config: BestRQEBranchformerConfig):
         super().__init__()
-        self.random_projection = nn.Linear(config.conv_dim[-1], config.best_rq_codebook_dim, bias=False)
+        self.random_projection = nn.Linear(config.best_rq_in_dim, config.best_rq_codebook_dim, bias=False)
         nn.init.xavier_uniform_(self.random_projection.weight)
 
         self.code_book = nn.Parameter(torch.randn(config.best_rq_codebook_size, config.best_rq_codebook_dim))
@@ -396,7 +398,6 @@ class RandomProjectionQuantizer(nn.Module):
         vector_distances = vector_norm(normalize(targets, p=2, dim=-1) - self.code_book, dim=-1)
 
         labels = torch.argmin(vector_distances, dim=-1)
-
         return labels
 
 
@@ -476,7 +477,7 @@ class BestRQEBranchformerForPreTraining(Wav2Vec2ForPreTraining):
         loss = None
         for classifier, rpq in zip(self.classifiers, self.rpqs):
             probs = classifier(last_hidden_states)
-            labels = rpq(extract_features)
+            labels = rpq(input_values.view((*extract_features.shape[:2], -1)))
             # pylint: disable=invalid-unary-operand-type
             labels.masked_fill_(~mask_time_indices, -100)
 
