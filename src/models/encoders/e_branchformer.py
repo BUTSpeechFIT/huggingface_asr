@@ -323,16 +323,13 @@ class Wav2Vec2EBranchformerEncoder(Wav2Vec2ConformerEncoder):
 
 
 class CustomFE:
-    def __init__(self, config: Wav2Vec2EBranchformerConfig):
-        self.config = config
-
     def _get_feat_extract_output_lengths(
         self, input_lengths: Union[torch.LongTensor, int], add_adapter: Optional[bool] = None
     ):
         """
         Computes the output length of the convolutional layers
         """
-
+        # pylint: disable=no-member
         add_adapter = self.config.add_adapter if add_adapter is None else add_adapter
 
         def _conv_out_length(input_length, kernel_size, stride):
@@ -341,6 +338,7 @@ class CustomFE:
 
             return torch.div(input_length - kernel_size, stride, rounding_mode="floor") + 1
 
+        # pylint: disable=no-member
         for kernel_size, stride in zip(self.config.conv_kernel, self.config.conv_stride):
             input_lengths = _conv_out_length(
                 # pylint: disable=no-member
@@ -350,7 +348,9 @@ class CustomFE:
             )
 
         if add_adapter:
+            # pylint: disable=no-member
             for _ in range(self.config.num_adapter_layers):
+                # pylint: disable=no-member
                 input_lengths = _conv_out_length(input_lengths, 1, self.config.adapter_stride)
 
         return input_lengths
