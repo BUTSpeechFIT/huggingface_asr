@@ -324,7 +324,6 @@ class Wav2Vec2EBranchformerEncoder(Wav2Vec2ConformerEncoder):
 
 class CustomFE:
     def __init__(self, config: Wav2Vec2EBranchformerConfig):
-        self.base_model = None
         self.config = config
 
     def _get_feat_extract_output_lengths(
@@ -344,6 +343,7 @@ class CustomFE:
 
         for kernel_size, stride in zip(self.config.conv_kernel, self.config.conv_stride):
             input_lengths = _conv_out_length(
+                # pylint: disable=no-member
                 input_lengths + 1 if isinstance(self.base_model.feature_extractor, Conv2dFeatureExtractor) else 0,
                 kernel_size,
                 stride,
