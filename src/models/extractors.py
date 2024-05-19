@@ -24,6 +24,7 @@ class Conv2dFeatureExtractor(nn.Module):
                         out_channels=conv_out,
                         kernel_size=(conv_kernel, conv_kernel),
                         stride=(conv_stride, conv_stride),
+                        padding=1,
                     ),
                     ACT2FN[config.feat_extract_activation],
                 )
@@ -36,7 +37,7 @@ class Conv2dFeatureExtractor(nn.Module):
             calculate_output_size_multilayer(
                 config.second_dim_input_size,
                 [
-                    (conv_kernel, conv_stride, 0, 0)
+                    (conv_kernel, conv_stride, 1, 0)
                     for conv_kernel, conv_stride in zip(config.conv_kernel, config.conv_stride)
                 ],
             )

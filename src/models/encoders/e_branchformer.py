@@ -25,10 +25,10 @@ from transformers.models.wav2vec2_conformer.modeling_wav2vec2_conformer import (
 from transformers.models.wav2vec2_conformer.modeling_wav2vec2_conformer import (
     Wav2Vec2ConformerModel,
     Wav2Vec2ConformerSelfAttention,
-    _compute_mask_indices,
 )
 from transformers.utils import logging
 
+from models.extractors import Conv2dFeatureExtractor
 from models.streaming_modules import CausalConv1d, FeatureExtractorForStreaming
 
 logger = logging.get_logger(__name__)
@@ -62,6 +62,8 @@ class Wav2Vec2EBranchformerConfig(Wav2Vec2ConformerConfig, Wav2Vec2Config):
 
 
 class Wav2Vec2EBranchformerSelfAttention(Wav2Vec2ConformerSelfAttention):
+    """Self-attention layer for EBranchformer."""
+
     def __init__(self, config: Wav2Vec2EBranchformerConfig):
         super().__init__(config)
         self.is_causal = config.is_causal
@@ -77,7 +79,7 @@ class Wav2Vec2EBranchformerSelfAttention(Wav2Vec2ConformerSelfAttention):
         output_attentions: bool = False,
     ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Tuple[torch.Tensor]]]:
         # self-attention mechanism
-        batch_size, sequence_length, hidden_size = hidden_states.size()
+        batch_size, _, __ = hidden_states.size()
 
         # make sure query/key states can be != value states
         query_key_states = hidden_states
@@ -320,7 +322,41 @@ class Wav2Vec2EBranchformerEncoder(Wav2Vec2ConformerEncoder):
         self.pos_conv_embed = None
 
 
-class Wav2Vec2EBranchformerModel(FeatureExtractorForStreaming, Wav2Vec2ConformerModel):
+class CustomFE:
+    def __init__(self, config: Wav2Vec2EBranchformerConfig):
+        self.base_model = None
+        self.config = config
+
+    def _get_feat_extract_output_lengths(
+        self, input_lengths: Union[torch.LongTensor, int], add_adapter: Optional[bool] = None
+    ):
+        """
+        Computes the output length of the convolutional layers
+        """
+
+        add_adapter = self.config.add_adapter if add_adapter is None else add_adapter
+
+        def _conv_out_length(input_length, kernel_size, stride):
+            # 1D convolutional layer output length formula taken
+            # from https://pytorch.org/docs/stable/generated/torch.nn.Conv1d.html
+
+            return torch.div(input_length - kernel_size, stride, rounding_mode="floor") + 1
+
+        for kernel_size, stride in zip(self.config.conv_kernel, self.config.conv_stride):
+            input_lengths = _conv_out_length(
+                input_lengths + 1 if isinstance(self.base_model.feature_extractor, Conv2dFeatureExtractor) else 0,
+                kernel_size,
+                stride,
+            )
+
+        if add_adapter:
+            for _ in range(self.config.num_adapter_layers):
+                input_lengths = _conv_out_length(input_lengths, 1, self.config.adapter_stride)
+
+        return input_lengths
+
+
+class Wav2Vec2EBranchformerModel(CustomFE, FeatureExtractorForStreaming, Wav2Vec2ConformerModel):
     def __init__(self, config: Wav2Vec2EBranchformerConfig):
         super().__init__(config)
         self.encoder = Wav2Vec2EBranchformerEncoder(config)
@@ -329,7 +365,7 @@ class Wav2Vec2EBranchformerModel(FeatureExtractorForStreaming, Wav2Vec2Conformer
         self.post_init()
 
 
-class Wav2Vec2EBranchformerForPreTraining(Wav2Vec2ForPreTraining):
+class Wav2Vec2EBranchformerForPreTraining(CustomFE, Wav2Vec2ForPreTraining):
     config_class = Wav2Vec2EBranchformerConfig
     base_model_prefix = "wav2vec2"
 
@@ -339,7 +375,7 @@ class Wav2Vec2EBranchformerForPreTraining(Wav2Vec2ForPreTraining):
         self.post_init()
 
 
-class Wav2Vec2EBranchformerForCTC(Wav2Vec2ForCTC):
+class Wav2Vec2EBranchformerForCTC(CustomFE, Wav2Vec2ForCTC):
     config_class = Wav2Vec2EBranchformerConfig
     base_model_prefix = "wav2vec2"
 
@@ -421,9 +457,6 @@ class BestRQModel(Wav2Vec2EBranchformerModel):
         if not getattr(self.config, "apply_spec_augment", True):
             return hidden_states
 
-        # generate indices & apply SpecAugment along time axis
-        batch_size, sequence_length, hidden_size = hidden_states.size()
-
         if mask_time_indices is not None:
             # apply SpecAugment along time axis with given mask_time_indices
             hidden_states[mask_time_indices] = hidden_states[mask_time_indices].normal_(mean=0, std=std)
@@ -432,7 +465,7 @@ class BestRQModel(Wav2Vec2EBranchformerModel):
         return hidden_states
 
 
-class BestRQEBranchformerForPreTraining(Wav2Vec2ForPreTraining):
+class BestRQEBranchformerForPreTraining(Wav2Vec2EBranchformerForPreTraining):
     config_class = BestRQEBranchformerConfig
     base_model_prefix = "wav2vec2"
 
