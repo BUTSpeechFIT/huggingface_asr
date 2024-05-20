@@ -88,6 +88,7 @@ class GeneralTrainingArguments(Seq2SeqTrainingArguments):
     save_before_eval: Optional[bool] = field(
         default=False, metadata={"help": "Whether to save model before evaluation."}
     )
+    start_by_eval: Optional[bool] = field(default=False, metadata={"help": "Whether to start by evaluation."})
 
     def __post_init__(self):
         super().__post_init__()
