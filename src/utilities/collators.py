@@ -15,6 +15,8 @@ from transformers.models.wav2vec2.modeling_wav2vec2 import (
     _sample_negative_indices,
 )
 
+from models.encoders.e_branchformer import BestRQEBranchformerForPreTraining
+
 
 @dataclass
 class SpeechCollatorWithPadding:
@@ -148,7 +150,7 @@ class DataCollatorForWav2Vec2Pretraining:
     sampling_rate: Optional[int] = 16_000
     audio_path: str = None
     model_input_name: str = ""
-    min_masks: int = 1
+    min_masks: int = 2
 
     def __post_init__(self):
         if not isinstance(self.feature_extractor, (Wav2Vec2FeatureExtractor, Speech2TextFeatureExtractor)):
@@ -203,15 +205,17 @@ class DataCollatorForWav2Vec2Pretraining:
             min_masks=self.min_masks,
         )
 
-        # sample negative indices
-        sampled_negative_indices = _sample_negative_indices(
-            features_shape,
-            # pylint: disable=no-member
-            self.model.config.num_negatives,
-            mask_time_indices=mask_time_indices,
-        )
         batch["mask_time_indices"] = torch.tensor(mask_time_indices, dtype=torch.long, device=device)
-        batch["sampled_negative_indices"] = torch.tensor(sampled_negative_indices, dtype=torch.long, device=device)
+
+        if not isinstance(self.model, BestRQEBranchformerForPreTraining):
+            # sample negative indices
+            sampled_negative_indices = _sample_negative_indices(
+                features_shape,
+                # pylint: disable=no-member
+                self.model.config.num_negatives,
+                mask_time_indices=mask_time_indices,
+            )
+            batch["sampled_negative_indices"] = torch.tensor(sampled_negative_indices, dtype=torch.long, device=device)
 
         if self.model_input_name != self.feature_extractor.model_input_names[0]:
             batch[self.model_input_name] = batch[self.feature_extractor.model_input_names[0]]

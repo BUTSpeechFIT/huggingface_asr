@@ -307,14 +307,17 @@ class SSLTrainer(Trainer):
 
     def gather_additional_statistics(self, inputs, outputs):
         additional_logs = {}
-        num_losses = inputs["mask_time_indices"].sum()
-        sub_attention_mask = inputs.pop("sub_attention_mask", None)
+        num_losses = inputs["mask_time_indices"].sum(dim=1)
+        sub_attention_mask = inputs.pop("attention_mask", None)
         sub_attention_mask = (
             sub_attention_mask
             if sub_attention_mask is not None
             else torch.ones_like(inputs["mask_time_indices"], device=inputs["mask_time_indices"].device)
         )
-        percent_masked = num_losses / sub_attention_mask.sum()
+
+        input_lens = self.model._get_feat_extract_output_lengths(sub_attention_mask.sum(dim=1))
+
+        percent_masked = (num_losses / input_lens).mean()
 
         if outputs.contrastive_loss:
             additional_logs["contrastive_loss"] = outputs.contrastive_loss
@@ -323,8 +326,12 @@ class SSLTrainer(Trainer):
             additional_logs["gumbel_temperature"] = torch.tensor(
                 self.gumbel_callback.current_gumbel_temperature, device=inputs["mask_time_indices"].device
             )
+        if outputs.codevector_perplexity is not None:
+            additional_logs["%_codebook_used"] = outputs.codevector_perplexity
+        if outputs.diversity_loss is not None:
+            additional_logs["%_unique_labels"] = outputs.diversity_loss
         additional_logs["%_mask_idx"] = percent_masked
-        additional_logs["num_losses"] = num_losses
+        additional_logs["num_losses"] = num_losses.sum()
 
         for key in additional_logs.keys():
             additional_logs[key] = additional_logs[key].detach()
