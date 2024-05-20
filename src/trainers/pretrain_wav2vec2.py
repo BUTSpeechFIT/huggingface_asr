@@ -80,6 +80,9 @@ if __name__ == "__main__":
         data_collator=data_collator,
     )
 
+    if training_args.start_by_eval:
+        logger.info(trainer.evaluate())
+
     # 8. Train model
     if training_args.do_train:
         trainer.train(resume_from_checkpoint=training_args.restart_from or None)
