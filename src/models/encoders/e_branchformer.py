@@ -507,18 +507,29 @@ class BestRQEBranchformerForPreTraining(Wav2Vec2EBranchformerForPreTraining):
         extract_features = outputs[1]
         last_hidden_states = outputs[0]
 
+        coverage = []
+        unique_values = []
         loss = None
         for classifier, rpq in zip(self.classifiers, self.rpqs):
             probs = classifier(last_hidden_states)
             labels = rpq(input_values.view((*extract_features.shape[:2], -1)))
             # pylint: disable=invalid-unary-operand-type
             labels.masked_fill_(~mask_time_indices, -100)
+            label_lens_unique = torch.tensor(
+                [labels[i, :].unique().shape[0] - 1 for i in range(labels.size(0))], device=labels.device
+            )
+
+            unique_values.append(label_lens_unique / mask_time_indices.sum(dim=1))
+            coverage.append(label_lens_unique / self.config.best_rq_codebook_size)
 
             loss_local = nn.functional.cross_entropy(probs.transpose(1, 2), labels, reduction="sum")
             if loss is None:
                 loss = 1 / len(self.rpqs) * loss_local
             else:
                 loss += 1 / len(self.rpqs) * loss_local
+
+        coverage = torch.stack(coverage).mean()
+        unique_values = torch.stack(unique_values).mean()
 
         if not return_dict:
             if loss is not None:
@@ -528,9 +539,9 @@ class BestRQEBranchformerForPreTraining(Wav2Vec2EBranchformerForPreTraining):
         return Wav2Vec2ForPreTrainingOutput(
             loss=loss,
             projected_states=last_hidden_states,
-            codevector_perplexity=None,
+            codevector_perplexity=coverage,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
             contrastive_loss=None,
-            diversity_loss=None,
+            diversity_loss=unique_values,
         )
