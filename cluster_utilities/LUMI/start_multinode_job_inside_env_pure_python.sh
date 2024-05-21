@@ -37,8 +37,8 @@ export MASTER_PORT=29500
 export WORLD_SIZE=$SLURM_NPROCS
 export RANK=$SLURM_PROCID
 export LOCAL_RANK=$SLURM_LOCALID
-export NODE_RANK=$((($RANK - $LOCAL_RANK) / $LOCAL_WORLD_SIZE))
 export LOCAL_WORLD_SIZE=$SLURM_NTASKS_PER_NODE
+export NODE_RANK=$((($RANK - $LOCAL_RANK) / $LOCAL_WORLD_SIZE))
 
 if [ $SLURM_LOCALID -eq 0 ] ; then
   if command -v rocm-smi &> /dev/null ; then
