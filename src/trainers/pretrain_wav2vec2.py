@@ -4,6 +4,7 @@ import sys
 from transformers import AutoFeatureExtractor, HfArgumentParser
 from transformers.utils import logging
 
+from models.encoders.e_branchformer import BestRQEBranchformerForPreTraining
 from utilities.callbacks import GumbelTemperatureCallback, init_callbacks
 from utilities.collators import DataCollatorForWav2Vec2Pretraining
 from utilities.data_utils import get_dataset
@@ -52,12 +53,13 @@ if __name__ == "__main__":
     # 4. Initialize callbacks
     callbacks = init_callbacks(data_args, training_args, dataset, feature_extractor)
 
-    temperature_callback = GumbelTemperatureCallback(
-        training_args.gumbel_temperature_decay,
-        training_args.min_gumbel_temperature,
-        training_args.max_gumbel_temperature,
-    )
-    callbacks.append(temperature_callback)
+    if not isinstance(model, BestRQEBranchformerForPreTraining):
+        temperature_callback = GumbelTemperatureCallback(
+            training_args.gumbel_temperature_decay,
+            training_args.min_gumbel_temperature,
+            training_args.max_gumbel_temperature,
+        )
+        callbacks.append(temperature_callback)
 
     # 6. Initialize data collator
     data_collator = DataCollatorForWav2Vec2Pretraining(

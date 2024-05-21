@@ -479,6 +479,11 @@ class BestRQEBranchformerForPreTraining(Wav2Vec2EBranchformerForPreTraining):
         self.classifiers = nn.ModuleList(
             nn.Linear(config.hidden_size, config.best_rq_codebook_size) for _ in range(config.best_rq_num_books)
         )
+        del self.project_q
+        del self.project_hid
+        del self.quantizer
+        del self.dropout_features
+        del self.wav2vec2.masked_spec_embed
 
     def forward(
         self,
