@@ -1,23 +1,10 @@
 #!/bin/bash -e
 # Source bash profile
 # shellcheck disable=SC1090
-source ~/.bash_profile
-
-export MIOPEN_USER_DB_PATH="/tmp/$(whoami)-miopen-cache-$SLURM_NODEID"
-export MIOPEN_CUSTOM_CACHE_DIR=$MIOPEN_USER_DB_PATH
-
-# Set MIOpen cache to a temporary folder.
-if [ $SLURM_LOCALID -eq 0 ] ; then
-    rm -rf $MIOPEN_USER_DB_PATH
-    mkdir -p $MIOPEN_USER_DB_PATH
-fi
-sleep 1
-
 # Report affinity
 echo "Rank $SLURM_PROCID --> $(taskset -p $$)"
 # Start conda environment inside the container
 $WITH_CONDA
-
 
 set -euo pipefail
 
