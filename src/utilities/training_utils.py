@@ -280,9 +280,11 @@ class SSLTrainer(Trainer):
             optimizers,
             preprocess_logits_for_metrics,
         )
-        self.gumbel_callback = [
-            callback for callback in self.callback_handler.callbacks if isinstance(callback, GumbelTemperatureCallback)
-        ][0]
+        self.gumbel_callback = None
+        for callback in self.callback_handler.callbacks:
+            if isinstance(callback, GumbelTemperatureCallback):
+                self.gumbel_callback = callback
+
         self.can_return_loss = True
 
     @staticmethod
