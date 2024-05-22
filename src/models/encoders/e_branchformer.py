@@ -4,10 +4,10 @@ import math
 from typing import Optional, Tuple, Union
 
 import torch
+import torch.nn.functional as F
 import torch.utils.checkpoint
 from torch import nn
 from torch.linalg import vector_norm
-from torch.nn.functional import normalize
 from transformers.activations import ACT2FN
 from transformers.models.wav2vec2.modeling_wav2vec2 import (
     Wav2Vec2Config,
@@ -406,35 +406,18 @@ class BestRQEBranchformerConfig(Wav2Vec2EBranchformerConfig):
 class RandomProjectionQuantizer(nn.Module):
     def __init__(self, config: BestRQEBranchformerConfig):
         super().__init__()
-        self.random_projection = nn.Linear(config.best_rq_in_dim, config.best_rq_codebook_dim, bias=False)
-        nn.init.xavier_uniform_(self.random_projection.weight)
+        P_init = torch.empty((config.best_rq_num_books, config.best_rq_in_dim, config.best_rq_codebook_dim))
+        self.register_buffer("P", nn.init.xavier_uniform_(P_init))
+        self.register_buffer(
+            "CB",
+            F.normalize(
+                torch.randn(config.best_rq_num_books, config.best_rq_codebook_size, config.best_rq_codebook_dim)
+            ),
+        )
 
-        self.code_book = nn.Parameter(torch.randn(config.best_rq_codebook_size, config.best_rq_codebook_dim))
-        nn.init.normal_(self.code_book)
-        self.code_book = nn.Parameter(torch.nn.functional.normalize(self.code_book, p=2, dim=-1))
-
-        self.random_projection.weight.requires_grad = False
-        self.code_book.requires_grad = False
-
-    @torch.no_grad()
-    def forward(self, input_values: torch.Tensor) -> torch.Tensor:
-        """
-        Args:
-            input_values (torch.Tensor): with shape `(B, L, D)`
-            mask_time_indices (torch.Tensor): with shape `(B, L)`
-
-        Returns:
-            torch.Tensor with shape `(N)`
-
-        """
-
-        targets = self.random_projection(input_values).unsqueeze(-2)
-
-        # Compute l2 norm targets and code vectors
-        vector_distances = vector_norm(normalize(targets, p=2, dim=-1) - self.code_book, dim=-1)
-
-        labels = torch.argmin(vector_distances, dim=-1)
-        return labels
+    def forward(self, x):
+        x = F.normalize(x[:, None, ...] @ self.P)
+        return vector_norm((self.CB.unsqueeze(2) - x.unsqueeze(2)), dim=-1).argmin(dim=2)
 
 
 class BestRQModel(Wav2Vec2EBranchformerModel):
@@ -473,9 +456,8 @@ class BestRQEBranchformerForPreTraining(Wav2Vec2EBranchformerForPreTraining):
         super().__init__(config)
         self.wav2vec2 = BestRQModel(config)
         self.post_init()
-        self.rpqs = nn.ModuleList(RandomProjectionQuantizer(config) for _ in range(config.best_rq_num_books))
-        for rpq in self.rpqs:
-            rpq.requires_grad = False
+        self.rpq = RandomProjectionQuantizer(config)
+
         self.classifiers = nn.ModuleList(
             nn.Linear(config.hidden_size, config.best_rq_codebook_size) for _ in range(config.best_rq_num_books)
         )
@@ -490,7 +472,7 @@ class BestRQEBranchformerForPreTraining(Wav2Vec2EBranchformerForPreTraining):
         input_values: Optional[torch.Tensor],
         attention_mask: Optional[torch.Tensor] = None,
         mask_time_indices: Optional[torch.BoolTensor] = None,
-        sampled_negative_indices: Optional[torch.BoolTensor] = None,
+        targets: Optional[torch.LongTensor] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
@@ -509,32 +491,12 @@ class BestRQEBranchformerForPreTraining(Wav2Vec2EBranchformerForPreTraining):
             return_dict=return_dict,
         )
 
-        extract_features = outputs[1]
         last_hidden_states = outputs[0]
 
-        coverage = []
-        unique_values = []
-        loss = None
-        for classifier, rpq in zip(self.classifiers, self.rpqs):
-            probs = classifier(last_hidden_states)
-            labels = rpq(input_values.view((*extract_features.shape[:2], -1)))
-            # pylint: disable=invalid-unary-operand-type
-            labels.masked_fill_(~mask_time_indices, -100)
-            label_lens_unique = torch.tensor(
-                [labels[i, :].unique().shape[0] - 1 for i in range(labels.size(0))], device=labels.device
-            )
-
-            unique_values.append(label_lens_unique / mask_time_indices.sum(dim=1))
-            coverage.append(label_lens_unique / self.config.best_rq_codebook_size)
-
-            loss_local = nn.functional.cross_entropy(probs.transpose(1, 2), labels, reduction="sum")
-            if loss is None:
-                loss = 1 / len(self.rpqs) * loss_local
-            else:
-                loss += 1 / len(self.rpqs) * loss_local
-
-        coverage = torch.stack(coverage).mean()
-        unique_values = torch.stack(unique_values).mean()
+        probs = torch.stack([classifier(last_hidden_states) for classifier in self.classifiers], dim=1)
+        loss = nn.functional.cross_entropy(
+            probs.flatten(0, 1).transpose(1, 2), targets.flatten(0, 1), reduction="sum"
+        ) / probs.size(1)
 
         if not return_dict:
             if loss is not None:
@@ -544,9 +506,9 @@ class BestRQEBranchformerForPreTraining(Wav2Vec2EBranchformerForPreTraining):
         return Wav2Vec2ForPreTrainingOutput(
             loss=loss,
             projected_states=last_hidden_states,
-            codevector_perplexity=coverage,
+            codevector_perplexity=None,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
             contrastive_loss=None,
-            diversity_loss=unique_values,
+            diversity_loss=None,
         )
