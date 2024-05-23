@@ -48,3 +48,7 @@ class Conv2dFeatureExtractor(nn.Module):
         hidden_states = self.conv(input_values[:, None, ...])
         hidden_states = self.out(hidden_states.transpose(1, 2).flatten(2, 3))
         return hidden_states.transpose(1, 2)
+
+    def _freeze_parameters(self):
+        for param in self.parameters():
+            param.requires_grad = False

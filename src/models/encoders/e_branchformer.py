@@ -512,3 +512,13 @@ class BestRQEBranchformerForPreTraining(Wav2Vec2EBranchformerForPreTraining):
             contrastive_loss=None,
             diversity_loss=None,
         )
+
+
+class BestRQEBranchformerForCTC(CustomFE, Wav2Vec2ForCTC):
+    config_class = BestRQEBranchformerConfig
+    base_model_prefix = "wav2vec2"
+
+    def __init__(self, config: BestRQEBranchformerConfig):
+        super().__init__(config)
+        self.wav2vec2 = BestRQModel(config)
+        self.post_init()

@@ -29,13 +29,11 @@ from models.ctc_encoder_plus_autoregressive_decoder import (
     JointCTCAttentionEncoderDecoder,
     JointCTCAttentionEncoderDecoderConfig,
 )
-from models.decoders.multi_head_gpt2 import GPT2LMMultiHeadModel, GPT2MultiHeadConfig
-from models.decoders.multi_head_gpt2_mixing import (
-    GPT2LMMultiHeadModelMixing,
-    GPT2MultiHeadMixingConfig,
-)
+from models.decoders.multi_head_gpt2 import GPT2LMMultiHeadModel
+from models.decoders.multi_head_gpt2_mixing import GPT2MultiHeadMixingConfig
 from models.encoders.e_branchformer import (
     BestRQEBranchformerConfig,
+    BestRQEBranchformerForCTC,
     BestRQEBranchformerForPreTraining,
     Wav2Vec2EBranchformerConfig,
     Wav2Vec2EBranchformerForCTC,
@@ -54,6 +52,7 @@ CustomAutoModelForCTC.register(Wav2Vec2EBranchformerConfig, Wav2Vec2EBranchforme
 CustomAutoModelForPretraining.register(Wav2Vec2EBranchformerConfig, Wav2Vec2EBranchformerForPreTraining)
 
 AutoConfig.register("bestrq-ebranchformer", BestRQEBranchformerConfig)
+CustomAutoModelForCTC.register(BestRQEBranchformerConfig, BestRQEBranchformerForCTC)
 CustomAutoModelForPretraining.register(BestRQEBranchformerConfig, BestRQEBranchformerForPreTraining)
 
 
