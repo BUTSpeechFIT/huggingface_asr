@@ -152,16 +152,12 @@ class DataCollatorForWav2Vec2Pretraining:
     audio_path: str = None
     model_input_name: str = ""
     min_masks: int = 2
-    rpq: Optional[PreTrainedModel] = None
 
     def __post_init__(self):
         if not isinstance(self.feature_extractor, (Wav2Vec2FeatureExtractor, Speech2TextFeatureExtractor)):
             raise ValueError(
                 f"`feature_extractor` has to be of type {Wav2Vec2FeatureExtractor} or {Speech2TextFeatureExtractor} for {self.__class__}."
             )
-
-        if isinstance(self.model, BestRQEBranchformerForPreTraining):
-            self.rpq = copy.deepcopy(self.model.rpq).to("cpu")
 
     def __call__(
         self, features: List[Dict[str, Union[List[int], torch.Tensor]]]
@@ -228,8 +224,4 @@ class DataCollatorForWav2Vec2Pretraining:
 
         del batch["sub_attention_mask"]
 
-        if self.rpq is not None:
-            targets = self.rpq(batch[self.model_input_name].view((*features_shape[:2], -1)))
-            targets.masked_fill_(~batch["mask_time_indices"].to(torch.bool)[:, None, :], -100)
-            batch["targets"] = targets
         return batch

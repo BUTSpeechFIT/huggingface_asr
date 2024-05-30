@@ -81,11 +81,5 @@ if __name__ == "__main__":
     if training_args.start_by_eval:
         logger.info(trainer.evaluate())
 
-    with profile(activities=[ProfilerActivity.CPU, ProfilerActivity.CUDA], record_shapes=True) as prof:
-        with record_function("model_inference"):
-            # 8. Train model
-            if training_args.do_train:
-                trainer.train(resume_from_checkpoint=training_args.restart_from or None)
-    print(prof.key_averages().table(sort_by="cpu_time_total", row_limit=10))
-    print(prof.key_averages(group_by_input_shape=True).table(sort_by="cpu_time_total", row_limit=10))
-    print(prof.key_averages().table(sort_by="cuda_time_total", row_limit=10))
+    if training_args.do_train:
+        trainer.train(resume_from_checkpoint=training_args.restart_from or None)

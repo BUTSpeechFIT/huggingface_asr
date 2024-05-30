@@ -172,8 +172,6 @@ def audio_object_stripper(audio: Union[Dict, np.ndarray, List[float]], key="arra
     """Strips audio object to numpy array."""
     audio_array = audio[key] if isinstance(audio, dict) and key in audio else audio
     trimmed = np.trim_zeros(audio_array)
-    if trimmed.shape[0] == 0:
-        return audio_array
     return trimmed
 
 
