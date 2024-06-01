@@ -56,7 +56,7 @@
       "train"
     ],
     "validation_splits": [
-      "dev"
+      "validation"
     ],
     "test_splits": [
       "test"
