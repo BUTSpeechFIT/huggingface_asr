@@ -42,6 +42,7 @@ spec_tokens_mapping_gigaspeech = {"<COMMA>": ",", "<PERIOD>": ".", "<QUESTIONMAR
 tokens_escaped_regex = re.compile("|".join([r"\s" + re.escape(token) for token in special_tokens]))
 
 MIN_INPUT_LEN = 0.1
+MAX_INPUT_LEN = 100.0
 
 
 def get_local_rank():
@@ -303,6 +304,7 @@ def prepare_dataset(
 
     # Filter samples shorter than 0.1s - {MIN_INPUT_LEN},
     # due to the conv subsampling and mel fbank extraction in model encoder
+    # and longer than 100s - {MAX_INPUT_LEN} to avoid memory issues
     for split in list(dataset.keys()):
         if split != train_split:
             dataset[split] = distributed_process(
@@ -313,7 +315,7 @@ def prepare_dataset(
                 input_columns=[length_column_name],
                 num_proc=preprocessing_num_workers,
                 writer_batch_size=writer_batch_size,
-                fn_kwargs={"max_input_len": np.finfo(np.float32).max, "min_input_len": MIN_INPUT_LEN},
+                fn_kwargs={"max_input_len": MAX_INPUT_LEN, "min_input_len": MIN_INPUT_LEN},
                 desc="Filter samples that the model is not able to process due to the conv subsampling.",
             )
 
