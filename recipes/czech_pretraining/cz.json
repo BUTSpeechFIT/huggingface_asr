@@ -1,0 +1,75 @@
+[
+  {
+    "dataset_name": "facebook/voxpopuli",
+    "dataset_id": "voxpopuli",
+    "load_from_disk": false,
+    "train_splits": [
+      "train"
+    ],
+    "validation_splits": [
+      "validation"
+    ],
+    "test_splits": [
+      "test"
+    ],
+    "text_column_name": "normalized_text",
+    "audio_column_name": "audio",
+    "length_column_name": "input_len",
+    "text_transformations": [
+      "remove_punctuation",
+      "do_lower_case"
+    ],
+    "additional_args": {
+      "name": "cs"
+    }
+  },
+    {
+    "dataset_name": "mozilla-foundation/common_voice_16_1",
+    "dataset_id": "cv",
+    "load_from_disk": false,
+    "train_splits": [
+      "train",
+      "other"
+    ],
+    "validation_splits": [
+      "validation"
+    ],
+    "test_splits": [
+      "test"
+    ],
+    "text_column_name": "sentence",
+    "audio_column_name": "audio",
+    "length_column_name": "input_len",
+    "text_transformations": [
+      "remove_punctuation",
+      "do_lower_case"
+    ],
+    "additional_args": {
+      "name": "cs"
+    }
+  },
+      {
+    "dataset_name": "jkot/czech_parliament_plenary_hearings",
+    "dataset_id": "cs_plenary",
+    "load_from_disk": false,
+    "train_splits": [
+      "train"
+    ],
+    "validation_splits": [
+      "dev"
+    ],
+    "test_splits": [
+      "test"
+    ],
+    "text_column_name": "transcription",
+    "audio_column_name": "audio",
+    "length_column_name": "input_len",
+    "text_transformations": [
+      "remove_punctuation",
+      "do_lower_case"
+    ],
+    "additional_args": {
+      "name": "cs"
+    }
+  }
+]
