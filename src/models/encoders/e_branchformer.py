@@ -1,19 +1,16 @@
 """ PyTorch Wav2Vec2-Ebranchformer model."""
 
 import math
-from typing import Optional, Tuple, Union
+from typing import Optional, Tuple
 
 import torch
-import torch.nn.functional as F
 import torch.utils.checkpoint
 from torch import nn
-from torch.linalg import vector_norm
 from transformers.activations import ACT2FN
 from transformers.models.wav2vec2.modeling_wav2vec2 import (
     Wav2Vec2Config,
     Wav2Vec2ForCTC,
     Wav2Vec2ForPreTraining,
-    Wav2Vec2ForPreTrainingOutput,
 )
 from transformers.models.wav2vec2_conformer.modeling_wav2vec2_conformer import (
     Wav2Vec2ConformerConfig,
@@ -28,7 +25,7 @@ from transformers.models.wav2vec2_conformer.modeling_wav2vec2_conformer import (
 )
 from transformers.utils import logging
 
-from models.extractors import Conv2dFeatureExtractor
+from models.extractors import CustomFE
 from models.streaming_modules import CausalConv1d, FeatureExtractorForStreaming
 
 logger = logging.get_logger(__name__)
@@ -322,40 +319,6 @@ class Wav2Vec2EBranchformerEncoder(Wav2Vec2ConformerEncoder):
         self.pos_conv_embed = None
 
 
-class CustomFE:
-    def _get_feat_extract_output_lengths(
-        self, input_lengths: Union[torch.LongTensor, int], add_adapter: Optional[bool] = None
-    ):
-        """
-        Computes the output length of the convolutional layers
-        """
-        # pylint: disable=no-member
-        add_adapter = self.config.add_adapter if add_adapter is None else add_adapter
-
-        def _conv_out_length(input_length, kernel_size, stride):
-            # 1D convolutional layer output length formula taken
-            # from https://pytorch.org/docs/stable/generated/torch.nn.Conv1d.html
-
-            return torch.div(input_length - kernel_size, stride, rounding_mode="floor") + 1
-
-        # pylint: disable=no-member
-        for kernel_size, stride in zip(self.config.conv_kernel, self.config.conv_stride):
-            input_lengths = _conv_out_length(
-                # pylint: disable=no-member
-                input_lengths + 1 if isinstance(self.base_model.feature_extractor, Conv2dFeatureExtractor) else 0,
-                kernel_size,
-                stride,
-            )
-
-        if add_adapter:
-            # pylint: disable=no-member
-            for _ in range(self.config.num_adapter_layers):
-                # pylint: disable=no-member
-                input_lengths = _conv_out_length(input_lengths, 1, self.config.adapter_stride)
-
-        return input_lengths
-
-
 class Wav2Vec2EBranchformerModel(CustomFE, FeatureExtractorForStreaming, Wav2Vec2ConformerModel):
     def __init__(self, config: Wav2Vec2EBranchformerConfig):
         super().__init__(config)
@@ -382,143 +345,4 @@ class Wav2Vec2EBranchformerForCTC(CustomFE, Wav2Vec2ForCTC):
     def __init__(self, config: Wav2Vec2EBranchformerConfig):
         super().__init__(config)
         self.wav2vec2 = Wav2Vec2EBranchformerModel(config)
-        self.post_init()
-
-
-class BestRQEBranchformerConfig(Wav2Vec2EBranchformerConfig):
-    model_type = "bestrq-ebranchformer"
-
-    def __init__(
-        self,
-        best_rq_codebook_size=8192,
-        best_rq_codebook_dim=16,
-        best_rq_num_books=1,
-        best_rq_in_dim=320,
-        **kwargs,
-    ):
-        super().__init__(**kwargs)
-        self.best_rq_codebook_size = best_rq_codebook_size
-        self.best_rq_codebook_dim = best_rq_codebook_dim
-        self.best_rq_num_books = best_rq_num_books
-        self.best_rq_in_dim = best_rq_in_dim
-
-
-class RandomProjectionQuantizer(nn.Module):
-    def __init__(self, config: BestRQEBranchformerConfig):
-        super().__init__()
-        P_init = torch.empty((config.best_rq_num_books, config.best_rq_in_dim, config.best_rq_codebook_dim))
-        self.register_buffer("P", nn.init.xavier_uniform_(P_init))
-        self.register_buffer(
-            "CB",
-            F.normalize(
-                torch.randn(config.best_rq_num_books, config.best_rq_codebook_size, config.best_rq_codebook_dim)
-            ),
-        )
-
-    def forward(self, x):
-        x = F.normalize(x[:, None, ...] @ self.P)
-        return vector_norm((self.CB.unsqueeze(2) - x.unsqueeze(2)), dim=-1).argmin(dim=2)
-
-
-class BestRQModel(Wav2Vec2EBranchformerModel):
-    def __init__(self, config: BestRQEBranchformerConfig):
-        super().__init__(config)
-
-    def _mask_hidden_states(
-        self,
-        hidden_states: torch.FloatTensor,
-        mask_time_indices: Optional[torch.FloatTensor] = None,
-        attention_mask: Optional[torch.LongTensor] = None,
-        std: float = 0.1,
-    ):
-        """
-        Masks extracted features along time axis and/or along feature axis according to
-        [SpecAugment](https://arxiv.org/abs/1904.08779).
-        """
-
-        # `config.apply_spec_augment` can set masking to False
-        if not getattr(self.config, "apply_spec_augment", True):
-            return hidden_states
-
-        if mask_time_indices is not None:
-            # apply SpecAugment along time axis with given mask_time_indices
-            hidden_states[mask_time_indices] = hidden_states[mask_time_indices].normal_(mean=0, std=std)
-        else:
-            raise NotImplementedError("mask_time_indices is required for now")
-        return hidden_states
-
-
-class BestRQEBranchformerForPreTraining(Wav2Vec2EBranchformerForPreTraining):
-    config_class = BestRQEBranchformerConfig
-    base_model_prefix = "wav2vec2"
-
-    def __init__(self, config: BestRQEBranchformerConfig):
-        super().__init__(config)
-        self.wav2vec2 = BestRQModel(config)
-        self.post_init()
-        self.rpq = RandomProjectionQuantizer(config)
-
-        self.classifiers = nn.ModuleList(
-            nn.Linear(config.hidden_size, config.best_rq_codebook_size) for _ in range(config.best_rq_num_books)
-        )
-        del self.project_q
-        del self.project_hid
-        del self.quantizer
-        del self.dropout_features
-        del self.wav2vec2.masked_spec_embed
-
-    def forward(
-        self,
-        input_values: Optional[torch.Tensor],
-        attention_mask: Optional[torch.Tensor] = None,
-        mask_time_indices: Optional[torch.BoolTensor] = None,
-        targets: Optional[torch.LongTensor] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
-    ) -> Union[Tuple, Wav2Vec2ForPreTrainingOutput]:
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-
-        if mask_time_indices is not None:
-            mask_time_indices = mask_time_indices.to(torch.bool)
-
-        outputs = self.wav2vec2(
-            input_values,
-            attention_mask=attention_mask,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            mask_time_indices=mask_time_indices,
-            return_dict=return_dict,
-        )
-
-        last_hidden_states = outputs[0]
-
-        probs = torch.stack([classifier(last_hidden_states) for classifier in self.classifiers], dim=1)
-        loss = nn.functional.cross_entropy(
-            probs.flatten(0, 1).transpose(1, 2), targets.flatten(0, 1), reduction="sum"
-        ) / probs.size(1)
-
-        if not return_dict:
-            if loss is not None:
-                return (loss, last_hidden_states, None, None) + outputs[2:]
-            return (last_hidden_states, None, None) + outputs[2:]
-
-        return Wav2Vec2ForPreTrainingOutput(
-            loss=loss,
-            projected_states=last_hidden_states,
-            codevector_perplexity=None,
-            hidden_states=outputs.hidden_states,
-            attentions=outputs.attentions,
-            contrastive_loss=None,
-            diversity_loss=None,
-        )
-
-
-class BestRQEBranchformerForCTC(CustomFE, Wav2Vec2ForCTC):
-    config_class = BestRQEBranchformerConfig
-    base_model_prefix = "wav2vec2"
-
-    def __init__(self, config: BestRQEBranchformerConfig):
-        super().__init__(config)
-        self.wav2vec2 = BestRQModel(config)
         self.post_init()

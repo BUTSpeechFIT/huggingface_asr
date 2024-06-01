@@ -1,3 +1,5 @@
+from typing import Optional, Union
+
 import torch
 from torch import nn
 from transformers.activations import ACT2FN
@@ -52,3 +54,37 @@ class Conv2dFeatureExtractor(nn.Module):
     def _freeze_parameters(self):
         for param in self.parameters():
             param.requires_grad = False
+
+
+class CustomFE:
+    def _get_feat_extract_output_lengths(
+        self, input_lengths: Union[torch.LongTensor, int], add_adapter: Optional[bool] = None
+    ):
+        """
+        Computes the output length of the convolutional layers
+        """
+        # pylint: disable=no-member
+        add_adapter = self.config.add_adapter if add_adapter is None else add_adapter
+
+        def _conv_out_length(input_length, kernel_size, stride):
+            # 1D convolutional layer output length formula taken
+            # from https://pytorch.org/docs/stable/generated/torch.nn.Conv1d.html
+
+            return torch.div(input_length - kernel_size, stride, rounding_mode="floor") + 1
+
+        # pylint: disable=no-member
+        for kernel_size, stride in zip(self.config.conv_kernel, self.config.conv_stride):
+            input_lengths = _conv_out_length(
+                # pylint: disable=no-member
+                input_lengths + 2 if isinstance(self.base_model.feature_extractor, Conv2dFeatureExtractor) else 0,
+                kernel_size,
+                stride,
+            )
+
+        if add_adapter:
+            # pylint: disable=no-member
+            for _ in range(self.config.num_adapter_layers):
+                # pylint: disable=no-member
+                input_lengths = _conv_out_length(input_lengths, 1, self.config.adapter_stride)
+
+        return input_lengths

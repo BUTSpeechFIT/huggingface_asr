@@ -1,4 +1,3 @@
-import copy
 from dataclasses import dataclass
 from typing import Dict, List, Optional, Union
 
@@ -16,7 +15,7 @@ from transformers.models.wav2vec2.modeling_wav2vec2 import (
     _sample_negative_indices,
 )
 
-from models.encoders.e_branchformer import BestRQEBranchformerForPreTraining
+from models.bestrq import BestRQModel
 
 
 @dataclass
@@ -208,7 +207,7 @@ class DataCollatorForWav2Vec2Pretraining:
 
         batch["mask_time_indices"] = torch.tensor(mask_time_indices, dtype=torch.long, device=device)
 
-        if not isinstance(self.model, BestRQEBranchformerForPreTraining):
+        if not isinstance(self.model, BestRQModel):
             # sample negative indices
             sampled_negative_indices = _sample_negative_indices(
                 features_shape,

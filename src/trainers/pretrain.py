@@ -1,11 +1,10 @@
 """Main training script for training of attention based encoder decoder ASR models."""
 import sys
 
-from torch.profiler import ProfilerActivity, profile, record_function
 from transformers import AutoFeatureExtractor, HfArgumentParser
 from transformers.utils import logging
 
-from models.encoders.e_branchformer import BestRQEBranchformerForPreTraining
+from models.bestrq import BestRQModel
 from utilities.callbacks import GumbelTemperatureCallback, init_callbacks
 from utilities.collators import DataCollatorForWav2Vec2Pretraining
 from utilities.data_utils import get_dataset
@@ -46,7 +45,7 @@ if __name__ == "__main__":
     # 4. Initialize callbacks
     callbacks = init_callbacks(data_args, training_args, dataset, feature_extractor)
 
-    if not isinstance(model, BestRQEBranchformerForPreTraining):
+    if not isinstance(model, BestRQModel):
         temperature_callback = GumbelTemperatureCallback(
             training_args.gumbel_temperature_decay,
             training_args.min_gumbel_temperature,
