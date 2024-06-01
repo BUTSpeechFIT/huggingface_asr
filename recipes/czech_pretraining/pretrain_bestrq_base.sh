@@ -4,7 +4,7 @@
 #SBATCH --tasks-per-node=4
 #SBATCH --cpus-per-task=7
 #SBATCH --output="outputs/czech_pretraining/output_%x_%j.out"
-#SBATCH --error="outputs/voxpopuli_czech/output_%x_%j.err"
+#SBATCH --error="outputs/czech_pretraining/output_%x_%j.err"
 #SBATCH --partition=small-g
 #SBATCH --mem=200G
 #SBATCH --time=2-00:00:00
