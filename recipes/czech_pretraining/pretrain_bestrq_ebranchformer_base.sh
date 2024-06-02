@@ -88,7 +88,7 @@ args=(
 
   # Model related arguments
   --feature_extractor_name="Lakoc/log_80mel_extractor_16k"
-  --base_encoder_model="Lakoc/Lakoc/bestrq_ebranchformer_12_512h_2d"
+  --base_encoder_model="Lakoc/bestrq_ebranchformer_12_512h_2d"
   --expect_2d_input
 )
 
