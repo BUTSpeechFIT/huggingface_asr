@@ -107,6 +107,7 @@ class SSLTrainer(Trainer):
 
         self.can_return_loss = True
         self.metadata = {"train": {}, "eval": {}}
+        self.prev_loss = None
 
     def compute_loss(self, model, inputs, return_outputs=False):
         """
@@ -150,6 +151,15 @@ class SSLTrainer(Trainer):
                 self.metadata[stats_object][key] = 0
             self.metadata[stats_object][key] += additional_stats[key]
         loss /= num_losses.sum()
+
+        if self.prev_loss is not None and loss > 10 * self.prev_loss:
+            logger.warning(
+                f"Training loss ({loss}) is much larger than previous loss ({self.prev_loss})."
+                "You may want to check your training data or consider clipping gradients."
+            )
+            loss -= loss
+        else:
+            self.prev_loss = loss
         return (loss, outputs) if return_outputs else loss
 
     def gather_additional_statistics(self, inputs, outputs):
