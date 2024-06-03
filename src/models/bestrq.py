@@ -1,3 +1,6 @@
+"""
+This module implements the BestRQ model https://arxiv.org/abs/2202.01855.
+"""
 import math
 from typing import Optional, Tuple, Union
 
@@ -52,22 +55,22 @@ def xavier_uniform_(tensor: Tensor, gain: float = 1.0) -> Tensor:
     if tensor.dim() > 2:
         # math.prod is not always available, accumulate the product manually
         # we could use functools.reduce but that is not supported by TorchScript
-        for s in tensor.shape[2:]:
-            receptive_field_size *= s
+        for scale in tensor.shape[2:]:
+            receptive_field_size *= scale
     fan_in = num_input_fmaps * receptive_field_size
     fan_out = num_output_fmaps * receptive_field_size
 
     std = gain * math.sqrt(2.0 / float(fan_in + fan_out))
-    a = math.sqrt(3.0) * std  # Calculate uniform bounds from standard deviation
+    amplitude = math.sqrt(3.0) * std  # Calculate uniform bounds from standard deviation
 
-    return tensor.uniform_(-a, a)
+    return tensor.uniform_(-amplitude, amplitude)
 
 
 class RandomProjectionQuantizer(nn.Module):
     def __init__(self, config: BestRQConfig):
         super().__init__()
-        P_init = torch.zeros((config.best_rq_num_books, config.best_rq_in_dim, config.best_rq_codebook_dim))
-        self.register_buffer("P", xavier_uniform_(P_init))
+        p_init = torch.zeros((config.best_rq_num_books, config.best_rq_in_dim, config.best_rq_codebook_dim))
+        self.register_buffer("P", xavier_uniform_(p_init))
         self.register_buffer(
             "CB",
             F.normalize(
@@ -75,9 +78,9 @@ class RandomProjectionQuantizer(nn.Module):
             ),
         )
 
-    def forward(self, x):
-        x = F.normalize(x[:, None, ...] @ self.P)
-        return vector_norm((self.CB.unsqueeze(2) - x.unsqueeze(2)), dim=-1).argmin(dim=2)
+    def forward(self, hidden_states: torch.FloatTensor) -> torch.LongTensor:
+        hidden_states = F.normalize(hidden_states[:, None, ...] @ self.P)
+        return vector_norm((self.CB.unsqueeze(2) - hidden_states.unsqueeze(2)), dim=-1).argmin(dim=2)
 
 
 class BestRQModel(nn.Module):
@@ -92,19 +95,14 @@ class BestRQModel(nn.Module):
         self,
         hidden_states: torch.FloatTensor,
         mask_time_indices: Optional[torch.FloatTensor] = None,
+        attention_mask: Optional[torch.FloatTensor] = None,
         std: float = 0.1,
     ):
         """
         Masks extracted features along time axis and/or along feature axis according to
         [SpecAugment](https://arxiv.org/abs/1904.08779).
         """
-
-        # `config.apply_spec_augment` can set masking to False
-        if not getattr(self.config, "apply_spec_augment", True):
-            return hidden_states
-
         if mask_time_indices is not None:
-            # apply SpecAugment along time axis with given mask_time_indices
             hidden_states[mask_time_indices] = hidden_states[mask_time_indices].normal_(mean=0, std=std)
         else:
             raise NotImplementedError("mask_time_indices is required for now")
@@ -165,6 +163,7 @@ class BestRQTransformerForPreTrainingConfig(Wav2Vec2Config, BestRQConfig):
         super().__init__(**kwargs)
 
 
+# pylint: disable=abstract-method
 class BestRQTransformerForPreTraining(CustomFE, BestRQModel, Wav2Vec2PreTrainedModel):
     config_class = BestRQTransformerForPreTrainingConfig
 
@@ -172,6 +171,7 @@ class BestRQTransformerForPreTraining(CustomFE, BestRQModel, Wav2Vec2PreTrainedM
         super().__init__(config)
         self.wav2vec2 = Wav2Vec2Model(config)
         del self.wav2vec2.masked_spec_embed
+        self.wav2vec2._mask_hidden_states = self._mask_hidden_states
         self.post_init()
 
 
@@ -186,6 +186,7 @@ class BestRQEBranchformerForPreTrainingConfig(Wav2Vec2EBranchformerConfig, BestR
         super().__init__(**kwargs)
 
 
+# pylint: disable=abstract-method
 class BestRQEBranchformerForPreTraining(CustomFE, BestRQModel, Wav2Vec2PreTrainedModel):
     config_class = BestRQEBranchformerForPreTrainingConfig
 
@@ -193,6 +194,7 @@ class BestRQEBranchformerForPreTraining(CustomFE, BestRQModel, Wav2Vec2PreTraine
         super().__init__(config)
         self.wav2vec2 = Wav2Vec2EBranchformerModel(config)
         del self.wav2vec2.masked_spec_embed
+        self.wav2vec2._mask_hidden_states = self._mask_hidden_states
         self.post_init()
 
 
