@@ -152,7 +152,7 @@ class SSLTrainer(Trainer):
             self.metadata[stats_object][key] += additional_stats[key]
         loss /= num_losses.sum()
 
-        if self.prev_loss is not None and loss > 10 * self.prev_loss:
+        if self.state.global_step > self.args.warmup_steps and self.prev_loss is not None and loss > 4 * self.prev_loss:
             logger.warning(
                 f"Training loss ({loss}) is much larger than previous loss ({self.prev_loss})."
                 "You may want to check your training data or consider clipping gradients."
