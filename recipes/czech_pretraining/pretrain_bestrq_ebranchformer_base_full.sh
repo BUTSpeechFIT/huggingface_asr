@@ -9,7 +9,7 @@
 #SBATCH --mem=0G
 #SBATCH --time=2-00:00:00
 
-EXPERIMENT="bestrq_ebranchformer_90M_full_cz"
+EXPERIMENT="bestrq_ebranchformer_97M_full_cz"
 SRC_DIR="/project/${EC_PROJECT}/ipoloka/huggingface_asr"
 WORK_DIR="/scratch/${EC_PROJECT}/ipoloka/huggingface_asr"
 RECIPE_DIR="${SRC_DIR}/recipes/czech_pretraining"
@@ -70,8 +70,8 @@ args=(
   --logging_steps="10"
   --save_strategy="steps"
   --evaluation_strategy="steps"
-  --eval_steps="10000"
-  --save_steps="10000"
+  --eval_steps="5000"
+  --save_steps="5000"
   --greater_is_better="False"
   --save_total_limit="5"
 
@@ -86,7 +86,7 @@ args=(
   --writer_batch_size="200"
   --pad_to_multiples_of="100"
   --validation_split="validation5%"
-  --validation_slice="10%"
+  --validation_slice="20%"
 
 
   # Preprocessing related arguments

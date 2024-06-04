@@ -312,7 +312,9 @@ class SSLTrainer(Trainer):
         # pylint: disable=no-member
         output = super().evaluation_loop(eval_dataloader, *args, **kwargs)
         for metric in self.metadata["eval"].keys():
-            metric_value = self._nested_gather(self.metadata["eval"][metric]).mean().item()
-            output.metrics[metric] = round(metric_value / (output.num_samples / self.args.eval_batch_size), 4)
+            metric_value = self._nested_gather(self.metadata["eval"][metric]).sum().item()
+            output.metrics[metric] = round(
+                metric_value / (output.num_samples / self.args.eval_batch_size * max(1, self.args.n_gpu)), 4
+            )
             self.metadata["eval"][metric] -= self.metadata["eval"][metric]
         return output
