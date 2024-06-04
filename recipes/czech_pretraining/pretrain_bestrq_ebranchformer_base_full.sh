@@ -78,7 +78,7 @@ args=(
   --length_column_name="input_len"
   --remove_unused_columns="False"
   --preprocessing_num_workers="16"
-  --datasets_creation_config="/flash/project_465000836/data/dataset_dict-050.json"
+  --dataset_name="/scratch/project_465000836/szoke/huggingface_cache/dataset_dump"
   --load_pure_dataset_only
   --writer_batch_size="200"
   --pad_to_multiples_of="100"
