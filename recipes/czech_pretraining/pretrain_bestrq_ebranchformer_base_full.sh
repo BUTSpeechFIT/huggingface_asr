@@ -9,7 +9,7 @@
 #SBATCH --mem=0G
 #SBATCH --time=2-00:00:00
 
-EXPERIMENT="bestrq_ebranchformer_90M_full"
+EXPERIMENT="bestrq_ebranchformer_90M_full_cz"
 SRC_DIR="/project/${EC_PROJECT}/ipoloka/huggingface_asr"
 WORK_DIR="/scratch/${EC_PROJECT}/ipoloka/huggingface_asr"
 RECIPE_DIR="${SRC_DIR}/recipes/czech_pretraining"
@@ -51,14 +51,15 @@ args=(
   --start_by_eval
 
    # Data loader params
-  --dataloader_num_workers="6"
+  --dataloader_num_workers="7"
+  --dataloader_prefetch_factor="2"
   --dataloader_pin_memory="False"
   --dataloader_persistent_workers="True"
 
   # Optimizer related arguments
   --optim="adamw_torch"
   --learning_rate="2e-3"
-  --warmup_steps="0"
+  --warmup_steps="5000"
   --early_stopping_patience="3"
   --weight_decay="1e-6"
   --max_grad_norm="1.0"
@@ -67,8 +68,10 @@ args=(
   # Logging, saving and evaluation related arguments
   --report_to="wandb"
   --logging_steps="10"
-  --save_strategy="epoch"
-  --evaluation_strategy="epoch"
+  --save_strategy="steps"
+  --evaluation_strategy="steps"
+  --eval_steps="10000"
+  --save_steps="10000"
   --greater_is_better="False"
   --save_total_limit="5"
 
@@ -82,6 +85,9 @@ args=(
   --load_pure_dataset_only
   --writer_batch_size="200"
   --pad_to_multiples_of="100"
+  --validation_split="validation5%"
+  --validation_slice="10%"
+
 
   # Preprocessing related arguments
   --data_preprocessing_config="${RECIPE_DIR}/data_preprocessing.json"
