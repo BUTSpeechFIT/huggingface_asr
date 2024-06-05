@@ -9,7 +9,7 @@
 #SBATCH --mem=0G
 #SBATCH --time=2-00:00:00
 
-EXPERIMENT="bestrq_ebranchformer_97M_full_cz"
+EXPERIMENT="bestrq_ebranchformer_97M_full_cz_v2"
 SRC_DIR="/project/${EC_PROJECT}/ipoloka/huggingface_asr"
 WORK_DIR="/scratch/${EC_PROJECT}/ipoloka/huggingface_asr"
 RECIPE_DIR="${SRC_DIR}/recipes/czech_pretraining"
@@ -17,8 +17,8 @@ EXPERIMENT_PATH="${WORK_DIR}/experiments/${EXPERIMENT}"
 
 module load LUMI partition/G PyTorch/2.2.0-rocm-5.6.1-python-3.10-singularity-20240209
 
-export CXI_FORK_SAFE=1
-export CXI_FORK_SAFE_HP=1
+#export CXI_FORK_SAFE=1
+#export CXI_FORK_SAFE_HP=1
 
 # We need to set this to avoid "Cassini Event Queue overflow detected." errors.
 export FI_CXI_DEFAULT_CQ_SIZE=131072
@@ -55,6 +55,7 @@ args=(
   --dataloader_prefetch_factor="2"
   --dataloader_pin_memory="False"
   --dataloader_persistent_workers="True"
+  --use_start_method_spawn
 
   # Optimizer related arguments
   --optim="adamw_torch"
