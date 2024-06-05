@@ -9,6 +9,7 @@ import torch.nn.functional as F
 import torch.utils.checkpoint
 from torch import Tensor, nn
 from torch.linalg import vector_norm
+from transformers.configuration_utils import PretrainedConfig
 from transformers.models.wav2vec2.modeling_wav2vec2 import (
     Wav2Vec2Config,
     Wav2Vec2ForCTC,
@@ -23,21 +24,18 @@ from models.encoders.e_branchformer import (
     Wav2Vec2EBranchformerForCTC,
     Wav2Vec2EBranchformerModel,
 )
-from models.extractors import CustomFE
+from models.extractors import CustomFE, CustomFEConfig
 
 logger = logging.get_logger(__name__)
 
 
-class BestRQConfig:
+class BestRQConfig(PretrainedConfig):
     # model_type = "bestrq-ebranchformer"
 
     def __init__(
-        self,
-        best_rq_codebook_size=8192,
-        best_rq_codebook_dim=16,
-        best_rq_num_books=1,
-        best_rq_in_dim=320,
+        self, best_rq_codebook_size=8192, best_rq_codebook_dim=16, best_rq_num_books=1, best_rq_in_dim=320, **kwargs
     ):
+        super().__init__(**kwargs)
         self.best_rq_codebook_size = best_rq_codebook_size
         self.best_rq_codebook_dim = best_rq_codebook_dim
         self.best_rq_num_books = best_rq_num_books
@@ -83,14 +81,7 @@ class RandomProjectionQuantizer(nn.Module):
         return vector_norm((self.CB.unsqueeze(2) - hidden_states.unsqueeze(2)), dim=-1).argmin(dim=2)
 
 
-class BestRQModel(nn.Module):
-    def __init__(self, config):
-        super().__init__(config)
-        self.rpq = RandomProjectionQuantizer(config)
-        self.classifiers = nn.ModuleList(
-            nn.Linear(config.hidden_size, config.best_rq_codebook_size) for _ in range(config.best_rq_num_books)
-        )
-
+class BestRQMask:
     def _mask_hidden_states(
         self,
         hidden_states: torch.FloatTensor,
@@ -107,6 +98,15 @@ class BestRQModel(nn.Module):
         else:
             raise NotImplementedError("mask_time_indices is required for now")
         return hidden_states
+
+
+class BestRQModel(nn.Module):
+    def __init__(self, config):
+        super().__init__(config)
+        self.rpq = RandomProjectionQuantizer(config)
+        self.classifiers = nn.ModuleList(
+            nn.Linear(config.hidden_size, config.best_rq_codebook_size) for _ in range(config.best_rq_num_books)
+        )
 
     def forward(
         self,
@@ -156,27 +156,27 @@ class BestRQModel(nn.Module):
         )
 
 
-class BestRQTransformerForPreTrainingConfig(Wav2Vec2Config, BestRQConfig):
-    model_type = "bestrq-transformer"
-
-    def __init__(self, **kwargs):
-        super().__init__(**kwargs)
-
-
-# pylint: disable=abstract-method
-class BestRQTransformerForPreTraining(CustomFE, BestRQModel, Wav2Vec2PreTrainedModel):
-    config_class = BestRQTransformerForPreTrainingConfig
-
-    def __init__(self, config: BestRQTransformerForPreTrainingConfig):
-        super().__init__(config)
-        self.wav2vec2 = Wav2Vec2Model(config)
-        del self.wav2vec2.masked_spec_embed
-        self.wav2vec2._mask_hidden_states = self._mask_hidden_states
-        self.post_init()
+# class BestRQTransformerForPreTrainingConfig(Wav2Vec2Config, CustomFEConfig, BestRQConfig):
+#     model_type = "bestrq-transformer"
+#
+#     def __init__(self, **kwargs):
+#         super().__init__(**kwargs)
 
 
-class BestRQTransformerForCTC(Wav2Vec2ForCTC):
-    config_class = BestRQTransformerForPreTrainingConfig
+# # pylint: disable=abstract-method
+# class BestRQTransformerForPreTraining(CustomFE, BestRQModel, Wav2Vec2PreTrainedModel):
+#     config_class = BestRQTransformerForPreTrainingConfig
+#
+#     def __init__(self, config: BestRQTransformerForPreTrainingConfig):
+#         super().__init__(config)
+#         self.wav2vec2 = Wav2Vec2Model(config)
+#         del self.wav2vec2.masked_spec_embed
+#         self.wav2vec2._mask_hidden_states = self._mask_hidden_states
+#         self.post_init()
+#
+#
+# class BestRQTransformerForCTC(Wav2Vec2ForCTC):
+#     config_class = BestRQTransformerForPreTrainingConfig
 
 
 class BestRQEBranchformerForPreTrainingConfig(Wav2Vec2EBranchformerConfig, BestRQConfig):
@@ -186,15 +186,20 @@ class BestRQEBranchformerForPreTrainingConfig(Wav2Vec2EBranchformerConfig, BestR
         super().__init__(**kwargs)
 
 
+class BestRQEBranchformerModel(BestRQMask, Wav2Vec2EBranchformerModel):
+    pass
+
+
 # pylint: disable=abstract-method
-class BestRQEBranchformerForPreTraining(CustomFE, BestRQModel, Wav2Vec2PreTrainedModel):
+class BestRQEBranchformerForPreTraining(BestRQModel, Wav2Vec2PreTrainedModel):
     config_class = BestRQEBranchformerForPreTrainingConfig
 
     def __init__(self, config: BestRQEBranchformerForPreTrainingConfig):
-        super().__init__(config)
-        self.wav2vec2 = Wav2Vec2EBranchformerModel(config)
-        del self.wav2vec2.masked_spec_embed
-        self.wav2vec2._mask_hidden_states = self._mask_hidden_states
+        Wav2Vec2PreTrainedModel.__init__(self, config)
+        BestRQModel.__init__(self, config)
+        self.wav2vec2 = BestRQEBranchformerModel(config)
+
+        # Initialize weights and apply final processing
         self.post_init()
 
 

@@ -34,7 +34,6 @@ class ModelArguments:
     average_checkpoints: Optional[bool] = field(default=False, metadata={"help": "Whether to average checkpoints."})
 
     """Model architecture related arguments."""
-    expect_2d_input: Optional[bool] = field(default=False, metadata={"help": "Whether to expect 2d input for encoder."})
     ctc_weight: Optional[float] = field(default=0, metadata={"help": "Weight of CTC loss."})
     lsm_factor: Optional[float] = field(default=0, metadata={"help": "Label smoothing coefficient for CE loss."})
     shared_lm_head: Optional[bool] = field(default=False, metadata={"help": "Whether to share LM head params."})

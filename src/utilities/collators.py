@@ -182,7 +182,7 @@ class DataCollatorForWav2Vec2Pretraining:
             else batch[self.feature_extractor.model_input_names[0]].shape[-1]
         )
         # pylint: disable=no-member
-        mask_indices_seq_length = self.model._get_feat_extract_output_lengths(input_len)
+        mask_indices_seq_length = self.model.base_model._get_feat_extract_output_lengths(input_len)
         # make sure masked sequence length is a Python scalar
         mask_indices_seq_length = int(mask_indices_seq_length)
 
@@ -190,7 +190,7 @@ class DataCollatorForWav2Vec2Pretraining:
         if batch.get("attention_mask") is not None:
             # compute real output lengths according to convolution formula
             # pylint: disable=no-member
-            batch["sub_attention_mask"] = self.model._get_feature_vector_attention_mask(
+            batch["sub_attention_mask"] = self.model.base_model._get_feature_vector_attention_mask(
                 mask_indices_seq_length, batch["attention_mask"]
             )
 
