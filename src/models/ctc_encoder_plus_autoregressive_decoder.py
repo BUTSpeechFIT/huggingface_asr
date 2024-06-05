@@ -6,6 +6,8 @@ from torch import nn
 from torch.nn import CrossEntropyLoss
 from transformers import (
     AutoConfig,
+    AutoModelForCausalLM,
+    AutoModelForCTC,
     GenerationConfig,
     PretrainedConfig,
     PreTrainedModel,
@@ -23,7 +25,8 @@ from transformers.utils import logging
 
 from decoding.ctc_scorer import CTCRescorerLogitsProcessor, LogSoftmaxProcessor
 from decoding.shallow_fussion import LMRescorerLogitsProcessor
-from models.auto_wrappers import CustomAutoModelForCTC, CustomModelForCausalLM
+
+# from models.auto_wrappers import CustomAutoModelForCTC, CustomModelForCausalLM
 from models.decoders.multi_head_gpt2 import GPT2LMMultiHeadModel, GPT2MultiHeadConfig
 from models.decoders.multi_head_gpt2_mixing import (
     GPT2LMMultiHeadModelMixing,
@@ -39,18 +42,6 @@ from models.encoders.e_branchformer import (
 )
 
 logger = logging.get_logger("transformers")
-
-AutoConfig.register("gpt2-multi-head", GPT2MultiHeadConfig)
-CustomModelForCausalLM.register(GPT2MultiHeadConfig, GPT2LMMultiHeadModel)
-
-AutoConfig.register("gpt2-multi-head-mixing", GPT2MultiHeadMixingConfig)
-CustomModelForCausalLM.register(GPT2MultiHeadMixingConfig, GPT2LMMultiHeadModelMixing)
-
-AutoConfig.register("gpt2-residuals-head", GPT2ResidualsLMHeadConfig)
-CustomModelForCausalLM.register(GPT2ResidualsLMHeadConfig, GPT2ResidualsLMHeadModel)
-
-AutoConfig.register("wav2vec2-ebranchformer", Wav2Vec2EBranchformerConfig)
-CustomAutoModelForCTC.register(Wav2Vec2EBranchformerConfig, Wav2Vec2EBranchformerForCTC)
 
 
 def wav2vec2_forward_hidden_return_hook(_: PreTrainedModel, __: Any, kwargs):
@@ -69,7 +60,7 @@ class Seq2SeqLMOutputLosses(Seq2SeqLMOutput):
     encoder_logits: Optional[torch.FloatTensor] = None
 
 
-def wav2vec2_for_ctc_forward_hook(model: CustomAutoModelForCTC, input: Any, output: CausalLMOutput):
+def wav2vec2_for_ctc_forward_hook(model: AutoModelForCTC, input: Any, output: CausalLMOutput):
     if "hidden_states" in output:
         output.last_hidden_state = output.hidden_states[-1]
 
@@ -109,11 +100,11 @@ class JointCTCAttentionEncoderDecoder(SpeechEncoderDecoderModel):
         super(SpeechEncoderDecoderModel, self).__init__(config)
 
         if encoder is None:
-            encoder = CustomAutoModelForCTC.from_config(config.encoder)
+            encoder = AutoModelForCTC.from_config(config.encoder)
         encoder.register_forward_hook(wav2vec2_for_ctc_forward_hook)
         encoder.register_forward_pre_hook(wav2vec2_forward_hidden_return_hook, with_kwargs=True)
         if decoder is None:
-            decoder = CustomModelForCausalLM.from_config(config.decoder)
+            decoder = AutoModelForCausalLM.from_config(config.decoder)
 
         self.encoder = encoder
         self.decoder = decoder
@@ -207,7 +198,7 @@ class JointCTCAttentionEncoderDecoder(SpeechEncoderDecoderModel):
 
                 kwargs_encoder["config"] = encoder_config
 
-            encoder = CustomAutoModelForCTC.from_pretrained(
+            encoder = AutoModelForCTC.from_pretrained(
                 encoder_pretrained_model_name_or_path, *model_args, **kwargs_encoder
             )
             encoder.register_forward_hook(wav2vec2_for_ctc_forward_hook)
@@ -245,7 +236,7 @@ class JointCTCAttentionEncoderDecoder(SpeechEncoderDecoderModel):
                     "`decoder_config` to `.from_encoder_decoder_pretrained(...)`"
                 )
 
-            decoder = CustomModelForCausalLM.from_pretrained(decoder_pretrained_model_name_or_path, **kwargs_decoder)
+            decoder = AutoModelForCausalLM.from_pretrained(decoder_pretrained_model_name_or_path, **kwargs_decoder)
 
         # instantiate config with corresponding kwargs
         config = JointCTCAttentionEncoderDecoderConfig.from_encoder_decoder_configs(
