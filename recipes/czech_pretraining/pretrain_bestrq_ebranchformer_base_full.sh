@@ -9,7 +9,7 @@
 #SBATCH --mem=0G
 #SBATCH --time=2-00:00:00
 
-EXPERIMENT="bestrq_ebranchformer_97M_full_cz_v2"
+EXPERIMENT="bestrq_ebranchformer_97M_full_cz_v5"
 SRC_DIR="/project/${EC_PROJECT}/ipoloka/huggingface_asr"
 WORK_DIR="/scratch/${EC_PROJECT}/ipoloka/huggingface_asr"
 RECIPE_DIR="${SRC_DIR}/recipes/czech_pretraining"
@@ -96,7 +96,6 @@ args=(
   # Model related arguments
   --feature_extractor_name="Lakoc/log_80mel_extractor_16k"
   --base_encoder_model="Lakoc/bestrq_ebranchformer_12_512h_2d"
-  --expect_2d_input
 )
 
 srun --unbuffered --kill-on-bad-exit singularity exec --bind /usr/sbin:/usr/sbin $SIFPYTORCH \

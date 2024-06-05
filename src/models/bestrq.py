@@ -11,10 +11,7 @@ from torch import Tensor, nn
 from torch.linalg import vector_norm
 from transformers.configuration_utils import PretrainedConfig
 from transformers.models.wav2vec2.modeling_wav2vec2 import (
-    Wav2Vec2Config,
-    Wav2Vec2ForCTC,
     Wav2Vec2ForPreTrainingOutput,
-    Wav2Vec2Model,
     Wav2Vec2PreTrainedModel,
 )
 from transformers.utils import logging
@@ -24,7 +21,6 @@ from models.encoders.e_branchformer import (
     Wav2Vec2EBranchformerForCTC,
     Wav2Vec2EBranchformerModel,
 )
-from models.extractors import CustomFE, CustomFEConfig
 
 logger = logging.get_logger(__name__)
 
@@ -187,7 +183,9 @@ class BestRQEBranchformerForPreTrainingConfig(Wav2Vec2EBranchformerConfig, BestR
 
 
 class BestRQEBranchformerModel(BestRQMask, Wav2Vec2EBranchformerModel):
-    pass
+    def __init__(self, config: BestRQEBranchformerForPreTrainingConfig):
+        super().__init__(config)
+        del self.masked_spec_embed
 
 
 # pylint: disable=abstract-method
