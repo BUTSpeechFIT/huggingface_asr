@@ -9,7 +9,7 @@
 #SBATCH --mem=0G
 #SBATCH --time=2-00:00:00
 
-EXPERIMENT="bestrq_ebranchformer_97M_full_cz_v5"
+EXPERIMENT="bestrq_ebranchformer_97M"
 SRC_DIR="/project/${EC_PROJECT}/ipoloka/huggingface_asr"
 WORK_DIR="/scratch/${EC_PROJECT}/ipoloka/huggingface_asr"
 RECIPE_DIR="${SRC_DIR}/recipes/czech_pretraining"
@@ -17,15 +17,25 @@ EXPERIMENT_PATH="${WORK_DIR}/experiments/${EXPERIMENT}"
 
 module load LUMI partition/G PyTorch/2.2.0-rocm-5.6.1-python-3.10-singularity-20240209
 
-#export CXI_FORK_SAFE=1
-#export CXI_FORK_SAFE_HP=1
+# We need to set this to avoid "Cassini Event Queue overflow detected." errors.
+export OMP_NUM_THREADS=7
+
+export MPICH_GPU_SUPPORT_ENABLED=1
+export NCCL_SOCKET_IFNAME=hsn
+export NCCL_NET_GDR_LEVEL=3
+export CXI_FORK_SAFE=1
+export CXI_FORK_SAFE_HP=1
+export FI_CXI_DISABLE_CQ_HUGETLB=1
 
 # We need to set this to avoid "Cassini Event Queue overflow detected." errors.
 export FI_CXI_DEFAULT_CQ_SIZE=131072
-export OMP_NUM_THREADS=16
 
 export ROCM_PATH=/opt/rocm
 export SINGULARITYENV_LD_LIBRARY_PATH=/usr/local/lib:/opt/cray/libfabric/1.15.2.0/lib64
+
+# Try playing with max_split_size_mb if you run into OOM errors.
+export PYTORCH_HIP_ALLOC_CONF=max_split_size_mb:512
+
 
 
 export HF_HOME="/scratch/${EC_PROJECT}/ipoloka/hf_cache"
@@ -41,9 +51,9 @@ args=(
   # General training arguments
   --output_dir="${EXPERIMENT_PATH}"
   --per_device_train_batch_size="48"
-  --per_device_eval_batch_size="32"
+  --per_device_eval_batch_size="64"
   --num_train_epochs="5"
-  --group_by_length="True"
+  --group_by_length="False"
   --do_train
   --do_evaluate
   --load_best_model_at_end
@@ -52,15 +62,14 @@ args=(
 
    # Data loader params
   --dataloader_num_workers="7"
-  --dataloader_prefetch_factor="2"
+  --dataloader_prefetch_factor="4"
   --dataloader_pin_memory="False"
   --dataloader_persistent_workers="True"
-  --use_start_method_spawn
 
   # Optimizer related arguments
   --optim="adamw_torch"
   --learning_rate="2e-3"
-  --warmup_steps="5000"
+  --warmup_steps="20000"
   --early_stopping_patience="3"
   --weight_decay="1e-6"
   --max_grad_norm="1.0"
@@ -98,5 +107,8 @@ args=(
   --base_encoder_model="Lakoc/bestrq_ebranchformer_12_512h_2d"
 )
 
-srun --unbuffered --kill-on-bad-exit singularity exec --bind /usr/sbin:/usr/sbin $SIFPYTORCH \
+c=fe
+MYMASKS="0x${c}000000000000,0x${c}00000000000000,0x${c}0000,0x${c}000000,0x${c},0x${c}00,0x${c}00000000,0x${c}0000000000"
+
+srun --kill-on-bad-exit --cpu-bind=mask_cpu:$MYMASKS  singularity exec --bind /usr/sbin:/usr/sbin $SIFPYTORCH \
 "${SRC_DIR}/cluster_utilities/LUMI/start_multinode_job_inside_env_pure_python.sh"  src/trainers/pretrain.py "${args[@]}"
