@@ -91,18 +91,17 @@ class CustomFE:
             return torch.div(input_length - kernel_size, stride, rounding_mode="floor") + 1
 
         # pylint: disable=no-member
-        for kernel_size, stride in zip(self.config.conv_kernel, self.config.conv_stride):
+        for kernel_size, stride, conv_padding in zip(
+            self.config.conv_kernel, self.config.conv_stride, self.config.conv_padding
+        ):
             input_lengths = _conv_out_length(
                 # pylint: disable=no-member
-                input_lengths + 2 * self.config.conv_padding[0],
+                input_lengths + (kernel_size - 1 if self.config.is_causal else 2 * conv_padding),
                 kernel_size,
                 stride,
             )
 
         if add_adapter:
-            # pylint: disable=no-member
-            for _ in range(self.config.num_adapter_layers):
-                # pylint: disable=no-member
-                input_lengths = _conv_out_length(input_lengths, 1, self.config.adapter_stride)
+            raise NotImplementedError("Adapter layers are not implemented yet.")
 
         return input_lengths

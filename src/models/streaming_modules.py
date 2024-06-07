@@ -34,7 +34,7 @@ class CausalConv2d(nn.Conv2d):
         stride = _pair(stride)
         dilation = _pair(dilation)
         if padding is None:
-            padding = (int((kernel_size[0] - 1) * dilation[0]), 0)
+            padding = (int((kernel_size[0] - 1) * dilation[0]), padding)
         else:
             padding = padding * 2
         self.left_padding = _pair(padding)
