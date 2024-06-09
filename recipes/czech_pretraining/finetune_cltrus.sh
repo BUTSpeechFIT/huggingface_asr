@@ -3,13 +3,13 @@
 #SBATCH --gpus-per-node=2
 #SBATCH --tasks-per-node=2
 #SBATCH --cpus-per-task=7
-#SBATCH --output="outputs/czech_pretraining/output_finetune_%x_%j.out"
-#SBATCH --error="outputs/czech_pretraining/output_finetune_%x_%j.err"
-#SBATCH --partition=standard-g
+#SBATCH --output="outputs/czech_pretraining/output_%x_%j.out"
+#SBATCH --error="outputs/czech_pretraining/output_%x_%j.err"
+#SBATCH --partition=small-g
 #SBATCH --mem=120G
 #SBATCH --time=24:00:00
 
-EXPERIMENT="cltrus"
+EXPERIMENT="cltrus_v2"
 SRC_DIR="/project/${EC_PROJECT}/ipoloka/huggingface_asr"
 WORK_DIR="/scratch/${EC_PROJECT}/ipoloka/huggingface_asr"
 RECIPE_DIR="${SRC_DIR}/recipes/czech_pretraining"
@@ -39,8 +39,8 @@ cd $SRC_DIR || exit
 args=(
   # General training arguments
   --output_dir="${EXPERIMENT_PATH}"
-  --per_device_train_batch_size="64"
-  --per_device_eval_batch_size="16"
+  --per_device_train_batch_size="32"
+  --per_device_eval_batch_size="8"
   --num_train_epochs="20"
   --group_by_length="True"
   --bf16
@@ -61,7 +61,7 @@ args=(
   --weight_decay="1e-6"
   --max_grad_norm="1.0"
   --lsm_factor="0.1"
-  --gradient_accumulation_steps="1"
+  --gradient_accumulation_steps="2"
 
   # Logging, saving and evaluation related arguments
   --report_to="wandb"

@@ -87,7 +87,7 @@ if __name__ == "__main__":
             dataset=dataset,
             model=model,
             tokenizer=tokenizer,
-            gen_args=None,
+            gen_args=gen_args,
             data_args=data_args,
             training_args=training_args,
         )
