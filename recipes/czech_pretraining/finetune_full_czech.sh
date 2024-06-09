@@ -91,7 +91,6 @@ args=(
   --tokenizer_name="Lakoc/uni500_cz"
   --feature_extractor_name="Lakoc/log_80mel_extractor_16k"
   --from_pretrained="/scratch/project_465000836/ipoloka/huggingface_asr/experiments/bestrq_ebranchformer_97M_full_cz_v7/checkpoint-110000"
-  --expect_2d_input
 
   # Generation related arguments
   --num_beams="1"
