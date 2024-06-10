@@ -272,21 +272,33 @@ class BestRQEBranchformerForCTCWithPreTraining(BestRQModel, Wav2Vec2PreTrainedMo
             return_dict=return_dict,
         )
 
-        outputs_masked = self.wav2vec2(
-            input_values,
-            attention_mask=attention_mask,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            mask_time_indices=mask_time_indices,
-            return_dict=return_dict,
-        )
+        loss = None
+        if labels is not None:
+            outputs_masked = self.wav2vec2(
+                input_values,
+                attention_mask=attention_mask,
+                output_attentions=output_attentions,
+                output_hidden_states=output_hidden_states,
+                mask_time_indices=mask_time_indices,
+                return_dict=return_dict,
+            )
+
+            targets = self.rpq(input_values.view((*mask_time_indices.shape[:2], -1)))
+            targets = targets.masked_fill(~mask_time_indices[:, None, ...], -100)
+
+            last_hidden_states = outputs_masked[0]
+            probs = torch.stack([classifier(last_hidden_states) for classifier in self.classifiers], dim=1)
+            loss = (
+                nn.functional.cross_entropy(probs.flatten(0, 1).transpose(1, 2), targets.flatten(0, 1), reduction="sum")
+                / probs.size(1)
+                / mask_time_indices.sum()
+            )
 
         hidden_states = outputs[0]
         hidden_states = self.dropout(hidden_states)
 
         logits = self.lm_head(hidden_states)
 
-        loss = None
         if labels is not None:
             if labels.max() >= self.config.vocab_size:
                 raise ValueError(f"Label values must be <= vocab_size: {self.config.vocab_size}")
@@ -307,7 +319,7 @@ class BestRQEBranchformerForCTCWithPreTraining(BestRQModel, Wav2Vec2PreTrainedMo
             log_probs = nn.functional.log_softmax(logits, dim=-1, dtype=torch.float32).transpose(0, 1)
 
             with torch.backends.cudnn.flags(enabled=False):
-                loss = nn.functional.ctc_loss(
+                loss += nn.functional.ctc_loss(
                     log_probs,
                     flattened_targets,
                     input_lengths,
@@ -316,17 +328,6 @@ class BestRQEBranchformerForCTCWithPreTraining(BestRQModel, Wav2Vec2PreTrainedMo
                     reduction=self.config.ctc_loss_reduction,
                     zero_infinity=self.config.ctc_zero_infinity,
                 )
-
-        targets = self.rpq(input_values.view((*mask_time_indices.shape[:2], -1)))
-        targets = targets.masked_fill(~mask_time_indices[:, None, ...], -100)
-
-        last_hidden_states = outputs_masked[0]
-        probs = torch.stack([classifier(last_hidden_states) for classifier in self.classifiers], dim=1)
-        loss += (
-            nn.functional.cross_entropy(probs.flatten(0, 1).transpose(1, 2), targets.flatten(0, 1), reduction="sum")
-            / probs.size(1)
-            / mask_time_indices.sum()
-        )
 
         if not return_dict:
             output = (logits,) + outputs[_HIDDEN_STATES_START_POSITION:]

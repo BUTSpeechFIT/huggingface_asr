@@ -1,15 +1,15 @@
 #!/usr/bin/bash
 #SBATCH --nodes=1
-#SBATCH --gpus-per-node=2
-#SBATCH --tasks-per-node=2
+#SBATCH --gpus-per-node=4
+#SBATCH --tasks-per-node=4
 #SBATCH --cpus-per-task=7
 #SBATCH --output="outputs/czech_pretraining/output_%x_%j.out"
 #SBATCH --error="outputs/czech_pretraining/output_%x_%j.err"
 #SBATCH --partition=small-g
-#SBATCH --mem=120G
-#SBATCH --time=24:00:00
+#SBATCH --mem=240G
+#SBATCH --time=2-00:00:00
 
-EXPERIMENT="bestrq_ebranchformer_90M_from_scratch_w_pretraining"
+EXPERIMENT="bestrq_ebranchformer_90M_from_scratch_w_pretraining_improved"
 SRC_DIR="/project/${EC_PROJECT}/ipoloka/huggingface_asr"
 WORK_DIR="/scratch/${EC_PROJECT}/ipoloka/huggingface_asr"
 RECIPE_DIR="${SRC_DIR}/recipes/czech_pretraining"
@@ -39,7 +39,7 @@ cd $SRC_DIR || exit
 args=(
   # General training arguments
   --output_dir="${EXPERIMENT_PATH}"
-  --per_device_train_batch_size="48"
+  --per_device_train_batch_size="24"
   --per_device_eval_batch_size="32"
   --num_train_epochs="20"
   --group_by_length="True"
