@@ -1,4 +1,4 @@
-from typing import Callable, Dict, List, Optional, Tuple, Union
+from typing import Any, Callable, Dict, List, Optional, Tuple, Union
 
 import torch
 from torch import nn
@@ -107,7 +107,7 @@ class SSLTrainer(Trainer):
 
         self.can_return_loss = True
         self.metadata = {"train": {}, "eval": {}}
-        self.prev_loss = None
+        self.grad_norm_thr = 100
 
     def compute_loss(self, model, inputs, return_outputs=False):
         """
@@ -152,15 +152,27 @@ class SSLTrainer(Trainer):
             self.metadata[stats_object][key] += additional_stats[key]
         loss /= num_losses.sum()
 
-        if self.state.global_step > self.args.warmup_steps and self.prev_loss is not None and loss > 4 * self.prev_loss:
-            logger.warning(
-                f"Training loss ({loss}) is much larger than previous loss ({self.prev_loss})."
-                "You may want to check your training data or consider clipping gradients."
-            )
-            loss -= loss
-        else:
-            self.prev_loss = loss
         return (loss, outputs) if return_outputs else loss
+
+    def get_grad_norm(self, model: nn.Module) -> torch.Tensor:
+        total_norm = 0
+        for p in model.parameters():
+            param_norm = p.grad.detach().data.norm(2)
+            total_norm += param_norm.item() ** 2
+        total_norm = total_norm**0.5
+        return total_norm
+
+    def training_step(self, model: nn.Module, inputs: Dict[str, Union[torch.Tensor, Any]]) -> torch.Tensor:
+        # pylint: disable=no-member
+        loss = super().training_step(model, inputs)
+
+        total_norm = self.get_grad_norm(model)
+        if total_norm > self.grad_norm_thr:
+            logger.warning(f"Gradient norm: {total_norm}, loss: {loss.item()}")
+
+            self.optimizer.zero_grad()
+            loss -= loss
+        return loss
 
     def gather_additional_statistics(self, inputs, outputs):
         additional_logs = {}
