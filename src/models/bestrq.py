@@ -10,7 +10,9 @@ import torch.utils.checkpoint
 from torch import Tensor, nn
 from torch.linalg import vector_norm
 from transformers.configuration_utils import PretrainedConfig
+from transformers.modeling_outputs import CausalLMOutput
 from transformers.models.wav2vec2.modeling_wav2vec2 import (
+    _HIDDEN_STATES_START_POSITION,
     Wav2Vec2ForPreTrainingOutput,
     Wav2Vec2PreTrainedModel,
 )
@@ -91,8 +93,6 @@ class BestRQMask:
         """
         if mask_time_indices is not None:
             hidden_states[mask_time_indices] = hidden_states[mask_time_indices].normal_(mean=0, std=std)
-        else:
-            raise NotImplementedError("mask_time_indices is required for now")
         return hidden_states
 
 
@@ -203,3 +203,135 @@ class BestRQEBranchformerForPreTraining(BestRQModel, Wav2Vec2PreTrainedModel):
 
 class BestRQEBranchformerForCTC(Wav2Vec2EBranchformerForCTC):
     config_class = BestRQEBranchformerForPreTrainingConfig
+
+
+class BestRQEBranchformerForCTCWithPreTrainingConfig(Wav2Vec2EBranchformerConfig, BestRQConfig):
+    model_type = "bestrq-ebranchformer-enhanced"
+
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+
+
+class BestRQEBranchformerForCTCWithPreTraining(BestRQModel, Wav2Vec2PreTrainedModel):
+    config_class = BestRQEBranchformerForCTCWithPreTrainingConfig
+
+    def __init__(self, config: BestRQEBranchformerForPreTrainingConfig):
+        Wav2Vec2PreTrainedModel.__init__(self, config)
+        BestRQModel.__init__(self, config)
+        self.wav2vec2 = BestRQEBranchformerModel(config)
+
+        # Initialize weights and apply final processing
+        self.post_init()
+
+        self.dropout = nn.Dropout(config.final_dropout)
+
+        if config.vocab_size is None:
+            raise ValueError(
+                f"You are trying to instantiate {self.__class__} with a configuration that "
+                "does not define the vocabulary size of the language model head. Please "
+                "instantiate the model as follows: `Wav2Vec2ForCTC.from_pretrained(..., vocab_size=vocab_size)`. "
+                "or define `vocab_size` of your model's configuration."
+            )
+        output_hidden_size = (
+            config.output_hidden_size if hasattr(config, "add_adapter") and config.add_adapter else config.hidden_size
+        )
+        self.lm_head = nn.Linear(output_hidden_size, config.vocab_size)
+
+        # Initialize weights and apply final processing
+        self.post_init()
+
+    def forward(
+        self,
+        input_values: Optional[torch.Tensor],
+        attention_mask: Optional[torch.Tensor] = None,
+        mask_time_indices: Optional[torch.BoolTensor] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
+        labels: Optional[torch.Tensor] = None,
+    ) -> Union[Tuple, CausalLMOutput]:
+        r"""
+        labels (`torch.LongTensor` of shape `(batch_size, target_length)`, *optional*):
+            Labels for connectionist temporal classification. Note that `target_length` has to be smaller or equal to
+            the sequence length of the output logits. Indices are selected in `[-100, 0, ..., config.vocab_size - 1]`.
+            All labels set to `-100` are ignored (masked), the loss is only computed for labels in `[0, ...,
+            config.vocab_size - 1]`.
+        """
+
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+
+        if mask_time_indices is not None:
+            mask_time_indices = mask_time_indices.to(torch.bool)
+
+        outputs = self.wav2vec2(
+            input_values,
+            attention_mask=attention_mask,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            mask_time_indices=None,
+            return_dict=return_dict,
+        )
+
+        outputs_masked = self.wav2vec2(
+            input_values,
+            attention_mask=attention_mask,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            mask_time_indices=mask_time_indices,
+            return_dict=return_dict,
+        )
+
+        hidden_states = outputs[0]
+        hidden_states = self.dropout(hidden_states)
+
+        logits = self.lm_head(hidden_states)
+
+        loss = None
+        if labels is not None:
+            if labels.max() >= self.config.vocab_size:
+                raise ValueError(f"Label values must be <= vocab_size: {self.config.vocab_size}")
+
+            # retrieve loss input_lengths from attention_mask
+            attention_mask = (
+                attention_mask if attention_mask is not None else torch.ones_like(input_values, dtype=torch.long)
+            )
+            input_lengths = self._get_feat_extract_output_lengths(attention_mask.sum(-1)).to(torch.long)
+
+            # assuming that padded tokens are filled with -100
+            # when not being attended to
+            labels_mask = labels >= 0
+            target_lengths = labels_mask.sum(-1)
+            flattened_targets = labels.masked_select(labels_mask)
+
+            # ctc_loss doesn't support fp16
+            log_probs = nn.functional.log_softmax(logits, dim=-1, dtype=torch.float32).transpose(0, 1)
+
+            with torch.backends.cudnn.flags(enabled=False):
+                loss = nn.functional.ctc_loss(
+                    log_probs,
+                    flattened_targets,
+                    input_lengths,
+                    target_lengths,
+                    blank=self.config.pad_token_id,
+                    reduction=self.config.ctc_loss_reduction,
+                    zero_infinity=self.config.ctc_zero_infinity,
+                )
+
+        targets = self.rpq(input_values.view((*mask_time_indices.shape[:2], -1)))
+        targets = targets.masked_fill(~mask_time_indices[:, None, ...], -100)
+
+        last_hidden_states = outputs_masked[0]
+        probs = torch.stack([classifier(last_hidden_states) for classifier in self.classifiers], dim=1)
+        loss += (
+            nn.functional.cross_entropy(probs.flatten(0, 1).transpose(1, 2), targets.flatten(0, 1), reduction="sum")
+            / probs.size(1)
+            / mask_time_indices.sum()
+        )
+
+        if not return_dict:
+            output = (logits,) + outputs[_HIDDEN_STATES_START_POSITION:]
+            return ((loss,) + output) if loss is not None else output
+
+        return CausalLMOutput(
+            loss=loss, logits=logits, hidden_states=outputs.hidden_states, attentions=outputs.attentions
+        )

@@ -26,7 +26,7 @@ from transformers.models.wav2vec2_conformer.modeling_wav2vec2_conformer import (
 from transformers.utils import logging
 
 from models.extractors import CustomFE, CustomFEConfig
-from models.streaming_modules import CausalConv1d, FeatureExtractorForStreaming
+from models.streaming_modules import CausalConv1d
 
 logger = logging.get_logger(__name__)
 

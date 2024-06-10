@@ -148,7 +148,9 @@ class DataCollatorForWav2Vec2Pretraining:
     mask_time_prob: Optional[float] = 0.65
     mask_time_length: Optional[int] = 10
     sampling_rate: Optional[int] = 16_000
+    tokenizer: PreTrainedTokenizer = None
     audio_path: str = None
+    text_path: str = None
     model_input_name: str = ""
     min_masks: int = 2
 
@@ -172,6 +174,16 @@ class DataCollatorForWav2Vec2Pretraining:
             pad_to_multiple_of=self.pad_to_multiple_of,
             return_tensors="pt",
         )
+
+        if self.tokenizer is not None and self.text_path is not None:
+            labels = self.tokenizer.batch_encode_plus(
+                [feature[self.text_path] for feature in features],
+                return_attention_mask=True,
+                padding="longest",
+                return_tensors="pt",
+            )
+            labels = labels["input_ids"].masked_fill(labels.attention_mask.ne(1), -100)
+            batch["labels"] = labels
 
         device = batch[self.feature_extractor.model_input_names[0]].device
         batch_size = batch[self.feature_extractor.model_input_names[0]].shape[0]
