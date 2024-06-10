@@ -9,7 +9,7 @@
 #SBATCH --mem=0G
 #SBATCH --time=2-00:00:00
 
-EXPERIMENT="bestrq_ebranchformer_97M"
+EXPERIMENT="bestrq_ebranchformer_97M_flash"
 SRC_DIR="/project/${EC_PROJECT}/ipoloka/huggingface_asr"
 WORK_DIR="/scratch/${EC_PROJECT}/ipoloka/huggingface_asr"
 RECIPE_DIR="${SRC_DIR}/recipes/czech_pretraining"
@@ -91,7 +91,7 @@ args=(
   --length_column_name="input_len"
   --remove_unused_columns="False"
   --preprocessing_num_workers="16"
-  --dataset_name="/scratch/project_465000836/szoke/huggingface_cache/dataset_dump"
+  --dataset_name="/flash/project_465000836/szoke/huggingface_cache/dataset_dump"
   --load_pure_dataset_only
   --writer_batch_size="200"
   --pad_to_multiples_of="100"
