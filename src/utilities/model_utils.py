@@ -25,6 +25,8 @@ from decoding.config import GenerationConfigCustom
 from models.auto_wrappers import CustomModelForCausalLM
 from models.bestrq import (  # BestRQTransformerForCTC,; BestRQTransformerForPreTraining,; BestRQTransformerForPreTrainingConfig,
     BestRQEBranchformerForCTC,
+    BestRQEBranchformerForCTCWithPreTraining,
+    BestRQEBranchformerForCTCWithPreTrainingConfig,
     BestRQEBranchformerForPreTraining,
     BestRQEBranchformerForPreTrainingConfig,
 )
@@ -58,6 +60,10 @@ AutoModelForPreTraining.register(Wav2Vec2EBranchformerConfig, Wav2Vec2EBranchfor
 AutoConfig.register("bestrq-ebranchformer", BestRQEBranchformerForPreTrainingConfig)
 AutoModelForCTC.register(BestRQEBranchformerForPreTrainingConfig, BestRQEBranchformerForCTC)
 AutoModelForPreTraining.register(BestRQEBranchformerForPreTrainingConfig, BestRQEBranchformerForPreTraining)
+
+
+AutoConfig.register("bestrq-ebranchformer-enhanced", BestRQEBranchformerForCTCWithPreTrainingConfig)
+AutoModelForCTC.register(BestRQEBranchformerForCTCWithPreTrainingConfig, BestRQEBranchformerForCTCWithPreTraining)
 
 
 def average_checkpoints(experiment_dir: str) -> str:
