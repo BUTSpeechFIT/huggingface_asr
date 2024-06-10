@@ -1,6 +1,6 @@
 [
   {
-    "dataset_name": "mozilla-foundation/common_voice_13",
+    "dataset_name": "mozilla-foundation/common_voice_13_0",
     "dataset_id": "common_voice_13_en",
     "load_from_disk": false,
     "train_splits": [
