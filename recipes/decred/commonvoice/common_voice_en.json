@@ -1,8 +1,8 @@
 [
   {
-    "dataset_name": "mozilla-foundation/common_voice_13_0",
+    "dataset_name": "/scratch/project_465000836/ipoloka/cv13_en",
     "dataset_id": "common_voice_13_en",
-    "load_from_disk": false,
+    "load_from_disk": true,
     "train_splits": [
       "train"
     ],
