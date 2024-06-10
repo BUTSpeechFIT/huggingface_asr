@@ -107,7 +107,7 @@ class SSLTrainer(Trainer):
 
         self.can_return_loss = True
         self.metadata = {"train": {}, "eval": {}}
-        self.grad_norm_thr = 100
+        self.grad_norm_thr = 10
 
     def compute_loss(self, model, inputs, return_outputs=False):
         """
@@ -170,7 +170,7 @@ class SSLTrainer(Trainer):
         if total_norm > self.grad_norm_thr:
             logger.warning(f"Gradient norm: {total_norm}, loss: {loss.item()}")
 
-            self.optimizer.zero_grad()
+            self.optimizer.zero_grad(set_to_none=True)
             loss -= loss
         return loss
 
