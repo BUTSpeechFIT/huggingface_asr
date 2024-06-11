@@ -9,7 +9,7 @@
 #SBATCH --mem=120G
 #SBATCH --time=2-00:00:00
 
-EXPERIMENT="ED_small_cv"
+EXPERIMENT="ED_small_cv_higher_lr"
 SRC_DIR="/project/${EC_PROJECT}/ipoloka/huggingface_asr"
 WORK_DIR="/scratch/${EC_PROJECT}/ipoloka/huggingface_asr"
 RECIPE_DIR="${SRC_DIR}/recipes/decred/commonvoice"
@@ -29,7 +29,7 @@ export SINGULARITYENV_LD_LIBRARY_PATH=/usr/local/lib:/opt/cray/libfabric/1.15.2.
 
 export HF_HOME="/scratch/${EC_PROJECT}/ipoloka/hf_cache"
 export PYTHONPATH="${PYTHONPATH}:${SRC_DIR}/src"
-export WANDB_PROJECT="ed_commonvoice_en"
+export WANDB_PROJECT="decred_commonvoice_en"
 export WANDB_RUN_ID="${EXPERIMENT}"
 export WANDB_ENTITY="butspeechfit"
 
@@ -40,14 +40,15 @@ args=(
   # General training arguments
   --output_dir=$EXPERIMENT_PATH
   --per_device_train_batch_size="256"
-  --per_device_eval_batch_size="256"
-  --num_train_epochs="20"
+  --per_device_eval_batch_size="128"
+  --num_train_epochs="50"
   --group_by_length="True"
   --bf16
   --do_train
   --do_evaluate
   --load_best_model_at_end
   --eval_delay="5"
+  --push_to_hub_final_model
 
    # Data loader params
   --dataloader_num_workers="6"
@@ -55,7 +56,7 @@ args=(
 
   # Optimizer related arguments
   --optim="adamw_torch"
-  --learning_rate="2e-3"
+  --learning_rate="4e-3"
   --warmup_steps="10000"
   --early_stopping_patience="5"
   --weight_decay="1e-6"
