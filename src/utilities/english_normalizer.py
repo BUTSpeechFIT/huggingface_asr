@@ -1800,6 +1800,8 @@ class EnglishNormalizer(EnglishTextNormalizer):
         # map all hesitations to a single token
         s = re.sub(self.ignore_patterns, "[hesitation]", s)
 
+        s = re.sub(r"(\[hesitation\])(-\[hesitation\])+", "[hesitation]", s)  # remove multiple hesitations
+
         # clean wsj specific stuff
         for key, value in self.wsj_mapping.items():
             s = s.replace(key, value)
