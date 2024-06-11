@@ -9,7 +9,7 @@
 #SBATCH --mem=120G
 #SBATCH --time=2-00:00:00
 
-EXPERIMENT="ED_small_cv_higher_lr"
+EXPERIMENT="ED_small_cv_en_continue"
 SRC_DIR="/project/${EC_PROJECT}/ipoloka/huggingface_asr"
 WORK_DIR="/scratch/${EC_PROJECT}/ipoloka/huggingface_asr"
 RECIPE_DIR="${SRC_DIR}/recipes/decred/commonvoice"
@@ -40,7 +40,7 @@ args=(
   # General training arguments
   --output_dir=$EXPERIMENT_PATH
   --per_device_train_batch_size="256"
-  --per_device_eval_batch_size="128"
+  --per_device_eval_batch_size="512"
   --num_train_epochs="50"
   --group_by_length="True"
   --bf16
@@ -49,6 +49,7 @@ args=(
   --load_best_model_at_end
   --eval_delay="5"
   --push_to_hub_final_model
+  --restart_from="/scratch/project_465000836/ipoloka/huggingface_asr/experiments/decred/commonvoice/ED_small_cv/checkpoint-29780"
 
    # Data loader params
   --dataloader_num_workers="6"
@@ -56,7 +57,7 @@ args=(
 
   # Optimizer related arguments
   --optim="adamw_torch"
-  --learning_rate="4e-3"
+  --learning_rate="2e-3"
   --warmup_steps="10000"
   --early_stopping_patience="5"
   --weight_decay="1e-6"
@@ -81,7 +82,7 @@ args=(
   --preprocessing_num_workers="16"
   --datasets_creation_config="${RECIPE_DIR}/common_voice_en.json"
   --writer_batch_size="200"
-  --test_splits common_voice_13_en_testcommon_voice_13_en_common_voice_13_en_test
+  --test_splits common_voice_13_en_common_voice_13_en_test
   --pad_to_multiples_of="100"
   --load_pure_dataset_only
 
