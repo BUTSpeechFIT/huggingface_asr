@@ -3,8 +3,8 @@
 #SBATCH --gpus-per-node=2
 #SBATCH --tasks-per-node=2
 #SBATCH --cpus-per-task=7
-#SBATCH --output="outputs/decred/output%x_%j.out"
-#SBATCH --error="outputs/decred/output%x_%j.err"
+#SBATCH --output="outputs/decred/output_%x_%j.out"
+#SBATCH --error="outputs/decred/output_%x_%j.err"
 #SBATCH --partition=small-g
 #SBATCH --mem=120G
 #SBATCH --time=2-00:00:00
