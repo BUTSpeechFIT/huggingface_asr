@@ -1,4 +1,6 @@
 #!/bin/bash -e
+source ~/.bash_profile
+
 # Make sure GPUs are up
 if [ $SLURM_LOCALID -eq 0 ] ; then
     rocm-smi
