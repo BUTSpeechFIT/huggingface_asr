@@ -31,7 +31,7 @@ export SINGULARITYENV_LD_LIBRARY_PATH=/usr/local/lib:/opt/cray/libfabric/1.15.2.
 
 export HF_HOME="/scratch/${EC_PROJECT}/ipoloka/hf_cache"
 export PYTHONPATH="${PYTHONPATH}:${SRC_DIR}/src"
-export WANDB_PROJECT="decred_commonvoice"
+export WANDB_PROJECT="decred_commonvoice_en"
 export WANDB_RUN_ID="${EXPERIMENT}"
 export WANDB_ENTITY="butspeechfit"
 
@@ -41,7 +41,7 @@ cd $SRC_DIR || exit
 args=(
   # General training arguments
   --output_dir=$EXPERIMENT_PATH
-  --per_device_train_batch_size="128"
+  --per_device_train_batch_size="256"
   --per_device_eval_batch_size="128"
   --num_train_epochs="10"
   --group_by_length="True"
@@ -83,6 +83,7 @@ args=(
   --writer_batch_size="200"
   --test_splits common_voice_13_en_test
   --pad_to_multiples_of="100"
+  --load_pure_dataset_only
 
   # Preprocessing related arguments
   --data_preprocessing_config="${RECIPE_DIR}/data_preprocessing.json"
@@ -105,4 +106,4 @@ args=(
 )
 
 srun --unbuffered --kill-on-bad-exit singularity exec --bind /usr/sbin:/usr/sbin $SIFPYTORCH \
-"${SRC_DIR}/cluster_utilities/LUMI/start_multinode_job_inside_env_pure_python.sh"  src/trainers/train_ctc_asr.py "${args[@]}"
+"${SRC_DIR}/cluster_utilities/LUMI/start_multinode_job_inside_env_pure_python.sh"  src/trainers/train_enc_dec_asr.py "${args[@]}"
