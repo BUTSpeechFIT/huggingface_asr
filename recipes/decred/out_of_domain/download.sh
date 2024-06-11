@@ -10,7 +10,7 @@
 EXPERIMENT="download_out_of_domain"
 SRC_DIR="/project/${EC_PROJECT}/ipoloka/huggingface_asr"
 WORK_DIR="/scratch/${EC_PROJECT}/ipoloka/huggingface_asr"
-RECIPE_DIR="${SRC_DIR}/recipes/decred/commonvoice"
+RECIPE_DIR="${SRC_DIR}/recipes/decred/out_of_domain"
 EXPERIMENT_PATH="${WORK_DIR}/experiments/${EXPERIMENT}"
 
 module load LUMI partition/G PyTorch/2.2.0-rocm-5.6.1-python-3.10-singularity-20240209
