@@ -48,7 +48,7 @@ args=(
   --load_best_model_at_end
   --eval_delay="5"
   --push_to_hub_final_model
-  --restart_from_checkpoint="/scratch/project_465000836/ipoloka/huggingface_asr/experiments/decred/commonvoice/DeCRED_small_cv/checkpoint-5956"
+  --restart_from="/scratch/project_465000836/ipoloka/huggingface_asr/experiments/decred/commonvoice/DeCRED_small_cv/checkpoint-5956"
 
    # Data loader params
   --dataloader_num_workers="6"
