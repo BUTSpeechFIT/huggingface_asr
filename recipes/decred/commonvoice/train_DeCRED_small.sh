@@ -5,7 +5,7 @@
 #SBATCH --cpus-per-task=7
 #SBATCH --output="outputs/decred/output%x_%j.out"
 #SBATCH --error="outputs/decred/output%x_%j.err"
-#SBATCH --partition=standard-g
+#SBATCH --partition=small-g
 #SBATCH --mem=120G
 #SBATCH --time=2-00:00:00
 
