@@ -1,6 +1,7 @@
 """Main training script for training of attention based encoder decoder ASR models."""
 import sys
 
+from huggingface_hub import ModelCard
 from transformers import (
     AutoFeatureExtractor,
     AutoModelForCausalLM,
@@ -11,6 +12,7 @@ from transformers import (
 )
 from transformers.utils import logging
 
+import wandb
 from decoding.config import GenerationConfigCustom
 from utilities.callbacks import init_callbacks
 from utilities.collators import SpeechCollatorWithPadding
@@ -133,3 +135,13 @@ if __name__ == "__main__":
             data_args=data_args,
             gen_config=gen_config,
         )
+
+    if training_args.push_to_hub_final_model:
+        trainer.push_to_hub()
+        if wandb.run is not None:
+            card = ModelCard.load(trainer.hub_model_id)
+            card.text = card.text + f"\n### Wandb run\n{wandb.run.url}"
+            card.push_to_hub(trainer.hub_model_id)
+
+        tokenizer.push_to_hub(trainer.hub_model_id)
+        feature_extractor.push_to_hub(trainer.hub_model_id)

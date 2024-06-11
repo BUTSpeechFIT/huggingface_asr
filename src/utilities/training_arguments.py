@@ -90,6 +90,10 @@ class GeneralTrainingArguments(Seq2SeqTrainingArguments):
     )
     start_by_eval: Optional[bool] = field(default=False, metadata={"help": "Whether to start by evaluation."})
 
+    push_to_hub_final_model: Optional[bool] = field(
+        default=False, metadata={"help": "Whether to push the final model to the hub."}
+    )
+
     def __post_init__(self):
         super().__post_init__()
         if self.use_start_method_spawn:
