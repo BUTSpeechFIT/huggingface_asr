@@ -26,21 +26,6 @@ from transformers.utils import logging
 from decoding.ctc_scorer import CTCRescorerLogitsProcessor, LogSoftmaxProcessor
 from decoding.shallow_fussion import LMRescorerLogitsProcessor
 
-# from models.auto_wrappers import CustomAutoModelForCTC, CustomModelForCausalLM
-from models.decoders.multi_head_gpt2 import GPT2LMMultiHeadModel, GPT2MultiHeadConfig
-from models.decoders.multi_head_gpt2_mixing import (
-    GPT2LMMultiHeadModelMixing,
-    GPT2MultiHeadMixingConfig,
-)
-from models.decoders.residual_clasiffier_gpt2 import (
-    GPT2ResidualsLMHeadConfig,
-    GPT2ResidualsLMHeadModel,
-)
-from models.encoders.e_branchformer import (
-    Wav2Vec2EBranchformerConfig,
-    Wav2Vec2EBranchformerForCTC,
-)
-
 logger = logging.get_logger("transformers")
 
 
