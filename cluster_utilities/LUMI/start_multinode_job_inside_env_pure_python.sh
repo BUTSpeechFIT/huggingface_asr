@@ -1,6 +1,9 @@
 #!/bin/bash -e
 source ~/.bash_profile
 
+# Start conda environment inside the container
+$WITH_CONDA
+
 # Make sure GPUs are up
 if [ $SLURM_LOCALID -eq 0 ] ; then
     rocm-smi
@@ -26,7 +29,7 @@ export NCCL_SOCKET_IFNAME=hsn0,hsn1,hsn2,hsn3
 export NCCL_NET_GDR_LEVEL=3
 
 # Set ROCR_VISIBLE_DEVICES so that each task uses the proper GPU
-export ROCR_VISIBLE_DEVICES=$SLURM_LOCALID
+#export ROCR_VISIBLE_DEVICES=$SLURM_LOCALID
 
 # Report affinity to check
 echo "Rank $SLURM_PROCID --> $(taskset -p $$); GPU $ROCR_VISIBLE_DEVICES"
@@ -41,6 +44,7 @@ export RANK=$SLURM_PROCID
 export LOCAL_RANK=$SLURM_LOCALID
 export LOCAL_WORLD_SIZE=$SLURM_NTASKS_PER_NODE
 export NODE_RANK=$((($RANK - $LOCAL_RANK) / $LOCAL_WORLD_SIZE))
+export FS_LOCAL_RANK=$SLURM_PROCID
 
 if [ $SLURM_LOCALID -eq 0 ] ; then
   if command -v rocm-smi &> /dev/null ; then
