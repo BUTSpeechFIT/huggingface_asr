@@ -532,6 +532,8 @@ def get_eval_split(
     elif train_split_name == validation_split_name:
         raise ValueError("Cannot use the same split for training and validation.")
     else:
+        if validation_split_name not in dataset:
+            return Dataset.from_dict({})
         validation_split = dataset[validation_split_name]
         if data_slice_str is not None:
             data_slice = extract_num_samples(validation_split, data_slice_str)
