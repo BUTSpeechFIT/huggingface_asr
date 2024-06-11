@@ -1,15 +1,15 @@
 #!/usr/bin/bash
 #SBATCH --nodes=1
-#SBATCH --gpus-per-node=4
-#SBATCH --tasks-per-node=4
+#SBATCH --gpus-per-node=2
+#SBATCH --tasks-per-node=2
 #SBATCH --cpus-per-task=7
-#SBATCH --output="outputs/czech_pretraining/output%x_%j.out"
-#SBATCH --error="outputs/czech_pretraining/output%x_%j.err"
+#SBATCH --output="outputs/decred/output%x_%j.out"
+#SBATCH --error="outputs/decred/output%x_%j.err"
 #SBATCH --partition=standard-g
-#SBATCH --mem=240G
+#SBATCH --mem=120G
 #SBATCH --time=2-00:00:00
 
-EXPERIMENT="ed_small"
+EXPERIMENT="ED_small"
 SRC_DIR="/project/${EC_PROJECT}/ipoloka/huggingface_asr"
 WORK_DIR="/scratch/${EC_PROJECT}/ipoloka/huggingface_asr"
 RECIPE_DIR="${SRC_DIR}/recipes/decred/commonvoice"
@@ -41,8 +41,8 @@ cd $SRC_DIR || exit
 args=(
   # General training arguments
   --output_dir=$EXPERIMENT_PATH
-  --per_device_train_batch_size="64"
-  --per_device_eval_batch_size="64"
+  --per_device_train_batch_size="128"
+  --per_device_eval_batch_size="128"
   --num_train_epochs="10"
   --group_by_length="True"
   --bf16
@@ -57,7 +57,7 @@ args=(
   # Optimizer related arguments
   --optim="adamw_torch"
   --learning_rate="2e-3"
-  --warmup_steps="5000"
+  --warmup_steps="10000"
   --early_stopping_patience="5"
   --weight_decay="1e-6"
   --max_grad_norm="5.0"
@@ -97,11 +97,11 @@ args=(
   --decoder_pos_emb_fixed
 
   # Generation related arguments
-  --num_beams="4"
+  --num_beams="1"
   --max_length="512"
   --predict_with_generate
   --decoding_ctc_weight="0.3"
-  --eval_beam_factor="10"
+  --override_for_evaluation="ctc_weight=0.3;num_beams=10"
 )
 
 srun --unbuffered --kill-on-bad-exit singularity exec --bind /usr/sbin:/usr/sbin $SIFPYTORCH \
