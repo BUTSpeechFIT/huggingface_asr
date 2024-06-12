@@ -110,20 +110,21 @@ if __name__ == "__main__":
     )
 
     # 8. Train model
-    # if training_args.do_train:
-    #     trainer.train(resume_from_checkpoint=training_args.restart_from or None)
-    #
-    # # 9. Evaluation
-    # if training_args.do_evaluate:
-    #     do_evaluate(
-    #         trainer=trainer,
-    #         dataset=dataset,
-    #         model=model,
-    #         tokenizer=tokenizer,
-    #         gen_args=gen_args,
-    #         training_args=training_args,
-    #         data_args=data_args,
-    #     )
+    if training_args.do_train:
+        trainer.train(resume_from_checkpoint=training_args.restart_from or None)
+
+    # 9. Evaluation
+    if training_args.do_evaluate:
+        do_evaluate(
+            trainer=trainer,
+            dataset=dataset,
+            model=model,
+            tokenizer=tokenizer,
+            gen_args=gen_args,
+            training_args=training_args,
+            data_args=data_args,
+        )
+
     # 10. N-best generation
     if training_args.do_generate:
         do_generate(
