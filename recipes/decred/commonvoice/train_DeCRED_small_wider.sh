@@ -9,7 +9,7 @@
 #SBATCH --mem=120G
 #SBATCH --time=2-00:00:00
 
-EXPERIMENT="DeCRED_small_wider_cv"
+EXPERIMENT="DeCRED_small_wider_cv_v2"
 SRC_DIR="/project/${EC_PROJECT}/ipoloka/huggingface_asr"
 WORK_DIR="/scratch/${EC_PROJECT}/ipoloka/huggingface_asr"
 RECIPE_DIR="${SRC_DIR}/recipes/decred/commonvoice"
@@ -53,8 +53,8 @@ args=(
 
   # Optimizer related arguments
   --optim="adamw_torch"
-  --learning_rate="2e-3"
-  --warmup_steps="10000"
+  --learning_rate="1e-3"
+  --warmup_steps="15000"
   --early_stopping_patience="5"
   --weight_decay="1e-6"
   --max_grad_norm="1.0"

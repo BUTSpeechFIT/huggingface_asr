@@ -55,8 +55,8 @@ args=(
 
   # Optimizer related arguments
   --optim="adamw_torch"
-  --learning_rate="2e-3"
-  --warmup_steps="10000"
+  --learning_rate="1e-3"
+  --warmup_steps="15000"
   --early_stopping_patience="5"
   --weight_decay="1e-6"
   --max_grad_norm="1.0"
