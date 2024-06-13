@@ -65,16 +65,14 @@ def save_predictions(
         re.sub(
             r"\[(\S*)\]",
             r"\1",
-            re.sub(r"(?<=\S)\[[^\[\]]*\](?=\s)|(?<=\s)\[[^\[\]]*\](?=\S)", "-", text_transforms(pred)),
+            re.sub(r"\(\[[^\]]+\]\)(?=\w)|(?<=\w)\(\[[^\]]+\]\)", "-", text_transforms(pred)),
         )
         if text_transforms
         else pred
         for pred in tokenizer.batch_decode(pred_ids, skip_special_tokens=True)
     ]
     label_str = [
-        re.sub(r"\[(\S*)\]", r"\1", re.sub(r"(?<=\S)\[[^\[\]]*\](?=\s)|(?<=\s)\[[^\[\]]*\](?=\S)", "-", label))
-        if label
-        else ""
+        re.sub(r"\[(\S*)\]", r"\1", re.sub(r"\(\[[^\]]+\]\)(?=\w)|(?<=\w)\(\[[^\]]+\]\)", "-", label)) if label else ""
         for label in tokenizer.batch_decode(label_ids, skip_special_tokens=True)
     ]
     df = pd.DataFrame({"label": label_str, "prediction": pred_str})
@@ -87,9 +85,9 @@ def save_predictions(
                 file_handler.write(f"{string} (utterance_{index})\n")
 
     sclite_cmd = f"sclite -F -D -i wsj -r {sclite_files[1]} trn -h {sclite_files[0]} trn -o snt sum dtl"
-    p = subprocess.Popen(sclite_cmd.split())  # nosec
+    process = subprocess.Popen(sclite_cmd.split())  # nosec
     try:
-        p.wait(30)
+        process.wait(30)
     except subprocess.TimeoutExpired:
-        p.kill()
+        process.kill()
         logger.warning("Sclite evaluation timed out.")
