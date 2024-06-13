@@ -9,7 +9,7 @@
 #SBATCH --mem=120G
 #SBATCH --time=2-00:00:00
 
-EXPERIMENT="DeCRED_small_cv"
+EXPERIMENT="DeCRED_small_cv_v2"
 SRC_DIR="/project/${EC_PROJECT}/ipoloka/huggingface_asr"
 WORK_DIR="/scratch/${EC_PROJECT}/ipoloka/huggingface_asr"
 RECIPE_DIR="${SRC_DIR}/recipes/decred/commonvoice"
@@ -36,19 +36,16 @@ export WANDB_ENTITY="butspeechfit"
 cd $SRC_DIR || exit
 
 args=(
-  # General training arguments
-  --output_dir=$EXPERIMENT_PATH
-  --per_device_train_batch_size="256"
-  --per_device_eval_batch_size="128"
-  --num_train_epochs="20"
+ --output_dir=$EXPERIMENT_PATH
+  --per_device_train_batch_size="128"
+  --per_device_eval_batch_size="64"
+  --num_train_epochs="50"
   --group_by_length="True"
-  --bf16
   --do_train
   --do_evaluate
   --load_best_model_at_end
   --eval_delay="5"
   --push_to_hub_final_model
-  --restart_from="/scratch/project_465000836/ipoloka/huggingface_asr/experiments/decred/commonvoice/DeCRED_small_cv/checkpoint-5956"
 
    # Data loader params
   --dataloader_num_workers="6"
@@ -101,24 +98,23 @@ args=(
   --num_beams="1"
   --max_length="512"
   --predict_with_generate
-  --decoding_ctc_weight="0.3"
-  --override_for_evaluation="ctc_weight=0.3;num_beams=10"
+  --decoding_ctc_weight="0"
 )
 
 srun --unbuffered --kill-on-bad-exit singularity exec --bind /usr/sbin:/usr/sbin $SIFPYTORCH \
 "${SRC_DIR}/cluster_utilities/LUMI/start_multinode_job_inside_env_pure_python.sh"  src/trainers/train_enc_dec_asr.py "${args[@]}"
 
 
-EXPERIMENT_MIXING="DeCRED_small_cv_linear_mixing"
+EXPERIMENT_MIXING="DeCRED_small_cv_v2_linear_mixing"
 EXPERIMENT_PATH="${WORK_DIR}/experiments/decred/commonvoice/${EXPERIMENT_MIXING}"
 export WANDB_RUN_ID="${EXPERIMENT_MIXING}"
 
 args=(
   # General training arguments
   --output_dir=$EXPERIMENT_PATH
-  --per_device_train_batch_size="256"
+  --per_device_train_batch_size="128"
   --per_device_eval_batch_size="128"
-  --num_train_epochs="20"
+  --num_train_epochs="50"
   --group_by_length="True"
   --bf16
   --do_train
@@ -133,16 +129,16 @@ args=(
 
   # Optimizer related arguments
   --optim="adamw_torch"
-  --learning_rate="2e-5"
+  --learning_rate="5e-4"
   --early_stopping_patience="5"
   --weight_decay="1e-6"
   --max_grad_norm="1.0"
   --lsm_factor="0.1"
-  --gradient_accumulation_steps="1"
+  --gradient_accumulation_steps="2"
 
   # Logging, saving and evaluation related arguments
   --report_to="wandb"
-  --logging_steps="10"
+  --logging_steps="1"
   --save_strategy="epoch"
   --evaluation_strategy="epoch"
   --wandb_predictions_to_save=50
@@ -178,15 +174,15 @@ args=(
   --num_beams="1"
   --max_length="512"
   --predict_with_generate
-  --decoding_ctc_weight="0.3"
-  --override_for_evaluation="ctc_weight=0.3;num_beams=10"
+  --decoding_ctc_weight="0"
 )
+
 
 srun --unbuffered --kill-on-bad-exit singularity exec --bind /usr/sbin:/usr/sbin $SIFPYTORCH \
 "${SRC_DIR}/cluster_utilities/LUMI/start_multinode_job_inside_env_pure_python.sh"  src/trainers/train_enc_dec_asr.py "${args[@]}"
 
 
-EXPERIMENT_MIXING="DeCRED_small_cv_scalar_mixing"
+EXPERIMENT_MIXING="DeCRED_small_cv_v2_scalar_mixing"
 EXPERIMENT_PATH="${WORK_DIR}/experiments/decred/commonvoice/${EXPERIMENT_MIXING}"
 export WANDB_RUN_ID="${EXPERIMENT_MIXING}"
 
