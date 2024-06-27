@@ -24,9 +24,19 @@ if __name__ == "__main__":
 
     df = datasets.load_from_disk(data_args.dataset_path)
     print(df)
-    lengths = np.array(df[data_args.length_column_name])
-    # print statistics as mean, std, min, max
-    print(f"Mean: {lengths.mean()}")
-    print(f"Std: {lengths.std()}")
-    print(f"Min: {lengths.min()}")
-    print(f"Max: {lengths.max()}")
+    if isinstance(df, datasets.DatasetDict):
+        for split in df:
+            print(f"Split: {split}")
+            lengths = np.array(df[data_args.length_column_name][split])
+            # print statistics as mean, std, min, max
+            print(f"Mean: {lengths.mean()}")
+            print(f"Std: {lengths.std()}")
+            print(f"Min: {lengths.min()}")
+            print(f"Max: {lengths.max()}")
+    else:
+        lengths = np.array(df[data_args.length_column_name])
+        # print statistics as mean, std, min, max
+        print(f"Mean: {lengths.mean()}")
+        print(f"Std: {lengths.std()}")
+        print(f"Min: {lengths.min()}")
+        print(f"Max: {lengths.max()}")
