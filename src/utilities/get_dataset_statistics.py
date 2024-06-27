@@ -29,6 +29,7 @@ if __name__ == "__main__":
             print(f"Split: {split}")
             lengths = np.array(df[split][data_args.length_column_name])
             # print statistics as mean, std, min, max
+            print(f"Overall length: {lengths.sum()}")
             print(f"Mean: {lengths.mean()}")
             print(f"Std: {lengths.std()}")
             print(f"Min: {lengths.min()}")
@@ -36,6 +37,7 @@ if __name__ == "__main__":
     else:
         lengths = np.array(df[data_args.length_column_name])
         # print statistics as mean, std, min, max
+        print(f"Overall length: {lengths.sum()}")
         print(f"Mean: {lengths.mean()}")
         print(f"Std: {lengths.std()}")
         print(f"Min: {lengths.min()}")
