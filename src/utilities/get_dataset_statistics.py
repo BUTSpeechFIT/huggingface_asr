@@ -27,7 +27,7 @@ if __name__ == "__main__":
     if isinstance(df, datasets.DatasetDict):
         for split in df:
             print(f"Split: {split}")
-            lengths = np.array(df[data_args.length_column_name][split])
+            lengths = np.array(df[split][data_args.length_column_name])
             # print statistics as mean, std, min, max
             print(f"Mean: {lengths.mean()}")
             print(f"Std: {lengths.std()}")
