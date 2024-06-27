@@ -4,7 +4,7 @@
 #SBATCH --cpus-per-task=7
 #SBATCH --output="outputs/ec_pretraining/output_%x_%j.out"
 #SBATCH --error="outputs/ec_pretraining/output_%x_%j.err"
-#SBATCH --partition=debug-g
+#SBATCH --partition=debug
 #SBATCH --mem=100G
 #SBATCH --time=0:30:00
 
