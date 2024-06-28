@@ -25,6 +25,14 @@ from models.auto_wrappers import (
     CustomAutoModelForPretraining,
     CustomModelForCausalLM,
 )
+from models.bestrq import (
+    BestRQEBranchformerForCTC,
+    BestRQEBranchformerForPreTraining,
+    BestRQEBranchformerForPreTrainingConfig,
+    BestRQTransformerForCTC,
+    BestRQTransformerForPreTraining,
+    BestRQTransformerForPreTrainingConfig,
+)
 from models.ctc_encoder_plus_autoregressive_decoder import (
     JointCTCAttentionEncoderDecoder,
     JointCTCAttentionEncoderDecoderConfig,
@@ -32,9 +40,6 @@ from models.ctc_encoder_plus_autoregressive_decoder import (
 from models.decoders.multi_head_gpt2 import GPT2LMMultiHeadModel
 from models.decoders.multi_head_gpt2_mixing import GPT2MultiHeadMixingConfig
 from models.encoders.e_branchformer import (
-    BestRQEBranchformerConfig,
-    BestRQEBranchformerForCTC,
-    BestRQEBranchformerForPreTraining,
     Wav2Vec2EBranchformerConfig,
     Wav2Vec2EBranchformerForCTC,
     Wav2Vec2EBranchformerForPreTraining,
@@ -51,9 +56,13 @@ AutoConfig.register("wav2vec2-ebranchformer", Wav2Vec2EBranchformerConfig)
 CustomAutoModelForCTC.register(Wav2Vec2EBranchformerConfig, Wav2Vec2EBranchformerForCTC)
 CustomAutoModelForPretraining.register(Wav2Vec2EBranchformerConfig, Wav2Vec2EBranchformerForPreTraining)
 
-AutoConfig.register("bestrq-ebranchformer", BestRQEBranchformerConfig)
-CustomAutoModelForCTC.register(BestRQEBranchformerConfig, BestRQEBranchformerForCTC)
-CustomAutoModelForPretraining.register(BestRQEBranchformerConfig, BestRQEBranchformerForPreTraining)
+AutoConfig.register("bestrq-transformer", BestRQTransformerForPreTrainingConfig)
+CustomAutoModelForCTC.register(BestRQTransformerForPreTrainingConfig, BestRQTransformerForCTC)
+CustomAutoModelForPretraining.register(BestRQTransformerForPreTrainingConfig, BestRQTransformerForPreTraining)
+
+AutoConfig.register("bestrq-ebranchformer", BestRQEBranchformerForPreTrainingConfig)
+CustomAutoModelForCTC.register(BestRQEBranchformerForPreTrainingConfig, BestRQEBranchformerForCTC)
+CustomAutoModelForPretraining.register(BestRQEBranchformerForPreTrainingConfig, BestRQEBranchformerForPreTraining)
 
 
 def average_checkpoints(experiment_dir: str) -> str:

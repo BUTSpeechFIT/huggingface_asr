@@ -7,7 +7,7 @@
 #SBATCH --time 2-00:00:00
 #SBATCH --output=/mnt/proj1/open-28-58/lakoc/huggingface_asr/outputs/librispeech_ssl/ssl_small_8gpus_wav2vec2.out
 
-EXPERIMENT="ssl_small_8gpus_wav2vec2"
+EXPERIMENT="ssl_small_8gpus_wav2vec2_2"
 PROJECT="librispeech_ssl"
 WORK_DIR="/mnt/proj1/open-28-58/lakoc/huggingface_asr"
 RECIPE_DIR="${WORK_DIR}/recipes/librispeech_ssl"
@@ -29,7 +29,7 @@ cd $WORK_DIR
 args=(
   # General training arguments
   --output_dir=$EXPERIMENT_PATH
-  --per_device_train_batch_size="40"
+  --per_device_train_batch_size="24"
   --per_device_eval_batch_size="64"
   --dataloader_num_workers="24"
   --num_train_epochs="50"

@@ -1,11 +1,10 @@
 """Main training script for training of attention based encoder decoder ASR models."""
 import sys
 
-from torch.profiler import ProfilerActivity, profile, record_function
 from transformers import AutoFeatureExtractor, HfArgumentParser
 from transformers.utils import logging
 
-from models.encoders.e_branchformer import BestRQEBranchformerForPreTraining
+from models.bestrq import BestRQModel
 from utilities.callbacks import GumbelTemperatureCallback, init_callbacks
 from utilities.collators import DataCollatorForWav2Vec2Pretraining
 from utilities.data_utils import get_dataset
@@ -54,7 +53,7 @@ if __name__ == "__main__":
     # 4. Initialize callbacks
     callbacks = init_callbacks(data_args, training_args, dataset, feature_extractor)
 
-    if not isinstance(model, BestRQEBranchformerForPreTraining):
+    if not isinstance(model, BestRQModel):
         temperature_callback = GumbelTemperatureCallback(
             training_args.gumbel_temperature_decay,
             training_args.min_gumbel_temperature,
@@ -89,11 +88,5 @@ if __name__ == "__main__":
     if training_args.start_by_eval:
         logger.info(trainer.evaluate())
 
-    with profile(activities=[ProfilerActivity.CPU, ProfilerActivity.CUDA], record_shapes=True) as prof:
-        with record_function("model_inference"):
-            # 8. Train model
-            if training_args.do_train:
-                trainer.train(resume_from_checkpoint=training_args.restart_from or None)
-    print(prof.key_averages().table(sort_by="cpu_time_total", row_limit=10))
-    print(prof.key_averages(group_by_input_shape=True).table(sort_by="cpu_time_total", row_limit=10))
-    print(prof.key_averages().table(sort_by="cuda_time_total", row_limit=10))
+    if training_args.do_train:
+        trainer.train(resume_from_checkpoint=training_args.restart_from or None)

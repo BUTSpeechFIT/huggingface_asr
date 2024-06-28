@@ -2,7 +2,7 @@ import json
 import math
 import os
 from tempfile import NamedTemporaryFile
-from typing import Any, Callable, Dict, Optional, Tuple, Union
+from typing import Any, Callable, Dict, List, Optional, Tuple, Union
 
 import torch
 import tqdm
@@ -262,6 +262,26 @@ class CustomWav2Vec2CTCTokenizer(Wav2Vec2CTCTokenizer):  # nosec
             word_delimiter_token=word_delimiter_token,
             replace_word_delimiter_char=replace_word_delimiter_char,
             target_lang=target_lang,
+            **kwargs,
+        )
+
+    def batch_decode(
+        self,
+        sequences: Union[List[int], List[List[int]], "np.ndarray", "torch.Tensor", "tf.Tensor"],
+        skip_special_tokens: bool = False,
+        clean_up_tokenization_spaces: bool = None,
+        output_char_offsets: bool = False,
+        output_word_offsets: bool = False,
+        **kwargs,
+    ) -> List[str]:
+        if "group_ctc_tokens" in kwargs:
+            group_ctc_tokens = kwargs.pop("group_ctc_tokens")
+        return super().batch_decode(
+            sequences,
+            skip_special_tokens=skip_special_tokens,
+            clean_up_tokenization_spaces=clean_up_tokenization_spaces,
+            output_char_offsets=output_char_offsets,
+            output_word_offsets=output_word_offsets,
             **kwargs,
         )
 

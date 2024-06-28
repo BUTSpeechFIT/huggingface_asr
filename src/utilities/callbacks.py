@@ -163,35 +163,32 @@ def init_callbacks(
     callbacks = []
     if data_args.data_preprocessing_config:
         with open(data_args.data_preprocessing_config) as config_handle:
-            callbacks.append(
-                DataPreprocessingManagerCallback(
-                    preprocessing_config=json.load(config_handle),
-                    dataset=dataset,
-                    audio_column_name=data_args.audio_column_name,
-                    feature_extractor=feature_extractor,
-                )
-            )
+            config = json.load(config_handle)
     else:
-        default_preprocessing = [
-            {
-                "name": "feature_extractor",
-                "steps_before_activation": 0,
-                "fn_call_params": {
-                    "return_attention_mask": False,
-                    "sampling_rate": 16000,
-                    "return_tensors": "pt",
-                },
-                "return_behaviour": ["input_features[0]"],
-            }
-        ]
-        callbacks.append(
-            DataPreprocessingManagerCallback(
-                preprocessing_config={"default_preprocessing": default_preprocessing},
-                dataset=dataset,
-                audio_column_name=data_args.audio_column_name,
-                feature_extractor=feature_extractor,
-            )
+        config = {
+            "default_preprocessing": [
+                {
+                    "name": "feature_extractor",
+                    "steps_before_activation": 0,
+                    "fn_call_params": {
+                        "return_attention_mask": False,
+                        "sampling_rate": 16000,
+                        "return_tensors": "pt",
+                    },
+                    "return_behaviour": ["input_features[0]"],
+                }
+            ]
+        }
+
+    callbacks.append(
+        DataPreprocessingManagerCallback(
+            preprocessing_config=config,
+            dataset=dataset,
+            audio_column_name=data_args.audio_column_name,
+            feature_extractor=feature_extractor,
         )
+    )
+
     if training_args.early_stopping_patience > -1:
         callbacks.append(EarlyStoppingCallback(early_stopping_patience=training_args.early_stopping_patience))
     if training_args.track_ctc_loss:

@@ -1,6 +1,7 @@
 import copy
 import os
 
+from torch import nn
 from transformers import (
     AutoConfig,
     AutoModelForCausalLM,
@@ -44,6 +45,12 @@ class FeatureExtractionInitModifier(type):
                     self.config.second_dim_input_size = self.config.num_mel_bins
             if hasattr(self.config, "expect_2d_input") and self.config.expect_2d_input:
                 getattr(self, self.base_model_prefix).feature_extractor = Conv2dFeatureExtractor(self.config)
+                getattr(self, self.base_model_prefix).feature_projection.layer_norm = nn.LayerNorm(
+                    self.config.hidden_size, eps=self.config.layer_norm_eps
+                )
+                getattr(self, self.base_model_prefix).feature_projection.projection = nn.Linear(
+                    self.config.hidden_size, self.config.hidden_size
+                )
 
         # Replace the __init__ method with the modified version
         new_cls.__init__ = new_init
