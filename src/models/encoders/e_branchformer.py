@@ -11,6 +11,7 @@ from transformers.models.wav2vec2.modeling_wav2vec2 import (
     Wav2Vec2Config,
     Wav2Vec2ForCTC,
     Wav2Vec2ForPreTraining,
+    Wav2Vec2GumbelVectorQuantizer,
 )
 from transformers.models.wav2vec2_conformer.modeling_wav2vec2_conformer import (
     Wav2Vec2ConformerConfig,
@@ -331,6 +332,17 @@ class Wav2Vec2EBranchformerModel(CustomFE, Wav2Vec2ConformerModel):
         self.post_init()
 
 
+class Wav2Vec2GumbelVectorQuantizerCustom(Wav2Vec2GumbelVectorQuantizer):
+    """
+    Vector quantization using gumbel softmax. See `[CATEGORICAL REPARAMETERIZATION WITH
+    GUMBEL-SOFTMAX](https://arxiv.org/pdf/1611.01144.pdf) for more information.
+    """
+
+    def __init__(self, config):
+        super().__init__(config)
+        self.weight_proj = nn.Linear(config.hidden_size, self.num_groups * self.num_vars)
+
+
 class Wav2Vec2EBranchformerForPreTraining(Wav2Vec2ForPreTraining):
     config_class = Wav2Vec2EBranchformerConfig
     base_model_prefix = "wav2vec2"
@@ -338,6 +350,7 @@ class Wav2Vec2EBranchformerForPreTraining(Wav2Vec2ForPreTraining):
     def __init__(self, config: Wav2Vec2EBranchformerConfig):
         super().__init__(config)
         self.wav2vec2 = Wav2Vec2EBranchformerModel(config)
+        self.quantizer = Wav2Vec2GumbelVectorQuantizerCustom(config)
         self.post_init()
 
 
