@@ -2,7 +2,7 @@
 source ~/.bash_profile
 
 # Start conda environment inside the container
-$WITH_CONDA
+#$WITH_CONDA
 
 # Make sure GPUs are up
 if [ $SLURM_LOCALID -eq 0 ] ; then
