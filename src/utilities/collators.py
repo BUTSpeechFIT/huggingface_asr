@@ -199,23 +199,37 @@ class DataCollatorForWav2Vec2Pretraining:
         mask_indices_seq_length = int(mask_indices_seq_length)
 
         # make sure that no loss is computed on padded inputs
+        sub_attention_mask = False
         if batch.get("attention_mask") is not None:
             # compute real output lengths according to convolution formula
             # pylint: disable=no-member
             batch["sub_attention_mask"] = self.model.base_model._get_feature_vector_attention_mask(
                 mask_indices_seq_length, batch["attention_mask"]
             )
+            sub_attention_mask = True
 
         features_shape = (batch_size, mask_indices_seq_length)
 
-        # sample randomly masked indices
-        mask_time_indices = _compute_mask_indices(
-            features_shape,
-            self.mask_time_prob,
-            self.mask_time_length,
-            attention_mask=batch.get("sub_attention_mask"),
-            min_masks=self.min_masks,
-        )
+        # Igor: this caused problems in wav2vec2 FB so I put it in if here
+        if sub_attention_mask:
+            # sample randomly masked indices
+
+            mask_time_indices = _compute_mask_indices(
+                features_shape,
+                self.mask_time_prob,
+                self.mask_time_length,
+                attention_mask=batch.get("sub_attention_mask"),
+                min_masks=self.min_masks,
+            )
+
+        else:
+            # sample randomly masked indices
+            mask_time_indices = _compute_mask_indices(
+                features_shape,
+                self.mask_time_prob,
+                self.mask_time_length,
+                min_masks=self.min_masks,
+            )
 
         batch["mask_time_indices"] = torch.tensor(mask_time_indices, dtype=torch.long, device=device)
 
@@ -233,6 +247,7 @@ class DataCollatorForWav2Vec2Pretraining:
             batch[self.model_input_name] = batch[self.feature_extractor.model_input_names[0]]
             del batch[self.feature_extractor.model_input_names[0]]
 
-        del batch["sub_attention_mask"]
+        if sub_attention_mask:
+            del batch["sub_attention_mask"]
 
         return batch
