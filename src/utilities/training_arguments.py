@@ -138,7 +138,7 @@ class GenerationArguments:
     num_predictions_to_return: Optional[int] = field(default=1, metadata={"help": "Number of predictions to return."})
     nbest_path_to_save: Optional[str] = field(default="nbests", metadata={"help": "Path to save nbest hypotheses."})
     save_output_states: Optional[bool] = field(default=False, metadata={"help": "Whether to save output states."})
-    post_process_predicitons: Optional[bool] = field(
+    post_process_predictions: Optional[bool] = field(
         default=False, metadata={"help": "Whether to post process predictions."}
     )
     apply_eos_space_trick: Optional[bool] = field(default=False, metadata={"help": "Whether to apply eos space trick."})

@@ -6,7 +6,6 @@ from torch import nn
 from torch.nn import CrossEntropyLoss
 from transformers import (
     AutoConfig,
-    AutoModelForCausalLM,
     AutoModelForCTC,
     GenerationConfig,
     PretrainedConfig,
@@ -25,6 +24,7 @@ from transformers.utils import logging
 
 from decoding.ctc_scorer import CTCRescorerLogitsProcessor, LogSoftmaxProcessor
 from decoding.shallow_fussion import LMRescorerLogitsProcessor
+from models.auto_wrappers import CustomModelForCausalLM
 
 logger = logging.get_logger("transformers")
 
@@ -89,7 +89,7 @@ class JointCTCAttentionEncoderDecoder(SpeechEncoderDecoderModel):
         encoder.register_forward_hook(wav2vec2_for_ctc_forward_hook)
         encoder.register_forward_pre_hook(wav2vec2_forward_hidden_return_hook, with_kwargs=True)
         if decoder is None:
-            decoder = AutoModelForCausalLM.from_config(config.decoder)
+            decoder = CustomModelForCausalLM.from_config(config.decoder)
 
         self.encoder = encoder
         self.decoder = decoder
@@ -221,7 +221,7 @@ class JointCTCAttentionEncoderDecoder(SpeechEncoderDecoderModel):
                     "`decoder_config` to `.from_encoder_decoder_pretrained(...)`"
                 )
 
-            decoder = AutoModelForCausalLM.from_pretrained(decoder_pretrained_model_name_or_path, **kwargs_decoder)
+            decoder = CustomModelForCausalLM.from_pretrained(decoder_pretrained_model_name_or_path, **kwargs_decoder)
 
         # instantiate config with corresponding kwargs
         config = JointCTCAttentionEncoderDecoderConfig.from_encoder_decoder_configs(

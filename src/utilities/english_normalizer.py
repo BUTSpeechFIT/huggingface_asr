@@ -1801,8 +1801,6 @@ class EnglishNormalizer(EnglishTextNormalizer):
         # map all hesitations to a single token
         s = re.sub(self.ignore_patterns, "[hesitation]", s)
 
-        s = re.sub(r"(\[hesitation\])(-\[hesitation\])+", "[hesitation]", s)  # remove multiple hesitations
-
         # clean wsj specific stuff
         for key, value in self.wsj_mapping.items():
             s = s.replace(key, value)
@@ -1810,7 +1808,10 @@ class EnglishNormalizer(EnglishTextNormalizer):
         s = re.sub(r"\s+'", "'", s)  # standardize when there's a space before an apostrophe
 
         # standardize brackets for special tokens (%noise), [noise], <noise> -> ([noise])
-        s = re.sub(r"(\[|<|\(%|\*)(\w+)[]>)*]", r"([\2])", s)
+        s = re.sub(r"\(?(\[|<|\(%|\*)(\w+)[]>)*]\)?", r"([\2])", s)
+
+        s = re.sub(r"(\(\[hesitation\]\))(-\(\[hesitation\]\))+", "([hesitation])", s)  # remove multiple hesitations
+
         for pattern, replacement in self.replacers.items():
             s = re.sub(pattern, replacement, s)
 

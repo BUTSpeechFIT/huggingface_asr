@@ -239,7 +239,7 @@ def instantiate_aed_model(
             raise ValueError("The model decoder must be an instance of GPT2LMMultiHeadModel")
         old_config = model.decoder.config
         new_config = GPT2MultiHeadMixingConfig(**old_config.to_dict(), mixing_mode=model_args.finetune_mixing_mechanism)
-        new_decoder = AutoModelForCausalLM.from_config(new_config)
+        new_decoder = CustomModelForCausalLM.from_config(new_config)
         new_decoder.load_state_dict(model.decoder.state_dict(), strict=False)
 
         model.decoder = new_decoder
