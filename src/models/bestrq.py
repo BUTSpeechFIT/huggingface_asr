@@ -132,9 +132,7 @@ class BestRQModel(nn.Module):
 
         last_hidden_states = outputs[0]
         probs = torch.stack([classifier(last_hidden_states) for classifier in self.classifiers], dim=1)
-        loss = nn.functional.cross_entropy(
-            probs.flatten(0, 1).transpose(1, 2), targets.flatten(0, 1), reduction="sum"
-        ) / probs.size(1)
+        loss = nn.functional.cross_entropy(probs.flatten(0, 1).transpose(1, 2), targets.flatten(0, 1), reduction="sum")
 
         if not return_dict:
             if loss is not None:
