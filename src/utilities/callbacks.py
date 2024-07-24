@@ -105,7 +105,7 @@ class DataPreprocessingManagerCallback(TrainerCallback):
             audio = transform(audio, **fn_call_params)
         return audio
 
-    def default_transform(self, batch, transform_key, min_audio_length=1600):
+    def default_transform(self, batch, transform_key, min_audio_length=8000):
         out_dict = {self.audio_column_name: []}
         for audio in batch[self.audio_column_name]:
             audio_arr = audio_object_stripper(audio)
