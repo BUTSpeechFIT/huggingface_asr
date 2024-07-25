@@ -9,7 +9,7 @@
 #SBATCH --mem=120G
 #SBATCH --time=24:00:00
 
-EXPERIMENT="baseline_ebranchformer"
+EXPERIMENT="baseline_ebranchformer25M"
 SRC_DIR="/project/${EC_PROJECT}/ipoloka/huggingface_asr"
 WORK_DIR="/scratch/${EC_PROJECT}/ipoloka/huggingface_asr"
 RECIPE_DIR="${SRC_DIR}/recipes/librispeech_ctc"
@@ -17,17 +17,14 @@ EXPERIMENT_PATH="${WORK_DIR}/experiments/${EXPERIMENT}"
 
 module load LUMI partition/G PyTorch/2.2.0-rocm-5.6.1-python-3.10-singularity-20240209
 
-export CXI_FORK_SAFE=1
-export CXI_FORK_SAFE_HP=1
 
 # We need to set this to avoid "Cassini Event Queue overflow detected." errors.
 export FI_CXI_DEFAULT_CQ_SIZE=131072
-export OMP_NUM_THREADS=16
 
 export ROCM_PATH=/opt/rocm
 export SINGULARITYENV_LD_LIBRARY_PATH=/usr/local/lib:/opt/cray/libfabric/1.15.2.0/lib64
 
-export HF_HOME="/scratch/${EC_PROJECT}/ipoloka/hf_cache"
+export HF_HOME="/flash/${EC_PROJECT}/ipoloka/huggingface_cache"
 export PYTHONPATH="${PYTHONPATH}:${SRC_DIR}/src"
 export WANDB_PROJECT="librispeech_ctc"
 export WANDB_RUN_ID="${EXPERIMENT}"
@@ -39,9 +36,9 @@ cd $SRC_DIR || exit
 args=(
   # General training arguments
   --output_dir="${EXPERIMENT_PATH}"
-  --per_device_train_batch_size="64"
-  --per_device_eval_batch_size="16"
-  --num_train_epochs="20"
+  --per_device_train_batch_size="128"
+  --per_device_eval_batch_size="128"
+  --num_train_epochs="40"
   --group_by_length="True"
   --bf16
   --do_train
@@ -51,12 +48,11 @@ args=(
 
    # Data loader params
   --dataloader_num_workers="6"
-  --dataloader_pin_memory="True"
 
   # Optimizer related arguments
   --optim="adamw_torch"
-  --learning_rate="2e-4"
-  --warmup_steps="1000"
+  --learning_rate="2e-3"
+  --warmup_steps="2000"
   --early_stopping_patience="3"
   --weight_decay="1e-6"
   --max_grad_norm="1.0"
@@ -78,7 +74,7 @@ args=(
   --min_duration_in_seconds="1.0"
   --length_column_name="input_len"
   --remove_unused_columns="False"
-  --preprocessing_num_workers="16"
+  --preprocessing_num_workers="8"
   --datasets_creation_config="${RECIPE_DIR}/librispeech.json"
   --writer_batch_size="200"
   --test_splits test.clean test.other
