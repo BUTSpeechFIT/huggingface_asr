@@ -5,7 +5,7 @@
 #SBATCH --cpus-per-task=7
 #SBATCH --output="outputs/librispeech_ctc/output_%x_%j.out"
 #SBATCH --error="outputs/librispeech_ctc/output_%x_%j.err"
-#SBATCH --partition=small-g
+#SBATCH --partition=standard-g
 #SBATCH --mem=120G
 #SBATCH --time=24:00:00
 
