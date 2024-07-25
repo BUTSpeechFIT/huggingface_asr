@@ -21,7 +21,6 @@
     "length_column_name": "input_len",
     "text_transformations": [
       "do_lower_case",
-      "remove_punctuation"
     ],
     "additional_args": {
       "name": "all"
