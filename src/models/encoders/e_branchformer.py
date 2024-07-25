@@ -351,6 +351,7 @@ class Wav2Vec2EBranchformerForPreTraining(Wav2Vec2ForPreTraining):
         super().__init__(config)
         self.wav2vec2 = Wav2Vec2EBranchformerModel(config)
         self.quantizer = Wav2Vec2GumbelVectorQuantizerCustom(config)
+        del self.wav2vec2.masked_spec_embed
         self.post_init()
 
 
@@ -361,4 +362,5 @@ class Wav2Vec2EBranchformerForCTC(Wav2Vec2ForCTC):
     def __init__(self, config: Wav2Vec2EBranchformerConfig):
         super().__init__(config)
         self.wav2vec2 = Wav2Vec2EBranchformerModel(config)
+        del self.wav2vec2.masked_spec_embed
         self.post_init()
