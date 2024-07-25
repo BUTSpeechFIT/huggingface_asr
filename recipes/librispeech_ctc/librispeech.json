@@ -20,7 +20,7 @@
     "audio_column_name": "audio",
     "length_column_name": "input_len",
     "text_transformations": [
-      "do_lower_case",
+      "do_lower_case"
     ],
     "additional_args": {
       "name": "all"
