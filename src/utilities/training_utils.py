@@ -166,6 +166,9 @@ class SSLTrainer(Trainer):
         # pylint: disable=no-member
         loss = super().training_step(model, inputs)
 
+        if loss == 0:
+            self.optimizer.zero_grad(set_to_none=True)
+
         total_norm = self.get_grad_norm(model)
         if total_norm > self.grad_norm_thr:
             logger.warning(f"Gradient norm: {total_norm}, loss: {loss.item()}")
