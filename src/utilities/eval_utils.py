@@ -2,6 +2,7 @@ from typing import Dict, List
 
 import torch
 from jiwer import cer, compute_measures
+from torchaudio.models.decoder import ctc_decoder
 from transformers import PreTrainedTokenizer
 from transformers.trainer_utils import PredictionOutput
 
@@ -32,8 +33,27 @@ def get_metrics(labels: List[str], preds: List[str]):
     return {"cer": cer(labels, preds), **metrics}
 
 
-def get_most_likely_tokens(logits: torch.Tensor, _: torch.Tensor) -> torch.Tensor:
+def ctc_greedy_decode(logits: torch.Tensor, _: torch.Tensor) -> torch.Tensor:
     return torch.argmax(logits, dim=-1)
+
+
+def ctc_beam_decode(logits: torch.Tensor, _: torch.Tensor, tokenizer, beam_size) -> torch.Tensor:
+    beam_search_decoder = ctc_decoder(
+        lexicon=None,
+        tokens=list(tokenizer.get_vocab().keys()),
+        beam_size=beam_size,
+        beam_size_token=beam_size,
+        blank_token=tokenizer.pad_token,
+        sil_token=tokenizer.replace_word_delimiter_char,
+    )
+
+    log_probs = torch.nn.functional.log_softmax(logits, dim=-1)
+    output = beam_search_decoder(
+        log_probs.float().cpu(), torch.tensor(logits.shape[1], dtype=torch.int32).repeat(logits.shape[0])
+    )
+    predictions = [torch.tensor(pred[0].tokens) for pred in output]
+    output = torch.nn.utils.rnn.pad_sequence(predictions, batch_first=True, padding_value=tokenizer.pad_token_id)
+    return output
 
 
 def compute_metrics_ctc(
