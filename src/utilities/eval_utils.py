@@ -51,7 +51,7 @@ def ctc_beam_decode(logits: torch.Tensor, _: torch.Tensor, tokenizer, beam_size)
     output = beam_search_decoder(
         log_probs.float().cpu(), torch.tensor(logits.shape[1], dtype=torch.int32).repeat(logits.shape[0])
     )
-    predictions = [torch.tensor(pred[0].tokens) for pred in output]
+    predictions = [pred[0].tokens.to(logits.device) for pred in output]
     output = torch.nn.utils.rnn.pad_sequence(predictions, batch_first=True, padding_value=tokenizer.pad_token_id)
     return output
 
