@@ -36,7 +36,7 @@ cd $SRC_DIR || exit
 args=(
   # General training arguments
   --output_dir="${EXPERIMENT_PATH}"
-  --per_device_train_batch_size="96"
+  --per_device_train_batch_size="64"
   --per_device_eval_batch_size="32"
   --num_train_epochs="40"
   --group_by_length="True"
