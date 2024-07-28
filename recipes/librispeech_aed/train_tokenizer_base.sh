@@ -2,7 +2,7 @@
 #SBATCH --nodes=1
 #SBATCH --tasks-per-node=1
 #SBATCH --cpus-per-task=7
-#SBATCH --output="outputs/voxpopuli_czech/output_%x_%j.txt"
+#SBATCH --output="outputs/librispeech_aed/output_%x_%j.txt"
 #SBATCH --partition=small-g
 #SBATCH --mem=60G
 #SBATCH --time=1:00:00

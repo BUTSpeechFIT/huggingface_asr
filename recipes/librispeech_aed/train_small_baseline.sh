@@ -3,8 +3,8 @@
 #SBATCH --gpus-per-node=2
 #SBATCH --tasks-per-node=2
 #SBATCH --cpus-per-task=7
-#SBATCH --output="outputs/librispeech_ctc/output_%x_%j.out"
-#SBATCH --error="outputs/librispeech_ctc/output_%x_%j.err"
+#SBATCH --output="outputs/librispeech_aed/output_%x_%j.out"
+#SBATCH --error="outputs/librispeech_aed/output_%x_%j.err"
 #SBATCH --partition=standard-g
 #SBATCH --mem=120G
 #SBATCH --time=24:00:00
