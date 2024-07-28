@@ -86,6 +86,7 @@ args=(
   # Model related arguments
   --tokenizer_name="Lakoc/libri_5000"
   --feature_extractor_name="Lakoc/log_80mel_extractor_16k"
+  --from_encoder_decoder_config
   --base_encoder_model="Lakoc/fisher_ebranchformer_enc_12_layers_fixed"
   --base_decoder_model="Lakoc/gpt2_tiny_decoder_6_layers"
   --ctc_weight="0.3"
