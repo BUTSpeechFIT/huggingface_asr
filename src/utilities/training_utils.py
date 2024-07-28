@@ -1,3 +1,4 @@
+import os
 from typing import Any, Callable, Dict, List, Optional, Tuple, Union
 
 import torch
@@ -178,9 +179,10 @@ class SSLTrainer(Trainer):
 
         if torch.isnan(total_norm):
             logger.warning("Gradient norm is NaN")
-            torch.save(self.optimizer.state_dict(), "nan_optimizer.pkl")
-            torch.save(inputs, "nan_inputs.pkl")
-            torch.save(model, "nan_model.pkl")
+            if not os.path.exists("nan_optimizer.pkl"):
+                torch.save(self.optimizer.state_dict(), "nan_optimizer.pkl")
+                torch.save(inputs, "nan_inputs.pkl")
+                torch.save(model, "nan_model.pkl")
             self.optimizer.zero_grad(set_to_none=True)
             loss -= loss
         return loss
