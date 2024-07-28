@@ -93,9 +93,10 @@ args=(
   --decoder_pos_emb_fixed
 
   # Generation related arguments
+  --predict_with_generate
   --num_beams="1"
   --max_length="512"
-
+  --decoding_ctc_weight="0"
 )
 
 
