@@ -7,7 +7,7 @@
 #SBATCH --error="outputs/librispeech_aed/output_%x_%j.err"
 #SBATCH --partition=standard-g
 #SBATCH --mem=120G
-#SBATCH --time=24:00:00
+#SBATCH --time=2-00:00:00
 
 EXPERIMENT="baseline_ebranchformer"
 SRC_DIR="/project/${EC_PROJECT}/ipoloka/huggingface_asr"
