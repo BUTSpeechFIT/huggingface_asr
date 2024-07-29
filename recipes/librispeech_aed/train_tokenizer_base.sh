@@ -26,7 +26,7 @@ srun --unbuffered --kill-on-bad-exit  singularity exec $SIFPYTORCH \
   --preprocessing_num_workers="8" \
   --datasets_creation_config="${RECIPE_DIR}/librispeech.json" \
   --writer_batch_size="200" \
-  --tokenizer_name="Lakoc/libri_5000" \
+  --tokenizer_name="Lakoc/libri_5000_v2" \
   --vocab_size=5000 \
   --tokenizer_type="unigram" \
   --text_column_name="text" \

@@ -1,7 +1,7 @@
 #!/usr/bin/bash
 #SBATCH --nodes=1
-#SBATCH --gpus-per-node=2
-#SBATCH --tasks-per-node=2
+#SBATCH --gpus-per-node=4
+#SBATCH --tasks-per-node=4
 #SBATCH --cpus-per-task=7
 #SBATCH --output="outputs/librispeech_aed/output_%x_%j.out"
 #SBATCH --error="outputs/librispeech_aed/output_%x_%j.err"
@@ -9,7 +9,7 @@
 #SBATCH --mem=120G
 #SBATCH --time=2-00:00:00
 
-EXPERIMENT="baseline_ebranchformer"
+EXPERIMENT="baseline_ebranchformer_v2"
 SRC_DIR="/project/${EC_PROJECT}/ipoloka/huggingface_asr"
 WORK_DIR="/scratch/${EC_PROJECT}/ipoloka/huggingface_asr"
 RECIPE_DIR="${SRC_DIR}/recipes/librispeech_aed"
@@ -53,7 +53,7 @@ args=(
   --optim="adamw_torch"
   --learning_rate="2e-3"
   --warmup_steps="2000"
-  --early_stopping_patience="5"
+  --early_stopping_patience="15"
   --weight_decay="1e-6"
   --max_grad_norm="1.0"
   --lsm_factor="0.1"
@@ -84,7 +84,7 @@ args=(
   --data_preprocessing_config="${RECIPE_DIR}/data_preprocessing.json"
 
   # Model related arguments
-  --tokenizer_name="Lakoc/libri_5000"
+  --tokenizer_name="Lakoc/libri_5000_v2"
   --feature_extractor_name="Lakoc/log_80mel_extractor_16k"
   --from_encoder_decoder_config
   --base_encoder_model="Lakoc/fisher_ebranchformer_enc_12_layers_fixed"
@@ -97,6 +97,7 @@ args=(
   --num_beams="1"
   --max_length="512"
   --decoding_ctc_weight="0"
+  --eval_delay="2"
 )
 
 
