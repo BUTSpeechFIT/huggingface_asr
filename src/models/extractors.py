@@ -1,3 +1,4 @@
+"""This module contains the feature extractors for the ASR model."""
 from typing import Optional, Union
 
 import torch
@@ -10,10 +11,58 @@ from models.utils import calculate_output_size_multilayer
 
 
 class CustomFEConfig(PretrainedConfig):
-    def __init__(self, conv_padding=(1, 1), num_fbanks=80, **kwargs):
+    """This class contains the configuration for the feature extractor."""
+
+    def __init__(self, conv_padding=(1, 1), num_fbanks=80, context_awareness_type=None, **kwargs):
         super().__init__(**kwargs)
         self.conv_padding = conv_padding
         self.num_fbanks = num_fbanks
+        self.context_awareness_type = context_awareness_type
+
+
+class GatedConv2d(nn.Module):
+    """This class implements the gated convolutional layer."""
+
+    def __init__(self, in_channels, out_channels, kernel_size, stride, padding):
+        super().__init__()
+        self.conv = nn.Conv2d(in_channels, out_channels, kernel_size, stride=stride, padding=padding)
+        self.gate = nn.Conv2d(in_channels, out_channels, kernel_size, stride=stride, padding=padding)
+
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+        return self.conv(hidden_states) * torch.sigmoid(self.gate(hidden_states))
+
+
+class GatedConv2dShared(nn.Module):
+    def __init__(self, in_channels, out_channels, kernel_size, stride, padding, shared_scale_factor=4):
+        super().__init__()
+
+        self.conv = nn.Conv2d(in_channels, out_channels, kernel_size, stride=stride, padding=padding)
+        self.shared_scale_factor = shared_scale_factor
+        self.gate = nn.Conv2d(
+            in_channels,
+            out_channels,
+            (kernel_size[0] * self.shared_scale_factor, kernel_size[1]),
+            stride=(stride[0] * self.shared_scale_factor, stride[1]),
+            padding=(padding * self.shared_scale_factor, padding),
+        )
+
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+        conv_out = self.conv(hidden_states)
+        gate_out = torch.sigmoid(self.gate(hidden_states))
+        conv_out_reshaped = conv_out.view(*conv_out.size()[:2], -1, self.shared_scale_factor, conv_out.size(3))
+        out = (conv_out_reshaped * gate_out.unsqueeze(3)).view(conv_out.size())
+        return out
+
+
+class ContextAwareConv2d(nn.Module):
+    def __init__(self, in_channels, out_channels, kernel_size, stride, padding, context_awareness_type=None):
+        super().__init__()
+        context_awareness_module_mapping = {"gated": GatedConv2d, "gated_shared": GatedConv2dShared}
+        conv_class = context_awareness_module_mapping.get(context_awareness_type, nn.Conv2d)
+        self.conv = conv_class(in_channels, out_channels, kernel_size, stride, padding)
+
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+        return self.conv(hidden_states)
 
 
 class Conv2dFeatureExtractor(nn.Module):
@@ -30,12 +79,13 @@ class Conv2dFeatureExtractor(nn.Module):
                         padding=conv_padding,
                     )
                     if hasattr(config, "is_causal") and config.is_causal
-                    else nn.Conv2d(
+                    else ContextAwareConv2d(
                         conv_in,
                         out_channels=conv_out,
                         kernel_size=(conv_kernel, conv_kernel),
                         stride=(conv_stride, conv_stride),
                         padding=conv_padding,
+                        context_awareness_type=config.context_awareness_type,
                     ),
                     ACT2FN[config.feat_extract_activation],
                 )
@@ -69,6 +119,11 @@ class Conv2dFeatureExtractor(nn.Module):
 
 class CustomFE:
     # pylint: disable=no-member
+    def __init__(self):
+        self.config = None
+        self.feature_projection = None
+        self.feature_extractor = None
+
     def overwrite_fe(self, config):
         self.config = config
         self.feature_extractor = Conv2dFeatureExtractor(config)
