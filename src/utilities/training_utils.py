@@ -177,7 +177,7 @@ class SSLTrainer(Trainer):
             self.optimizer.zero_grad(set_to_none=True)
             loss -= loss
 
-        if torch.isnan(total_norm):
+        if torch.isnan(torch.tensor(total_norm)):
             logger.warning("Gradient norm is NaN")
             if not os.path.exists("nan_optimizer.pkl"):
                 torch.save(self.optimizer.state_dict(), "nan_optimizer.pkl")
