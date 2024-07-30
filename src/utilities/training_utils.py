@@ -1,4 +1,5 @@
 import os
+import subprocess  # nosec
 from typing import Any, Callable, Dict, List, Optional, Tuple, Union
 
 import torch
@@ -73,7 +74,90 @@ class AdditionalLossTrackerTrainer(Seq2SeqTrainer):
         return (loss, outputs) if return_outputs else loss
 
 
-class SSLTrainer(Trainer):
+class GradAwareTrainer(Trainer):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.grad_norm_thr = 10
+
+    def get_grad_norm(self, model: nn.Module) -> torch.Tensor:
+        total_norm = 0
+        for name, p in model.named_parameters():
+            param_norm = p.grad.detach().data.norm(2)
+            total_norm += param_norm.item() ** 2
+        total_norm = total_norm**0.5
+        return total_norm
+
+    def training_step(self, model: nn.Module, inputs: Dict[str, Union[torch.Tensor, Any]]) -> torch.Tensor:
+        # pylint: disable=no-member
+        loss = super().training_step(model, inputs)
+
+        if loss == 0:
+            self.optimizer.zero_grad(set_to_none=True)
+
+        total_norm = self.get_grad_norm(model)
+        if total_norm > self.grad_norm_thr:
+            logger.warning(f"Gradient norm: {total_norm}, loss: {loss.item()}")
+
+            self.optimizer.zero_grad(set_to_none=True)
+            loss -= loss
+
+        if torch.isnan(torch.tensor(total_norm)):
+            logger.warning("Gradient norm is NaN")
+            if not os.path.exists("nan_optimizer.pkl"):
+                torch.save(self.optimizer.state_dict(), "nan_optimizer.pkl")
+                torch.save(inputs, "nan_inputs.pkl")
+                torch.save(model, "nan_model.pkl")
+            self.optimizer.zero_grad(set_to_none=True)
+            loss -= loss
+        return loss
+
+
+class CustomSeq2SeqTrainer(GradAwareTrainer, Seq2SeqTrainer):
+    def __init__(
+        self,
+        *args,
+        **kwargs,
+    ):
+        super().__init__(*args, **kwargs)
+        self.dev_output_dir = os.path.join(self.args.output_dir, "dev")
+        os.makedirs(self.dev_output_dir, exist_ok=True)
+
+    def evaluation_loop(
+        self,
+        dataloader: DataLoader,
+        description: str,
+        prediction_loss_only: Optional[bool] = None,
+        ignore_keys: Optional[List[str]] = None,
+        metric_key_prefix: str = "eval",
+    ) -> EvalLoopOutput:
+        # pylint: disable=no-member
+        output = super().evaluation_loop(dataloader, description, prediction_loss_only, ignore_keys, metric_key_prefix)
+
+        if self.args.use_sclite_for_metrics and self.is_in_train:
+            pred_str = self.tokenizer.batch_decode(output.predictions, skip_special_tokens=True)
+            label_str = self.tokenizer.batch_decode(output.label_ids, skip_special_tokens=True)
+
+            output_dir = os.path.join(self.dev_output_dir, str(self.state.global_step), metric_key_prefix)
+            os.makedirs(output_dir, exist_ok=True)
+
+            sclite_files = [f"{output_dir}/{type}.trn" for type in ["hyp", "ref"]]
+            for strings, file_to_save in zip([pred_str, label_str], sclite_files):
+                with open(file_to_save, "w") as file_handler:
+                    for index, string in enumerate(strings):
+                        file_handler.write(f"{string} (utterance_{index})\n")
+
+            sclite_cmd = f"sclite -F -D -i wsj -r {sclite_files[1]} trn -h {sclite_files[0]} trn -o snt sum dtl"
+            process = subprocess.Popen(sclite_cmd.split())  # nosec
+            try:
+                process.wait(60)
+            except subprocess.TimeoutExpired:
+                process.kill()
+                logger.warning("Sclite evaluation timed out.")
+
+        return output
+
+
+class SSLTrainer(GradAwareTrainer):
     def __init__(
         self,
         model: Union[PreTrainedModel, nn.Module] = None,
@@ -108,7 +192,6 @@ class SSLTrainer(Trainer):
 
         self.can_return_loss = True
         self.metadata = {"train": {}, "eval": {}}
-        self.grad_norm_thr = 10
 
     def compute_loss(self, model, inputs, return_outputs=False):
         """
@@ -154,38 +237,6 @@ class SSLTrainer(Trainer):
         loss /= num_losses.sum()
 
         return (loss, outputs) if return_outputs else loss
-
-    def get_grad_norm(self, model: nn.Module) -> torch.Tensor:
-        total_norm = 0
-        for p in model.parameters():
-            param_norm = p.grad.detach().data.norm(2)
-            total_norm += param_norm.item() ** 2
-        total_norm = total_norm**0.5
-        return total_norm
-
-    def training_step(self, model: nn.Module, inputs: Dict[str, Union[torch.Tensor, Any]]) -> torch.Tensor:
-        # pylint: disable=no-member
-        loss = super().training_step(model, inputs)
-
-        if loss == 0:
-            self.optimizer.zero_grad(set_to_none=True)
-
-        total_norm = self.get_grad_norm(model)
-        if total_norm > self.grad_norm_thr:
-            logger.warning(f"Gradient norm: {total_norm}, loss: {loss.item()}")
-
-            self.optimizer.zero_grad(set_to_none=True)
-            loss -= loss
-
-        if torch.isnan(torch.tensor(total_norm)):
-            logger.warning("Gradient norm is NaN")
-            if not os.path.exists("nan_optimizer.pkl"):
-                torch.save(self.optimizer.state_dict(), "nan_optimizer.pkl")
-                torch.save(inputs, "nan_inputs.pkl")
-                torch.save(model, "nan_model.pkl")
-            self.optimizer.zero_grad(set_to_none=True)
-            loss -= loss
-        return loss
 
     def gather_additional_statistics(self, inputs, outputs):
         additional_logs = {}
