@@ -68,7 +68,7 @@ args=(
   --wandb_predictions_to_save="500"
   --greater_is_better="False"
   --save_total_limit="5"
-  --metric_for_best_model="eval_wer"
+  --metric_for_best_model="eval_librispeech_validation.other_wer"
 
   # Data related arguments
   --max_duration_in_seconds="20.0"
