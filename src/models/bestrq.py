@@ -183,7 +183,8 @@ class BestRQEBranchformerForPreTrainingConfig(Wav2Vec2EBranchformerConfig, BestR
 class BestRQEBranchformerModel(BestRQMask, Wav2Vec2EBranchformerModel):
     def __init__(self, config: BestRQEBranchformerForPreTrainingConfig):
         super().__init__(config)
-        del self.masked_spec_embed
+        if hasattr(self, "masked_spec_embed"):
+            del self.masked_spec_embed
 
 
 # pylint: disable=abstract-method

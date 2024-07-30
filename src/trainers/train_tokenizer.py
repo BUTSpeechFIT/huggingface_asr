@@ -77,7 +77,7 @@ def train_tokenizer(
         pad_token=pad_token,
         unk_token=unk_token,
         mask_token=mask_token,
-        sep_token="▁" if tokenizer_type == "unigram" else " ",
+        # sep_token="▁" if tokenizer_type == "unigram" else " ",
     )
 
     wrapped_tokenizer.push_to_hub(tokenizer_name)  # pylint: disable=not-callable

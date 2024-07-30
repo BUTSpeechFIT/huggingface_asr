@@ -1,0 +1,29 @@
+[
+  {
+    "dataset_name": "librispeech_asr",
+    "dataset_id": "librispeech",
+    "load_from_disk": false,
+    "train_splits": [
+      "train.clean.100"
+    ],
+    "validation_splits": [
+      "validation.clean",
+      "validation.other"
+    ],
+    "test_splits": [
+      "test.clean",
+      "test.other"
+    ],
+    "text_column_name": "text",
+    "audio_column_name": "audio",
+    "length_column_name": "input_len",
+    "text_transformations": [
+      "whisper_normalize_english",
+      "clean_special_tokens_english_train",
+      "transforms_unfinished_words_to_unks_train"
+    ],
+    "additional_args": {
+      "name": "all"
+    }
+  }
+]

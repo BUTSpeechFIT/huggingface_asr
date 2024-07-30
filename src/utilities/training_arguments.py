@@ -229,6 +229,9 @@ class DataTrainingArguments:
     load_pure_dataset_only: Optional[bool] = field(
         default=False, metadata={"help": "Whether to load only the pure dataset without any preprocessing."}
     )
+    merge_validation_splits: Optional[bool] = field(
+        default=True, metadata={"help": "Whether to merge validation splits."}
+    )
 
 
 @dataclass
