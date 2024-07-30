@@ -1,7 +1,7 @@
 #!/usr/bin/bash
 #SBATCH --nodes=1
-#SBATCH --gpus-per-node=4
-#SBATCH --tasks-per-node=4
+#SBATCH --gpus-per-node=8
+#SBATCH --tasks-per-node=8
 #SBATCH --cpus-per-task=7
 #SBATCH --output="outputs/librispeech_aed/output_%x_%j.out"
 #SBATCH --error="outputs/librispeech_aed/output_%x_%j.err"
