@@ -400,15 +400,18 @@ def join_datasets(
             dataset1[train_split] = concatenate_datasets([dataset1[train_split], dataset2[train_split]])
         else:
             dataset1[train_split] = dataset2[train_split]
-    if validation_splits is not None and isinstance(validation_splits, str):
-        validation_split = validation_splits
-        if validation_split in dataset1:
-            dataset1[validation_split] = concatenate_datasets([dataset1[validation_split], dataset2[validation_split]])
+    if validation_splits is not None:
+        if isinstance(validation_splits, str):
+            validation_split = validation_splits
+            if validation_split in dataset1:
+                dataset1[validation_split] = concatenate_datasets(
+                    [dataset1[validation_split], dataset2[validation_split]]
+                )
+            else:
+                dataset1[validation_split] = dataset2[validation_split]
         else:
-            dataset1[validation_split] = dataset2[validation_split]
-    else:
-        for split in validation_splits:
-            dataset1["validation_" + local_dataset_prefix.split("/")[-1] + "_" + split] = dataset2[split]
+            for split in validation_splits:
+                dataset1["validation_" + local_dataset_prefix.split("/")[-1] + "_" + split] = dataset2[split]
     for split in test_splits:
         dataset1[local_dataset_prefix.split("/")[-1] + "_" + split] = dataset2[split]
     return dataset1
