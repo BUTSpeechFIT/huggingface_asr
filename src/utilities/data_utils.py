@@ -392,7 +392,7 @@ def join_datasets(
     test_splits: List[str],
     local_dataset_prefix: str,
     train_split: str,
-    validation_split: str,
+    validation_splits: Union[str, List[str]],
 ) -> DatasetDict:
     """Add local datasets to the global dataset."""
     if train_split is not None:
@@ -400,11 +400,15 @@ def join_datasets(
             dataset1[train_split] = concatenate_datasets([dataset1[train_split], dataset2[train_split]])
         else:
             dataset1[train_split] = dataset2[train_split]
-    if validation_split is not None:
+    if validation_splits is not None and isinstance(validation_splits, str):
+        validation_split = validation_splits
         if validation_split in dataset1:
             dataset1[validation_split] = concatenate_datasets([dataset1[validation_split], dataset2[validation_split]])
         else:
             dataset1[validation_split] = dataset2[validation_split]
+    else:
+        for split in validation_splits:
+            dataset1["validation_" + local_dataset_prefix.split("/")[-1] + "_" + split] = dataset2[split]
     for split in test_splits:
         dataset1[local_dataset_prefix.split("/")[-1] + "_" + split] = dataset2[split]
     return dataset1
@@ -424,6 +428,7 @@ def load_multiple_datasets(
     global_validation_split: str,
     split_long_segments_to_chunks: bool,
     load_pure_dataset_only: bool = False,
+    merge_validation_splits: bool = True,
 ) -> DatasetDict:
     """Loads multiple datasets, preprocess them and join to single dataset instance."""
     with open(config_path) as config_handle:
@@ -452,12 +457,14 @@ def load_multiple_datasets(
         new_train_split_name = global_train_split if len(dataset_config["train_splits"]) > 0 else None
         new_dev_split_name = global_validation_split if len(dataset_config["validation_splits"]) > 0 else None
         dataset = merge_splits(dataset, dataset_config["train_splits"], new_train_split_name)
-        dataset = merge_splits(dataset, dataset_config["validation_splits"], new_dev_split_name)
+        if merge_validation_splits:
+            dataset = merge_splits(dataset, dataset_config["validation_splits"], new_dev_split_name)
 
         # Remove unused splits
         for split in list(dataset.keys()):
             if split not in dataset_config["test_splits"] + [new_train_split_name, new_dev_split_name]:
-                del dataset[split]
+                if not merge_validation_splits and split in dataset_config["validation_splits"]:
+                    del dataset[split]
 
         logger.info(f"Preprocessing dataset {dataset_config['dataset_name']}")
         if not load_pure_dataset_only:
@@ -502,19 +509,29 @@ def load_multiple_datasets(
             dataset_config["test_splits"],
             dataset_config["dataset_id"],
             new_train_split_name,
-            new_dev_split_name,
+            new_dev_split_name if merge_validation_splits else dataset_config["validation_splits"],
         )
     return dataset_merged
 
 
-def get_eval_split(
+def get_eval_dataset(
     dataset: DatasetDict,
     train_split_name: str,
     validation_split_name: str,
     data_slice_str: str,
     cut_validation_from_train: bool,
     seed: Optional[int],
-) -> Dataset:
+) -> Union[Dataset, DatasetDict]:
+    num_validation_splits = np.sum([key.startswith("validation") for key in dataset.keys()])
+    if num_validation_splits > 1:
+        if cut_validation_from_train:
+            raise ValueError("Cannot use cut_validation_from_train with multiple validation splits.")
+        if data_slice_str is not None:
+            raise ValueError("Cannot use data_slice with multiple validation splits.")
+        return DatasetDict(
+            {key.split("validation_")[1]: dataset[key] for key in dataset.keys() if key.startswith("validation")}
+        )
+
     if cut_validation_from_train:
         if validation_split_name in dataset:
             raise ValueError(
@@ -564,6 +581,7 @@ def get_dataset(
             global_validation_split=data_args.validation_split,
             split_long_segments_to_chunks=data_args.split_long_segments_to_chunks,
             load_pure_dataset_only=data_args.load_pure_dataset_only,
+            merge_validation_splits=data_args.merge_validation_splits,
         )
     else:
         with DistributedContext() as context:
@@ -613,7 +631,7 @@ def get_dataset(
             max_shard_size=data_args.dataset_shard_size,
         )
 
-    train_eval_split = get_eval_split(
+    train_eval_dataset = get_eval_dataset(
         dataset,
         data_args.train_split,
         data_args.validation_split,
@@ -622,7 +640,7 @@ def get_dataset(
         data_args.validation_slice_seed,
     )
 
-    return dataset, train_eval_split
+    return dataset, train_eval_dataset
 
 
 def is_number(s):
