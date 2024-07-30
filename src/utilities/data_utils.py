@@ -462,9 +462,11 @@ def load_multiple_datasets(
 
         # Remove unused splits
         for split in list(dataset.keys()):
-            if split not in dataset_config["test_splits"] + [new_train_split_name, new_dev_split_name]:
-                if not merge_validation_splits and split in dataset_config["validation_splits"]:
-                    del dataset[split]
+            if not split.startswith("validation") and split not in dataset_config["test_splits"] + [
+                new_train_split_name,
+                new_dev_split_name,
+            ]:
+                del dataset[split]
 
         logger.info(f"Preprocessing dataset {dataset_config['dataset_name']}")
         if not load_pure_dataset_only:
