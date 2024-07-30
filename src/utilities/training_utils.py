@@ -77,7 +77,7 @@ class AdditionalLossTrackerTrainer(Seq2SeqTrainer):
 class GradAwareTrainer(Trainer):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self.grad_norm_thr = 10
+        self.grad_norm_thr = 100
 
     def get_grad_norm(self, model: nn.Module) -> torch.Tensor:
         total_norm = 0

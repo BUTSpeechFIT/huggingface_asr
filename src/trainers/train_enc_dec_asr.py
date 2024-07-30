@@ -108,6 +108,17 @@ if __name__ == "__main__":
         compute_metrics=lambda pred: compute_metrics(tokenizer, pred, gen_args.wandb_predictions_to_save),
     )
 
+    if training_args.start_by_eval:
+        do_evaluate(
+            trainer=trainer,
+            dataset=dataset,
+            model=model,
+            tokenizer=tokenizer,
+            gen_args=gen_args,
+            training_args=training_args,
+            data_args=data_args,
+        )
+
     # 8. Train model
     if training_args.do_train:
         trainer.train(resume_from_checkpoint=training_args.restart_from or None)
