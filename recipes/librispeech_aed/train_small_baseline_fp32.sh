@@ -1,7 +1,7 @@
 #!/usr/bin/bash
 #SBATCH --nodes=1
-#SBATCH --gpus-per-node=4
-#SBATCH --tasks-per-node=4
+#SBATCH --gpus-per-node=8
+#SBATCH --tasks-per-node=8
 #SBATCH --cpus-per-task=7
 #SBATCH --output="outputs/librispeech_aed/output_%x_%j.out"
 #SBATCH --error="outputs/librispeech_aed/output_%x_%j.err"
@@ -9,7 +9,7 @@
 #SBATCH --mem=120G
 #SBATCH --time=2-00:00:00
 
-EXPERIMENT="baseline_ebranchformer_v2.2_fp32"
+EXPERIMENT="baseline_ebranchformer_v2.3_fp32"
 
 SRC_DIR="/project/${EC_PROJECT}/ipoloka/huggingface_asr"
 WORK_DIR="/scratch/${EC_PROJECT}/ipoloka/huggingface_asr"
@@ -39,7 +39,7 @@ args=(
   --output_dir="${EXPERIMENT_PATH}"
   --per_device_train_batch_size="64"
   --per_device_eval_batch_size="32"
-  --num_train_epochs="150"
+  --num_train_epochs="240"
   --group_by_length="True"
 #  --bf16
   --do_train
@@ -53,7 +53,7 @@ args=(
   # Optimizer related arguments
   --optim="adamw_torch"
   --learning_rate="2e-3"
-  --warmup_steps="2000"
+  --warmup_steps="40000"
   --early_stopping_patience="15"
   --weight_decay="1e-6"
   --max_grad_norm="1.0"
@@ -69,6 +69,8 @@ args=(
   --greater_is_better="False"
   --save_total_limit="5"
   --metric_for_best_model="eval_librispeech_validation.other_wer"
+  --push_to_hub_final_model
+  --use_sclite_for_metrics
 
   # Data related arguments
   --max_duration_in_seconds="20.0"
