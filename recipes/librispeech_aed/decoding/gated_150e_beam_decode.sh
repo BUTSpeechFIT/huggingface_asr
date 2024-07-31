@@ -64,6 +64,7 @@ args=(
   --tokenizer_name="Lakoc/libri_5000_v2"
   --feature_extractor_name="Lakoc/log_80mel_extractor_16k"
   --from_pretrained="/scratch/project_465000836/ipoloka/huggingface_asr/experiments/baseline_ebranchformer_gated/checkpoint-108484"
+  --decoder_pos_emb_fixed
 
   # Generation related arguments
   --predict_with_generate
