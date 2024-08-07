@@ -1,15 +1,15 @@
 #!/usr/bin/bash
 #SBATCH --nodes=1
-#SBATCH --gpus-per-node=8
-#SBATCH --tasks-per-node=8
+#SBATCH --gpus-per-node=2
+#SBATCH --tasks-per-node=2
 #SBATCH --cpus-per-task=7
 #SBATCH --output="outputs/librispeech_aed/output_%x_%j.out"
 #SBATCH --error="outputs/librispeech_aed/output_%x_%j.err"
-#SBATCH --partition=standard-g
+#SBATCH --partition=small-g
 #SBATCH --mem=120G
-#SBATCH --time=2-00:00:00
+#SBATCH --time=3-00:00:00
 
-EXPERIMENT="baseline_ebranchformer_v2.3_fp32"
+EXPERIMENT="baseline_ebranchformer_v2.4_fp32"
 
 SRC_DIR="/project/${EC_PROJECT}/ipoloka/huggingface_asr"
 WORK_DIR="/scratch/${EC_PROJECT}/ipoloka/huggingface_asr"
@@ -41,7 +41,6 @@ args=(
   --per_device_eval_batch_size="32"
   --num_train_epochs="240"
   --group_by_length="True"
-#  --bf16
   --do_train
   --do_evaluate
   --load_best_model_at_end
