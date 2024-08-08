@@ -5,9 +5,9 @@
 #SBATCH --cpus-per-task=7
 #SBATCH --output="outputs/librispeech_aed/output_%x_%j.out"
 #SBATCH --error="outputs/librispeech_aed/output_%x_%j.err"
-#SBATCH --partition=standard-g
+#SBATCH --partition=small-g
 #SBATCH --mem=200G
-#SBATCH --time=2-00:00:00
+#SBATCH --time=3-00:00:00
 
 EXPERIMENT="baseline_ebranchformer_v2.4_fp32_gated"
 
