@@ -34,7 +34,9 @@ class CustomModelArguments(ModelArguments):
 if __name__ == "__main__":
     logging.set_verbosity_debug()
     logger = logging.get_logger("transformers")
-    parser = HfArgumentParser((ModelArguments, DataTrainingArguments, GeneralTrainingArguments, GenerationArguments))
+    parser = HfArgumentParser(
+        (CustomModelArguments, DataTrainingArguments, GeneralTrainingArguments, GenerationArguments)
+    )
 
     model_args, data_args, training_args, gen_args = parser.parse_args_into_dataclasses()
 
