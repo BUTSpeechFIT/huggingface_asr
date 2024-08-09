@@ -66,7 +66,7 @@ if __name__ == "__main__":
     config.out_dim = llm.config.hidden_size
     model.additional_layer = CustomWhisperEncoderLayer(config)
     model.lm_head = llm.lm_head
-    model.lm_head.requires_grad = False
+    model.lm_head.weight.requires_grad = False
     model.config.additional_layer = True
     model.config.ctc_zero_infinity = True
     model.config.blank_token_id = tokenizer.pad_token_id
