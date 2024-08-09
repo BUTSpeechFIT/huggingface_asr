@@ -1,7 +1,7 @@
 #!/usr/bin/bash
 #SBATCH --nodes=1
-#SBATCH --gpus-per-node=4
-#SBATCH --tasks-per-node=4
+#SBATCH --gpus-per-node=8
+#SBATCH --tasks-per-node=8
 #SBATCH --cpus-per-task=7
 #SBATCH --output="outputs/librispeech_whisper_ctc/output_%x_%j.out"
 #SBATCH --error="outputs/librispeech_whisper_ctc/output_%x_%j.err"
@@ -9,7 +9,7 @@
 #SBATCH --mem=120G
 #SBATCH --time=2-00:00:00
 
-EXPERIMENT="test"
+EXPERIMENT="gemma_whisper_llm"
 SRC_DIR="/project/${EC_PROJECT}/ipoloka/huggingface_asr"
 WORK_DIR="/scratch/${EC_PROJECT}/ipoloka/huggingface_asr"
 RECIPE_DIR="${SRC_DIR}/recipes/librispeech_whisper_ctc"
@@ -36,8 +36,8 @@ cd $SRC_DIR || exit
 args=(
   # General training arguments
   --output_dir="${EXPERIMENT_PATH}"
-  --per_device_train_batch_size="4"
-  --per_device_eval_batch_size="4"
+  --per_device_train_batch_size="8"
+  --per_device_eval_batch_size="8"
   --num_train_epochs="150"
   --group_by_length="True"
   --bf16
@@ -57,7 +57,7 @@ args=(
   --weight_decay="1e-6"
   --max_grad_norm="1.0"
   --lsm_factor="0.1"
-  --gradient_accumulation_steps="1"
+  --gradient_accumulation_steps="4"
 
   # Logging, saving and evaluation related arguments
   --report_to="wandb"
@@ -83,14 +83,15 @@ args=(
   --data_preprocessing_config="${RECIPE_DIR}/data_preprocessing.json"
 
   # Model related arguments
-  --from_pretrained="openai/whisper-tiny"
-  --tokenizer_name="openai/whisper-tiny"
-  --feature_extractor_name="openai/whisper-tiny"
+  --from_pretrained="openai/whisper-small"
+  --tokenizer_name="openai/whisper-small"
+  --feature_extractor_name="openai/whisper-small"
+  --llm_model="google/gemma-2b-it"
 
 
   # Generation related arguments
   --num_beams="1"
-  --max_length="512"
+  --max_length="10"
 )
 
 
