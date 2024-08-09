@@ -70,6 +70,13 @@ if __name__ == "__main__":
     model.config.additional_layer = True
     model.config.ctc_zero_infinity = True
     model.config.blank_token_id = tokenizer.pad_token_id
+    for module in [
+        *model.encoder.layers[: int(len(model.encoder.layers) * 2 / 3)],
+        model.encoder.conv1,
+        model.encoder.conv2,
+    ]:
+        for param in module.parameters():
+            param.requires_grad = False
     del llm
     # 4. Initialize callbacks
     callbacks = init_callbacks(data_args, training_args, dataset, feature_extractor)
