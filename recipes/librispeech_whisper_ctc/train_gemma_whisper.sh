@@ -9,7 +9,7 @@
 #SBATCH --mem=120G
 #SBATCH --time=2-00:00:00
 
-EXPERIMENT="gemma_whisper_llm"
+EXPERIMENT="gemma-whisper-medium"
 SRC_DIR="/project/${EC_PROJECT}/ipoloka/huggingface_asr"
 WORK_DIR="/scratch/${EC_PROJECT}/ipoloka/huggingface_asr"
 RECIPE_DIR="${SRC_DIR}/recipes/librispeech_whisper_ctc"
@@ -36,8 +36,8 @@ cd $SRC_DIR || exit
 args=(
   # General training arguments
   --output_dir="${EXPERIMENT_PATH}"
-  --per_device_train_batch_size="8"
-  --per_device_eval_batch_size="8"
+  --per_device_train_batch_size="16"
+  --per_device_eval_batch_size="16"
   --num_train_epochs="150"
   --group_by_length="True"
   --bf16
@@ -57,7 +57,7 @@ args=(
   --weight_decay="1e-6"
   --max_grad_norm="1.0"
   --lsm_factor="0.1"
-  --gradient_accumulation_steps="4"
+  --gradient_accumulation_steps="1"
 
   # Logging, saving and evaluation related arguments
   --report_to="wandb"
@@ -83,9 +83,9 @@ args=(
   --data_preprocessing_config="${RECIPE_DIR}/data_preprocessing.json"
 
   # Model related arguments
-  --from_pretrained="openai/whisper-small"
-  --tokenizer_name="openai/whisper-small"
-  --feature_extractor_name="openai/whisper-small"
+  --from_pretrained="openai/whisper-medium"
+  --tokenizer_name="openai/whisper-medium"
+  --feature_extractor_name="openai/whisper-medium"
   --llm_model="google/gemma-2b-it"
 
 

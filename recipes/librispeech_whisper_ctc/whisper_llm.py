@@ -101,7 +101,7 @@ def get_model(model_args):
     model.config.ctc_zero_infinity = True
     model.config.blank_token_id = tokenizer.pad_token_id
     for module in [
-        *model.encoder.layers[: int(len(model.encoder.layers) * 2 / 3)],
+        *model.encoder.layers[: int(len(model.encoder.layers) * 5 / 6)],
         model.encoder.conv1,
         model.encoder.conv2,
     ]:
