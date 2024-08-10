@@ -1,6 +1,7 @@
 """
 This module implements a CTC-based model for speech recognition using the Whisper model.
 """
+import copy
 from typing import Optional, Tuple, Union
 
 import torch
@@ -119,37 +120,37 @@ _HIDDEN_STATES_START_POSITION = 2
 class WhisperEncoderForCTC(WhisperPreTrainedModel):
     config_class = WhisperForCTCConfig
 
-    def __init__(self, config: WhisperForCTCConfig):
+    def __init__(self, config: WhisperForCTCConfig, llm_dim):
         super().__init__(config)
         self.encoder = WhisperEncoder(config)
-        if config.additional_layer:
-            self.additional_layer = WhisperEncoderLayer(config)
-        if config.additional_self_attention_layer:
-            self.additional_self_attention_layer = WHISPER_ATTENTION_CLASSES[config._attn_implementation](
-                embed_dim=config.d_model,
-                num_heads=config.encoder_attention_heads,
-                dropout=config.attention_dropout,
-                config=config,
-            )
+
+        extended_config = copy.deepcopy(config)
+        extended_config.d_model = llm_dim
+        extended_config.encoder_ffn_dim = llm_dim * 4
+        extended_config.encoder_attention_heads = 8
+        self.dim_matching = nn.Linear(config.d_model, llm_dim)
+        self.additional_layer_1 = WhisperEncoderLayer(extended_config)
+        # self.additional_layer_2 = WhisperEncoderLayer(extended_config)
+
         self.ctc_weight = config.ctc_weight
         if config.sub_sample:
             self.subsample_conv1 = nn.Conv1d(
-                in_channels=config.d_model,
-                out_channels=config.d_model,
+                in_channels=extended_config.d_model,
+                out_channels=extended_config.d_model,
                 kernel_size=3,
                 stride=2,
                 padding=1,
                 bias=False,
             )
             self.subsample_conv2 = nn.Conv1d(
-                in_channels=config.d_model,
-                out_channels=config.d_model,
+                in_channels=extended_config.d_model,
+                out_channels=extended_config.d_model,
                 kernel_size=3,
                 stride=2,
                 padding=1,
                 bias=False,
             )
-        self.lm_head = nn.Linear(config.d_model, config.vocab_size, bias=False)
+        self.lm_head = nn.Linear(extended_config.d_model, config.vocab_size, bias=False)
         self.dropout = nn.Dropout(config.final_dropout)
 
     def freeze_base_model(self):
@@ -193,24 +194,14 @@ class WhisperEncoderForCTC(WhisperPreTrainedModel):
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
         )
-        if self.config.additional_layer:
-            intermediate_output = self.additional_layer(
-                outputs.last_hidden_state,
-                attention_mask=None,
-                output_attentions=output_attentions,
-                layer_head_mask=None,
-            )
-            outputs.last_hidden_state = intermediate_output[0]
-        if self.config.additional_self_attention_layer:
-            intermediate_output = self.additional_self_attention_layer(
-                outputs.last_hidden_state,
-                attention_mask=None,
-                output_attentions=output_attentions,
-                layer_head_mask=None,
-            )
-            outputs.last_hidden_state = intermediate_output[0]
 
         hidden_states = outputs.last_hidden_state
+        hidden_states = self.dim_matching(hidden_states)
+        hidden_states = self.additional_layer_1(
+            hidden_states, attention_mask, output_attentions=output_attentions, layer_head_mask=None
+        )[0]
+        # hidden_states = self.additional_layer_2(hidden_states, attention_mask, output_attentions=output_attentions,layer_head_mask=None)[0]
+
         hidden_states = self.dropout(hidden_states)
         if self.config.sub_sample:
             hidden_states = self.subsample_conv2(self.subsample_conv1(hidden_states.transpose(1, 2))).transpose(1, 2)
