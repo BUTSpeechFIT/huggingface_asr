@@ -1,15 +1,15 @@
 #!/usr/bin/bash
 #SBATCH --nodes=1
-#SBATCH --gpus-per-node=8
-#SBATCH --tasks-per-node=8
+#SBATCH --gpus-per-node=4
+#SBATCH --tasks-per-node=4
 #SBATCH --cpus-per-task=7
 #SBATCH --output="outputs/librispeech_whisper_ctc/output_%x_%j.out"
 #SBATCH --error="outputs/librispeech_whisper_ctc/output_%x_%j.err"
-#SBATCH --partition=standard-g
-#SBATCH --mem=120G
-#SBATCH --time=2-00:00:00
+#SBATCH --partition=dev-g
+#SBATCH --mem=240G
+#SBATCH --time=01:00:00
 
-EXPERIMENT="gemma-whisper-medium"
+EXPERIMENT="gemma-whisper-medium-blank-as-bos"
 SRC_DIR="/project/${EC_PROJECT}/ipoloka/huggingface_asr"
 WORK_DIR="/scratch/${EC_PROJECT}/ipoloka/huggingface_asr"
 RECIPE_DIR="${SRC_DIR}/recipes/librispeech_whisper_ctc"
@@ -51,7 +51,7 @@ args=(
 
   # Optimizer related arguments
   --optim="adamw_torch"
-  --learning_rate="2e-3"
+  --learning_rate="2e-5"
   --warmup_steps="2000"
   --early_stopping_patience="15"
   --weight_decay="1e-6"
