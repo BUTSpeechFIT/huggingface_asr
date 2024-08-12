@@ -219,6 +219,8 @@ class WhisperEncoderForCTC(WhisperPreTrainedModel):
 
             # assuming that padded tokens are filled with -100
             # when not being attended to
+            if labels[0, 0] == self.config.bos_token_id:
+                labels = labels[:, 1:]
             labels_mask = labels >= 0
             target_lengths = labels_mask.sum(-1)
             flattened_targets = labels.masked_select(labels_mask)

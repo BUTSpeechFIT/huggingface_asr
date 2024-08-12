@@ -1,4 +1,5 @@
 """Main training script for training of CTC ASR models."""
+import itertools as it
 import string
 import sys
 from dataclasses import dataclass, field
@@ -22,7 +23,7 @@ import wandb
 from utilities.callbacks import init_callbacks
 from utilities.collators import SpeechCollatorWithPadding
 from utilities.data_utils import get_dataset
-from utilities.eval_utils import ctc_greedy_decode, get_metrics, write_wandb_pred
+from utilities.eval_utils import get_metrics, write_wandb_pred
 from utilities.general_utils import do_evaluate
 from utilities.training_arguments import (
     DataTrainingArguments,
@@ -65,8 +66,19 @@ def compute_metrics_ctc(
     return get_metrics(label_str, pred_str)
 
 
-def get_token_subset(tokenizer):
+def remove_duplicates(prediction, blank):
+    return torch.tensor([k for k, g in it.groupby(prediction) if k != blank])
 
+
+def ctc_greedy_decode(logits: torch.Tensor, _: torch.Tensor, blank, pad_token_id) -> torch.Tensor:
+    idxs = torch.argmax(logits, dim=-1)
+    predictions = []
+    for prediction in idxs:
+        predictions.append(remove_duplicates(prediction, blank))
+    return torch.nn.utils.rnn.pad_sequence(predictions, batch_first=True, padding_value=pad_token_id)
+
+
+def get_token_subset(tokenizer):
     removed_token_ids = []
     unwanted_tokens = []
     charset = string.digits + string.ascii_lowercase + string.punctuation + " "
@@ -100,6 +112,9 @@ def get_model(model_args):
     model.lm_head.weight.requires_grad = False
     model.config.ctc_zero_infinity = True
     model.config.blank_token_id = tokenizer.pad_token_id
+    model.config.bos_token_id = tokenizer.bos_token_id
+    model.config.eos_token_id = tokenizer.eos_token_id
+    model.config.pad_token_id = tokenizer.pad_token_id
     for module in [
         *model.encoder.layers[: int(len(model.encoder.layers) * 5 / 6)],
         model.encoder.conv1,
@@ -166,7 +181,9 @@ if __name__ == "__main__":
         train_dataset=dataset[data_args.train_split],
         eval_dataset=training_eval_dataset,
         data_collator=data_collator,
-        preprocess_logits_for_metrics=ctc_greedy_decode,
+        preprocess_logits_for_metrics=lambda x, y: ctc_greedy_decode(
+            x, y, model.config.blank_token_id, tokenizer.pad_token_id
+        ),
         compute_metrics=lambda pred: compute_metrics_ctc(
             tokenizer, new_token_ids_mapping_inverted, pred, gen_args.wandb_predictions_to_save
         ),
