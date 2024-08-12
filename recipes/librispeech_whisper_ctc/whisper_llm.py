@@ -30,6 +30,20 @@ from utilities.training_arguments import (
 )
 
 
+class LearnableBlankLinear(torch.nn.Module):
+    def __init__(self, frozen_linear, blank_id):
+        super().__init__()
+        self.frozen_linear = frozen_linear
+        self.blank_id = blank_id
+        self.blank_projection = torch.nn.Linear(frozen_linear.in_features, 1)
+        self.frozen_linear.weight.requires_grad = False
+
+    def forward(self, x):
+        out = self.frozen_linear(x)
+        out[..., self.blank_id] = self.blank_projection(x).squeeze(dim=-1)
+        return out
+
+
 def get_model(m_args: CustomModelArguments):
     llm = AutoModelForCausalLM.from_pretrained(m_args.llm_model)
     new_model = WhisperEncoderForCTC.from_pretrained(
@@ -38,15 +52,17 @@ def get_model(m_args: CustomModelArguments):
     llm_head = llm.lm_head
     unwanted_tokens_mask = np.ones((llm_head.weight.shape[0],), dtype=bool)
     unwanted_tokens_mask[removed_token_ids] = False
-    llm_head.out_features = len(tokenizer) - len(removed_token_ids)
-    llm_head.weight = torch.nn.Parameter(llm_head.weight[unwanted_tokens_mask])
-    new_model.lm_head = llm_head
-    new_model.lm_head.weight.requires_grad = False
-    new_model.config.ctc_zero_infinity = True
     new_model.config.blank_token_id = tokenizer.pad_token_id
     new_model.config.bos_token_id = tokenizer.bos_token_id
     new_model.config.eos_token_id = tokenizer.eos_token_id
     new_model.config.pad_token_id = tokenizer.pad_token_id
+
+    llm_head.weight = torch.nn.Parameter(llm_head.weight[unwanted_tokens_mask])
+    llm_head.out_features = len(tokenizer) - len(removed_token_ids)
+
+    new_model.lm_head = LearnableBlankLinear(llm_head, new_model.config.blank_token_id)
+    new_model.config.ctc_zero_infinity = True
+
     for module in [
         *new_model.encoder.layers[: int(len(new_model.encoder.layers) * 5 / 6)],
         new_model.encoder.conv1,
