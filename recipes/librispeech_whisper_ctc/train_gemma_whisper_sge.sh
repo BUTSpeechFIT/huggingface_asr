@@ -8,7 +8,7 @@
 #$ -e /mnt/matylda5/ipoloka/projects/huggingface_asr/outputs/whisper_llm/$JOB_NAME_$JOB_ID.err
 
 PROJECT="whisper_llm"
-EXPERIMENT="gemma-whisper-medium-learnable-blank-full-v1"
+EXPERIMENT="gemma-whisper-medium-learnable-blank-full-v2.1"
 SRC_DIR="/mnt/matylda5/ipoloka/projects/huggingface_asr"
 WORK_DIR=$SRC_DIR
 RECIPE_DIR="${SRC_DIR}/recipes/librispeech_whisper_ctc"
@@ -29,6 +29,7 @@ export WANDB_ENTITY="butspeechfit"
 
 # As Karel said don't be an idiot and use the same number of GPUs as requested
 export N_GPUS=4
+export CUDA_VISIBLE_DEVICES=0,1,2,3
 
 cd $SRC_DIR || exit
 
@@ -56,7 +57,7 @@ args=(
   --weight_decay="1e-6"
   --max_grad_norm="1.0"
   --lsm_factor="0.1"
-  --gradient_accumulation_steps="2"
+  --gradient_accumulation_steps="1"
 
   # Logging, saving and evaluation related arguments
   --report_to="wandb"

@@ -64,16 +64,13 @@ def compute_metrics_ctc(
     return get_metrics(label_str, pred_str)
 
 
-def remove_duplicates(prediction, blank):
-    return torch.tensor([k for k, g in it.groupby(prediction) if k != blank])
-
-
 def ctc_greedy_decode(logits: torch.Tensor, _: torch.Tensor, blank, pad_token_id) -> torch.Tensor:
     idxs = torch.argmax(logits, dim=-1)
-    predictions = []
-    for prediction in idxs:
-        predictions.append(remove_duplicates(prediction, blank))
-    return torch.nn.utils.rnn.pad_sequence(predictions, batch_first=True, padding_value=pad_token_id).to(logits.device)
+    for i, prediction in enumerate(idxs):
+        deduplicated = [k for k, g in it.groupby(prediction) if k != blank]
+        idxs[i, : len(deduplicated)] = torch.tensor(deduplicated)
+        idxs[i, len(deduplicated) :] = pad_token_id
+    return idxs
 
 
 def get_token_subset(tokenizer):
