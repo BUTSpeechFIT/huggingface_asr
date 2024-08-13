@@ -1,8 +1,4 @@
 #!/usr/bin/bash
-unset PYTHONPATH
-unset PYTHONHOME
-source /mnt/matylda5/ipoloka/miniconda3/bin/activate /mnt/matylda5/ipoloka/envs/hugginface_asr
-
 PORT=9049
 
 # Check if port is already in use
