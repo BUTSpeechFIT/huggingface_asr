@@ -1,6 +1,17 @@
 #!/usr/bin/bash
 PORT=9049
 
+# Enable opening multiple files
+ulimit -n 4096
+
+# Enable to save bigger files
+ulimit -f unlimited
+
+# Enable more threads per process by increasing virtual memory (https://stackoverflow.com/questions/344203/maximum-number-of-threads-per-process-in-linux)
+ulimit -v unlimited
+
+export OMP_NUM_THREADS=16
+
 # Check if port is already in use
 if lsof -Pi :$PORT -sTCP:LISTEN -t >/dev/null ; then
     echo "Port $PORT is already in use. Port forwarding is already running."
