@@ -23,7 +23,8 @@
       "do_lower_case"
     ],
     "additional_args": {
-      "name": "all"
+      "name": "all",
+      "revision": "0.0.0"
     }
   }
 ]
