@@ -3,16 +3,20 @@
 #$ -q long.q
 #$ -l ram_free=180G,mem_free=180G
 #$ -l scratch=8
-#$ -l gpu=1,gpu_ram=40G
+#$ -l gpu=4,gpu_ram=40G
 #$ -o /mnt/matylda5/ipoloka/projects/huggingface_asr/outputs/whisper_llm/$JOB_NAME_$JOB_ID.out
 #$ -e /mnt/matylda5/ipoloka/projects/huggingface_asr/outputs/whisper_llm/$JOB_NAME_$JOB_ID.err
 
 PROJECT="whisper_llm"
-EXPERIMENT="gemma-whisper-medium-blank-as-bos"
-SRC_ROOT="/mnt/matylda5/ipoloka/projects/huggingface_asr"
+EXPERIMENT="gemma-whisper-medium-learnable-blank-full-v1"
+SRC_DIR="/mnt/matylda5/ipoloka/projects/huggingface_asr"
 WORK_DIR=$SRC_DIR
 RECIPE_DIR="${SRC_DIR}/recipes/librispeech_whisper_ctc"
 EXPERIMENT_PATH="${WORK_DIR}/experiments/${PROJECT}/${EXPERIMENT}"
+
+unset PYTHONPATH
+unset PYTHONHOME
+source /mnt/matylda5/ipoloka/miniconda3/bin/activate /mnt/matylda5/ipoloka/envs/hugginface_asr
 
 export PATH="/mnt/matylda5/ipoloka/utils/SCTK/bin:$PATH"
 export PYTHONPATH="${PYTHONPATH}:${SRC_DIR}/src"
@@ -24,19 +28,19 @@ export WANDB_RUN_ID="${EXPERIMENT}"
 export WANDB_ENTITY="butspeechfit"
 
 # As Karel said don't be an idiot and use the same number of GPUs as requested
-export N_GPUS=1
+export N_GPUS=4
 
 cd $SRC_DIR || exit
 
 args=(
   # General training arguments
   --output_dir="${EXPERIMENT_PATH}"
-  --per_device_train_batch_size="16"
-  --per_device_eval_batch_size="16"
-  --num_train_epochs="150"
+  --per_device_train_batch_size="28"
+  --per_device_eval_batch_size="64"
+  --num_train_epochs="20"
   --group_by_length="True"
   --bf16
-  --do_train
+#  --do_train
   --do_evaluate
   --load_best_model_at_end
   --ddp_find_unused_parameters="False"
@@ -52,7 +56,7 @@ args=(
   --weight_decay="1e-6"
   --max_grad_norm="1.0"
   --lsm_factor="0.1"
-  --gradient_accumulation_steps="1"
+  --gradient_accumulation_steps="2"
 
   # Logging, saving and evaluation related arguments
   --report_to="wandb"
@@ -70,7 +74,7 @@ args=(
   --length_column_name="input_len"
   --remove_unused_columns="False"
   --preprocessing_num_workers="8"
-  --datasets_creation_config="${RECIPE_DIR}/librispeech.json"
+  --datasets_creation_config="${RECIPE_DIR}/librispeech_sge.json"
   --writer_batch_size="200"
   --test_splits librispeech_test.clean librispeech_test.other
 
@@ -89,5 +93,4 @@ args=(
   --max_length="10"
 )
 
-
-"${SRC_ROOT}/sge_tools/python" recipes/librispeech_whisper_ctc/whisper_llm.py "${args[@]}"
+"${SRC_DIR}/sge_tools/python" recipes/librispeech_whisper_ctc/whisper_llm.py "${args[@]}"
