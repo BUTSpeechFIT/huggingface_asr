@@ -1,6 +1,6 @@
 [
   {
-    "dataset_name": "openslr/librispeech_asr",
+    "dataset_name": "librispeech_asr",
     "dataset_id": "librispeech",
     "load_from_disk": false,
     "train_splits": [
