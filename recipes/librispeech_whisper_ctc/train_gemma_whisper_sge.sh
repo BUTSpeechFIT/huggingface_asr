@@ -40,7 +40,7 @@ args=(
   --num_train_epochs="20"
   --group_by_length="True"
   --bf16
-#  --do_train
+  --do_train
   --do_evaluate
   --load_best_model_at_end
   --ddp_find_unused_parameters="False"
