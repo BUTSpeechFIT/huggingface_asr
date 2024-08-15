@@ -128,7 +128,7 @@ class LLMASRModel(nn.Module):
             for idx, sequence in enumerate(asr_predictions):
                 labels_wo_pad = labels[idx][labels[idx] != -100][1:]
                 asr_sequence_mask = mask[idx]
-                asr_sequence = sequence[mask[idx]].apply_(new_token_ids_mapping_inverted.get)
+                asr_sequence = sequence[mask[idx]].to("cpu").apply_(new_token_ids_mapping_inverted.get).to(device)
                 asr_sequence_embeds = asr_outputs.hidden_states[idx][asr_sequence_mask]
                 asr_embeddings.append(asr_sequence_embeds)
                 label_sequence = torch.tensor(
