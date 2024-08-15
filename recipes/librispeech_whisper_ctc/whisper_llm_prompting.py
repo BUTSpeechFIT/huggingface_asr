@@ -77,29 +77,23 @@ def get_model(m_args: CustomModelArgumentsPrompting):
     return new_model, llm
 
 
-class LLMASRModel(PreTrainedModel):
-    def __init__(self, llm, asr, number_of_prompt_tokens=16, freeze_asr=False, freeze_llm=False, **kwargs):
-        super().__init__(llm.config)
+class LLMASRModel(nn.Module):
+    def __init__(self, llm, asr, number_of_prompt_tokens=16, freeze_asr=False, freeze_llm=False):
+        super().__init__()
         self.llm = llm
         self.asr = asr
         self.number_of_prompt_tokens = number_of_prompt_tokens
         self.soft_prompt = nn.Embedding(self.number_of_prompt_tokens + 1, llm.config.hidden_size)
+
+        # Initialize soft prompt embeddings
+        embeds = self.llm.get_input_embeddings()
+        embeds_mean = embeds.weight.mean(dim=0)
+        self.soft_prompt.weight.data = embeds_mean.repeat(self.number_of_prompt_tokens + 1, 1)
+
         if freeze_asr:
             self.freeze_asr()
         if freeze_llm:
             self.freeze_llm()
-        self.post_init()
-
-    def _init_weights(self, module):
-        std = self.config.initializer_range
-        if isinstance(module, nn.Linear):
-            module.weight.data.normal_(mean=0.0, std=std)
-            if module.bias is not None:
-                module.bias.data.zero_()
-        elif isinstance(module, nn.Embedding):
-            module.weight.data.normal_(mean=0.0, std=std)
-            if module.padding_idx is not None:
-                module.weight.data[module.padding_idx].zero_()
 
     def freeze_asr(self):
         for param in self.asr.parameters():
