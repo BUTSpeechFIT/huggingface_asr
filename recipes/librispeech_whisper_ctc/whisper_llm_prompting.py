@@ -111,7 +111,7 @@ class LLMASRModel(nn.Module):
         blank_mask = asr_predictions == self.asr.config.pad_token_id
         deduplication_mask = torch.hstack(
             [
-                torch.ones((asr_predictions.shape[0], 1), dtype=torch.bool),
+                torch.ones((asr_predictions.shape[0], 1), dtype=torch.bool, device=asr_predictions.device),
                 asr_predictions[:, 1:] != asr_predictions[:, :-1],
             ]
         )
