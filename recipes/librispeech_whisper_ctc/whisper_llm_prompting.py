@@ -105,20 +105,22 @@ class LLMASRModel(nn.Module):
 
     def forward(self, **kwargs):
         labels = kwargs.pop("labels")
-
         asr_outputs = self.asr(**kwargs)
         asr_predictions = asr_outputs.logits.argmax(dim=-1)
+
+        device = asr_predictions.device
+
         blank_mask = asr_predictions == self.asr.config.pad_token_id
         deduplication_mask = torch.hstack(
             [
-                torch.ones((asr_predictions.shape[0], 1), dtype=torch.bool, device=asr_predictions.device),
+                torch.ones((asr_predictions.shape[0], 1), dtype=torch.bool, device=device),
                 asr_predictions[:, 1:] != asr_predictions[:, :-1],
             ]
         )
         mask = ~blank_mask & deduplication_mask
 
-        soft_prompts = self.soft_prompt(torch.arange(1, self.number_of_prompt_tokens + 1))
-        end_prompt = self.soft_prompt(torch.tensor(0)).unsqueeze(0)
+        soft_prompts = self.soft_prompt(torch.arange(1, self.number_of_prompt_tokens + 1, device=device))
+        end_prompt = self.soft_prompt(torch.tensor(0, device=device)).unsqueeze(0)
 
         if labels is not None:
             llm_labels = []
@@ -135,7 +137,8 @@ class LLMASRModel(nn.Module):
                         + [self.llm.config.pad_token_id] * (self.number_of_prompt_tokens + len(asr_sequence) + 1)
                         + labels_wo_pad.tolist()
                         + [self.llm.config.eos_token_id]
-                    )
+                    ),
+                    device=device,
                 )
                 llm_labels.append(label_sequence)
             llm_labels = torch.nn.utils.rnn.pad_sequence(
@@ -152,8 +155,8 @@ class LLMASRModel(nn.Module):
         else:
             llm_labels = None
             input_embeds = []
-            bos_token_embed = self.llm.get_input_embeddings()(torch.tensor(tokenizer.bos_token_id))
-            pad_token_embed = self.llm.get_input_embeddings()(torch.tensor(tokenizer.pad_token_id))
+            bos_token_embed = self.llm.get_input_embeddings()(torch.tensor(tokenizer.bos_token_id, device=device))
+            pad_token_embed = self.llm.get_input_embeddings()(torch.tensor(tokenizer.pad_token_id, device=device))
             for idx, sequence in enumerate(asr_predictions):
                 asr_sequence_mask = mask[idx]
                 asr_sequence_embeds = asr_outputs.hidden_states[idx][asr_sequence_mask]
