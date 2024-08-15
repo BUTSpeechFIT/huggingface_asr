@@ -205,6 +205,7 @@ class WhisperEncoderForCTC(WhisperPreTrainedModel):
         hidden_states = self.dropout(hidden_states)
         if self.config.sub_sample:
             hidden_states = self.subsample_conv2(self.subsample_conv1(hidden_states.transpose(1, 2))).transpose(1, 2)
+        outputs.hidden_states = hidden_states
         logits = self.lm_head(hidden_states)
 
         loss = None

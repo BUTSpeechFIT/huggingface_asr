@@ -37,12 +37,21 @@ class CustomModelArguments(ModelArguments):
 
 
 @dataclass
+class CustomModelArgumentsPrompting(CustomModelArguments):
+    asr_model_checkpoint: Optional[str] = field(default=None, metadata={"help": "The model checkpoint to use for ASR."})
+    freeze_asr: Optional[bool] = field(default=False, metadata={"help": "Whether to freeze the ASR model."})
+    freeze_llm: Optional[bool] = field(default=False, metadata={"help": "Whether to freeze the LLM model."})
+    number_of_prompt_tokens: Optional[int] = field(default=16, metadata={"help": "Number of prompt tokens."})
+
+
+@dataclass
 class CustomCollator(SpeechCollatorWithPadding):
     token_mapping: dict = None
 
     def __call__(self, features):
         batch = super().__call__(features)
-        batch["labels"] = batch["labels"].apply_(lambda x: self.token_mapping[int(x)] if x != -100 else x)
+        if self.token_mapping is not None:
+            batch["labels"] = batch["labels"].apply_(lambda x: self.token_mapping[int(x)] if x != -100 else x)
         return batch
 
 
@@ -168,7 +177,7 @@ def do_evaluate(
             )
         else:
             predictions = trainer.predict(
-                dataset[split],
+                dataset[split].select(range(8)),
             )
         end_time = time.time()
         tokens_produced = (predictions.predictions != tokenizer.pad_token_id).sum()
