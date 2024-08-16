@@ -24,24 +24,10 @@ from utilities.training_arguments import (
     DataTrainingArguments,
     GeneralTrainingArguments,
     GenerationArguments,
-    ModelArguments,
 )
 
 logging.set_verbosity_debug()
 logger = logging.get_logger("transformers")
-
-
-@dataclass
-class CustomModelArguments(ModelArguments):
-    llm_model: Optional[str] = field(default="google/gemma-2b-it", metadata={"help": "The model to use for the LLM."})
-
-
-@dataclass
-class CustomModelArgumentsPrompting(CustomModelArguments):
-    asr_model_checkpoint: Optional[str] = field(default=None, metadata={"help": "The model checkpoint to use for ASR."})
-    freeze_asr: Optional[bool] = field(default=False, metadata={"help": "Whether to freeze the ASR model."})
-    freeze_llm: Optional[bool] = field(default=False, metadata={"help": "Whether to freeze the LLM model."})
-    number_of_prompt_tokens: Optional[int] = field(default=16, metadata={"help": "Number of prompt tokens."})
 
 
 @dataclass

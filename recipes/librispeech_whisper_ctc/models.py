@@ -1,9 +1,9 @@
 import copy
+from dataclasses import dataclass, field
 from typing import Any, Dict, Optional, Tuple, Union
 
 import numpy as np
 import torch
-from local_utils import CustomModelArgumentsPrompting
 from torch import nn as nn
 from torch.nn import CrossEntropyLoss
 from transformers import (
@@ -21,6 +21,21 @@ from whisper_llm_prompting import (
     removed_token_ids,
     tokenizer,
 )
+
+from utilities.training_arguments import ModelArguments
+
+
+@dataclass
+class CustomModelArguments(ModelArguments):
+    llm_model: Optional[str] = field(default="google/gemma-2b-it", metadata={"help": "The model to use for the LLM."})
+
+
+@dataclass
+class CustomModelArgumentsPrompting(CustomModelArguments):
+    asr_model_checkpoint: Optional[str] = field(default=None, metadata={"help": "The model checkpoint to use for ASR."})
+    freeze_asr: Optional[bool] = field(default=False, metadata={"help": "Whether to freeze the ASR model."})
+    freeze_llm: Optional[bool] = field(default=False, metadata={"help": "Whether to freeze the LLM model."})
+    number_of_prompt_tokens: Optional[int] = field(default=16, metadata={"help": "Number of prompt tokens."})
 
 
 class LLMASRModel(SpeechEncoderDecoderModel):
