@@ -12,6 +12,7 @@ import numpy as np
 import pandas as pd
 import torch
 from datasets import DatasetDict
+from local_models import LearnableBlankLinear
 from transformers import (
     AutoModelForCausalLM,
     PreTrainedModel,
@@ -24,7 +25,6 @@ from transformers.utils import logging
 from whisper_ctc import WhisperEncoderForCTC
 
 import wandb
-from models import LearnableBlankLinear
 from utilities import data_utils
 from utilities.collators import SpeechCollatorWithPadding
 from utilities.eval_utils import get_metrics, write_wandb_pred

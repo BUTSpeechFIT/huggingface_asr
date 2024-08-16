@@ -1,6 +1,7 @@
 """Main training script for training of CTC ASR models."""
 import sys
 
+from local_models import LLMASRModel
 from local_utils import (
     CustomCollator,
     CustomModelArgumentsPrompting,
@@ -19,7 +20,6 @@ from transformers import (
 )
 from transformers.utils import logging
 
-from models import LLMASRModel
 from utilities.callbacks import init_callbacks
 from utilities.data_utils import get_dataset
 from utilities.training_arguments import (
