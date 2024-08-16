@@ -1,3 +1,4 @@
+import copy
 import itertools as it
 import math
 import re
@@ -11,11 +12,19 @@ import numpy as np
 import pandas as pd
 import torch
 from datasets import DatasetDict
-from transformers import PreTrainedModel, PreTrainedTokenizer, Seq2SeqTrainer, Trainer
+from transformers import (
+    AutoModelForCausalLM,
+    PreTrainedModel,
+    PreTrainedTokenizer,
+    Seq2SeqTrainer,
+    Trainer,
+)
 from transformers.trainer_utils import PredictionOutput
 from transformers.utils import logging
+from whisper_ctc import WhisperEncoderForCTC
 
 import wandb
+from models import LearnableBlankLinear
 from utilities import data_utils
 from utilities.collators import SpeechCollatorWithPadding
 from utilities.eval_utils import get_metrics, write_wandb_pred
@@ -24,6 +33,7 @@ from utilities.training_arguments import (
     DataTrainingArguments,
     GeneralTrainingArguments,
     GenerationArguments,
+    ModelArguments,
 )
 
 logging.set_verbosity_debug()
@@ -191,3 +201,45 @@ def do_evaluate(
             callable_transform,
             token_mapping=token_mapping,
         )
+
+
+@dataclass
+class CustomModelArguments(ModelArguments):
+    llm_model: Optional[str] = field(default="google/gemma-2b-it", metadata={"help": "The model to use for the LLM."})
+
+
+@dataclass
+class CustomModelArgumentsPrompting(CustomModelArguments):
+    asr_model_checkpoint: Optional[str] = field(default=None, metadata={"help": "The model checkpoint to use for ASR."})
+    freeze_asr: Optional[bool] = field(default=False, metadata={"help": "Whether to freeze the ASR model."})
+    freeze_llm: Optional[bool] = field(default=False, metadata={"help": "Whether to freeze the LLM model."})
+    number_of_prompt_tokens: Optional[int] = field(default=16, metadata={"help": "Number of prompt tokens."})
+
+
+def get_model(m_args: CustomModelArgumentsPrompting, tokenizer, removed_token_ids):
+    llm = AutoModelForCausalLM.from_pretrained(m_args.llm_model)
+    new_model = WhisperEncoderForCTC.from_pretrained(
+        m_args.from_pretrained, llm_dim=llm.config.hidden_size, sub_sample=True
+    )
+    llm_head = copy.deepcopy(llm.lm_head)
+    unwanted_tokens_mask = np.ones((llm_head.weight.shape[0],), dtype=bool)
+    unwanted_tokens_mask[removed_token_ids] = False
+    new_model.config.blank_token_id = tokenizer.pad_token_id
+    new_model.config.bos_token_id = tokenizer.bos_token_id
+    new_model.config.eos_token_id = tokenizer.eos_token_id
+    new_model.config.pad_token_id = tokenizer.pad_token_id
+
+    llm_head.weight = torch.nn.Parameter(llm_head.weight[unwanted_tokens_mask])
+    llm_head.out_features = len(tokenizer) - len(removed_token_ids)
+
+    new_model.lm_head = LearnableBlankLinear(llm_head, new_model.config.blank_token_id)
+    new_model.config.ctc_zero_infinity = True
+
+    for module in [
+        *new_model.encoder.layers[: int(len(new_model.encoder.layers) * 5 / 6)],
+        new_model.encoder.conv1,
+        new_model.encoder.conv2,
+    ]:
+        for param in module.parameters():
+            param.requires_grad = False
+    return new_model, llm

@@ -6,6 +6,7 @@ from local_utils import (
     CustomModelArgumentsPrompting,
     compute_metrics_ctc,
     do_evaluate,
+    get_model,
     get_token_subset,
 )
 from safetensors.torch import load_file
@@ -18,7 +19,7 @@ from transformers import (
 )
 from transformers.utils import logging
 
-from models import LLMASRModel, get_model
+from models import LLMASRModel
 from utilities.callbacks import init_callbacks
 from utilities.data_utils import get_dataset
 from utilities.training_arguments import (
@@ -56,11 +57,17 @@ if __name__ == "__main__":
     new_token_ids_mapping, new_token_ids_mapping_inverted, removed_token_ids = get_token_subset(tokenizer)
 
     # 3. Instantiate model
-    asr, llm = get_model(model_args)
+    asr, llm = get_model(model_args, tokenizer, removed_token_ids)
 
     merged_config = SpeechEncoderDecoderConfig.from_encoder_decoder_configs(asr.config, llm.config)
     model = LLMASRModel(
-        merged_config, asr, llm, model_args.number_of_prompt_tokens, model_args.freeze_asr, model_args.freeze_llm
+        merged_config,
+        asr,
+        llm,
+        model_args.number_of_prompt_tokens,
+        model_args.freeze_asr,
+        model_args.freeze_llm,
+        new_token_ids_mapping_inverted,
     )
     model.encoder.load_state_dict(load_file(model_args.asr_model_checkpoint))
 

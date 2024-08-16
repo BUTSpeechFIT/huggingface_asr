@@ -1,41 +1,10 @@
-import copy
-from dataclasses import dataclass, field
 from typing import Any, Dict, Optional, Tuple, Union
 
-import numpy as np
 import torch
 from torch import nn as nn
 from torch.nn import CrossEntropyLoss
-from transformers import (
-    AutoModelForCausalLM,
-    PretrainedConfig,
-    PreTrainedModel,
-    SpeechEncoderDecoderModel,
-)
+from transformers import PretrainedConfig, PreTrainedModel, SpeechEncoderDecoderModel
 from transformers.modeling_outputs import BaseModelOutput, Seq2SeqLMOutput
-from whisper_ctc import WhisperEncoderForCTC
-from whisper_llm_prompting import (
-    asr,
-    llm,
-    new_token_ids_mapping_inverted,
-    removed_token_ids,
-    tokenizer,
-)
-
-from utilities.training_arguments import ModelArguments
-
-
-@dataclass
-class CustomModelArguments(ModelArguments):
-    llm_model: Optional[str] = field(default="google/gemma-2b-it", metadata={"help": "The model to use for the LLM."})
-
-
-@dataclass
-class CustomModelArgumentsPrompting(CustomModelArguments):
-    asr_model_checkpoint: Optional[str] = field(default=None, metadata={"help": "The model checkpoint to use for ASR."})
-    freeze_asr: Optional[bool] = field(default=False, metadata={"help": "Whether to freeze the ASR model."})
-    freeze_llm: Optional[bool] = field(default=False, metadata={"help": "Whether to freeze the LLM model."})
-    number_of_prompt_tokens: Optional[int] = field(default=16, metadata={"help": "Number of prompt tokens."})
 
 
 class LLMASRModel(SpeechEncoderDecoderModel):
@@ -47,12 +16,14 @@ class LLMASRModel(SpeechEncoderDecoderModel):
         number_of_prompt_tokens=16,
         freeze_asr=False,
         freeze_llm=False,
+        new_token_ids_mapping_inverted=None,
     ):
         super().__init__(config, encoder, decoder)
         self.number_of_prompt_tokens = number_of_prompt_tokens
-        self.soft_prompt = nn.Embedding(self.number_of_prompt_tokens + 1, llm.config.hidden_size)
-        self.linear = nn.Linear(llm.config.hidden_size, llm.config.hidden_size)
-        self.main_input_name = asr.main_input_name
+        self.soft_prompt = nn.Embedding(self.number_of_prompt_tokens + 1, decoder.config.hidden_size)
+        self.linear = nn.Linear(decoder.config.hidden_size, decoder.config.hidden_size)
+        self.main_input_name = encoder.main_input_name
+        self.new_token_ids_mapping_inverted = new_token_ids_mapping_inverted
 
         # Initialize soft prompt embeddings
         embeds = self.decoder.get_input_embeddings()
@@ -94,7 +65,7 @@ class LLMASRModel(SpeechEncoderDecoderModel):
             for idx, sequence in enumerate(encoder_predictions):
                 labels_wo_pad = labels[idx][labels[idx] != -100][1:]
                 asr_sequence_mask = mask[idx]
-                asr_sequence = sequence[mask[idx]].to("cpu").apply_(new_token_ids_mapping_inverted.get).to(device)
+                asr_sequence = sequence[mask[idx]].to("cpu").apply_(self.new_token_ids_mapping_inverted.get).to(device)
                 asr_sequence_embeds = self.linear(encoder_outputs.hidden_states[idx][asr_sequence_mask])
                 asr_embeddings.append(asr_sequence_embeds)
                 label_sequence = torch.tensor(
@@ -121,8 +92,12 @@ class LLMASRModel(SpeechEncoderDecoderModel):
         else:
             llm_labels = None
             input_embeds = []
-            bos_token_embed = self.decoder.get_input_embeddings()(torch.tensor(tokenizer.bos_token_id, device=device))
-            pad_token_embed = self.decoder.get_input_embeddings()(torch.tensor(tokenizer.pad_token_id, device=device))
+            bos_token_embed = self.decoder.get_input_embeddings()(
+                torch.tensor(self.decoder.config.bos_token_id, device=device)
+            )
+            pad_token_embed = self.decoder.get_input_embeddings()(
+                torch.tensor(self.decoder.config.pad_token_id, device=device)
+            )
             for idx, sequence in enumerate(encoder_predictions):
                 asr_sequence_mask = mask[idx]
                 asr_sequence_embeds = self.linear(encoder_outputs.hidden_states[idx][asr_sequence_mask])
@@ -265,32 +240,3 @@ class LearnableBlankLinear(torch.nn.Module):
         out = self.frozen_linear(x)
         out[..., self.blank_id] = self.blank_projection(x).squeeze(dim=-1)
         return out
-
-
-def get_model(m_args: CustomModelArgumentsPrompting):
-    llm = AutoModelForCausalLM.from_pretrained(m_args.llm_model)
-    new_model = WhisperEncoderForCTC.from_pretrained(
-        m_args.from_pretrained, llm_dim=llm.config.hidden_size, sub_sample=True
-    )
-    llm_head = copy.deepcopy(llm.lm_head)
-    unwanted_tokens_mask = np.ones((llm_head.weight.shape[0],), dtype=bool)
-    unwanted_tokens_mask[removed_token_ids] = False
-    new_model.config.blank_token_id = tokenizer.pad_token_id
-    new_model.config.bos_token_id = tokenizer.bos_token_id
-    new_model.config.eos_token_id = tokenizer.eos_token_id
-    new_model.config.pad_token_id = tokenizer.pad_token_id
-
-    llm_head.weight = torch.nn.Parameter(llm_head.weight[unwanted_tokens_mask])
-    llm_head.out_features = len(tokenizer) - len(removed_token_ids)
-
-    new_model.lm_head = LearnableBlankLinear(llm_head, new_model.config.blank_token_id)
-    new_model.config.ctc_zero_infinity = True
-
-    for module in [
-        *new_model.encoder.layers[: int(len(new_model.encoder.layers) * 5 / 6)],
-        new_model.encoder.conv1,
-        new_model.encoder.conv2,
-    ]:
-        for param in module.parameters():
-            param.requires_grad = False
-    return new_model, llm
