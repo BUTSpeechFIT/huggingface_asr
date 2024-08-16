@@ -8,7 +8,7 @@
 #$ -e /mnt/matylda5/ipoloka/projects/huggingface_asr/outputs/whisper_llm/$JOB_NAME_$JOB_ID.err
 
 PROJECT="whisper_llm_prompting"
-EXPERIMENT="gemma-whisper-medium-learnable-blank-full-v2.1"
+EXPERIMENT="soft_prompts_gemma_whisper_medium_additional_linear_2b_it_v0.1"
 SRC_DIR="/mnt/matylda5/ipoloka/projects/huggingface_asr"
 WORK_DIR=$SRC_DIR
 RECIPE_DIR="${SRC_DIR}/recipes/librispeech_whisper_ctc"
@@ -36,8 +36,8 @@ cd $SRC_DIR || exit
 args=(
   # General training arguments
   --output_dir="${EXPERIMENT_PATH}"
-  --per_device_train_batch_size="28"
-  --per_device_eval_batch_size="64"
+  --per_device_train_batch_size="24"
+  --per_device_eval_batch_size="24"
   --num_train_epochs="20"
   --group_by_length="True"
   --bf16
@@ -51,8 +51,8 @@ args=(
 
   # Optimizer related arguments
   --optim="adamw_torch"
-  --learning_rate="2e-5"
-  --warmup_steps="2000"
+  --learning_rate="5e-5"
+  --warmup_steps="1000"
   --early_stopping_patience="15"
   --weight_decay="1e-6"
   --max_grad_norm="1.0"
@@ -61,9 +61,11 @@ args=(
 
   # Logging, saving and evaluation related arguments
   --report_to="wandb"
-  --logging_steps="10"
-  --save_strategy="epoch"
-  --evaluation_strategy="epoch"
+  --logging_steps="1"
+  --save_strategy="steps"
+  --evaluation_strategy="steps"
+  --eval_steps="500"
+  --save_steps="500"
   --wandb_predictions_to_save="500"
   --greater_is_better="False"
   --save_total_limit="5"
@@ -87,15 +89,16 @@ args=(
   --tokenizer_name="openai/whisper-medium"
   --feature_extractor_name="openai/whisper-medium"
   --llm_model="google/gemma-2b-it"
-  --asr_model_checkpoint="/mnt/matylda5/ipoloka/projects/huggingface_asr/experiments/whisper_llm/gemma-whisper-medium-learnable-blank-full-v2.1/checkpoint-35154/model.safetensors"
+  --asr_model_checkpoint="/mnt/matylda5/ipoloka/projects/huggingface_asr/experiments/whisper_llm/gemma-whisper-medium-learnable-blank-full-v2.1/checkpoint-40176/model.safetensors"
   --freeze_asr
   --freeze_llm
   --number_of_prompt_tokens=16
 
 
   # Generation related arguments
+  --validation_slice="1920"
   --num_beams="1"
-  --max_length="10"
+  --predict_with_generate="True"
 )
 
 "${SRC_DIR}/sge_tools/python" recipes/librispeech_whisper_ctc/whisper_llm_prompting.py "${args[@]}"
