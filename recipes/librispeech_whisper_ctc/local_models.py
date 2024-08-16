@@ -35,6 +35,9 @@ class LLMASRModel(SpeechEncoderDecoderModel):
         if freeze_llm:
             self.freeze_decoder()
 
+        if hasattr(self, "enc_to_dec_proj"):
+            del self.enc_to_dec_proj
+
     def freeze_encoder(self):
         for param in self.encoder.parameters():
             param.requires_grad = False
