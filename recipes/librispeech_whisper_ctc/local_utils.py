@@ -51,6 +51,20 @@ class CustomCollator(SpeechCollatorWithPadding):
         return batch
 
 
+def compute_metrics(
+    tokenizer: PreTrainedTokenizer, pred: PredictionOutput, wandb_pred_to_save: int = 10
+) -> Dict[str, float]:
+    pred.predictions[pred.predictions == -100] = tokenizer.pad_token_id
+    pred.label_ids[pred.label_ids == -100] = tokenizer.pad_token_id
+    label_str = [label if label else "-" for label in tokenizer.batch_decode(pred.label_ids, skip_special_tokens=True)]
+    pred_str = tokenizer.batch_decode(pred.predictions, skip_special_tokens=True)
+
+    if wandb.run is not None:
+        write_wandb_pred(pred_str, label_str, rows_to_log=wandb_pred_to_save)
+
+    return get_metrics(label_str, pred_str)
+
+
 def compute_metrics_ctc(
     tokenizer: PreTrainedTokenizer, token_mapping, pred: PredictionOutput, wandb_pred_to_save: int = 10
 ) -> Dict[str, float]:

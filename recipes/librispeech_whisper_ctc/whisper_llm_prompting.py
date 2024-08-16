@@ -5,7 +5,7 @@ from local_models import LLMASRModel
 from local_utils import (
     CustomCollator,
     CustomModelArgumentsPrompting,
-    compute_metrics_ctc,
+    compute_metrics,
     do_evaluate,
     get_model,
     get_token_subset,
@@ -60,6 +60,8 @@ if __name__ == "__main__":
     asr, llm = get_model(model_args, tokenizer, removed_token_ids)
 
     merged_config = SpeechEncoderDecoderConfig.from_encoder_decoder_configs(asr.config, llm.config)
+    merged_config.pad_token_id = tokenizer.pad_token_id
+    merged_config.max_new_tokens = 100
     model = LLMASRModel(
         merged_config,
         asr,
@@ -94,9 +96,7 @@ if __name__ == "__main__":
         train_dataset=dataset[data_args.train_split],
         eval_dataset=training_eval_dataset,
         data_collator=data_collator,
-        compute_metrics=lambda pred: compute_metrics_ctc(
-            tokenizer, new_token_ids_mapping_inverted, pred, gen_args.wandb_predictions_to_save
-        ),
+        compute_metrics=lambda pred: compute_metrics(tokenizer, pred, gen_args.wandb_predictions_to_save),
     )
 
     # 6. Train
