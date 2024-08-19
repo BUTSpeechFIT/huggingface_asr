@@ -124,6 +124,7 @@ class LLMASRModel(SpeechEncoderDecoderModel):
                     att_mask = torch.concatenate(
                         (att_mask, torch.ones((b_size, decoder_input_ids.shape[1] - 1), dtype=torch.bool)), dim=1
                     )
+            att_mask = att_mask.to(device)
         return input_embeds, llm_labels, att_mask
 
     # pylint: disable=no-member
