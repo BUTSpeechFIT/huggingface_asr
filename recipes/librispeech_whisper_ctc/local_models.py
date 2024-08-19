@@ -49,6 +49,7 @@ class LLMASRModel(SpeechEncoderDecoderModel):
     def prepare_decoder_inputs(self, encoder_outputs, labels, decoder_input_ids=None):
         encoder_predictions = encoder_outputs.logits.argmax(dim=-1)
         device = encoder_predictions.device
+        b_size = encoder_predictions.shape[0]
 
         blank_mask = encoder_predictions == self.encoder.config.pad_token_id
         deduplication_mask = torch.hstack(
@@ -61,6 +62,7 @@ class LLMASRModel(SpeechEncoderDecoderModel):
 
         soft_prompts = self.soft_prompt(torch.arange(1, self.number_of_prompt_tokens + 1, device=device))
         end_prompt = self.soft_prompt(torch.tensor(0, device=device)).unsqueeze(0)
+        att_mask = None
 
         if labels is not None:
             llm_labels = []
@@ -107,16 +109,22 @@ class LLMASRModel(SpeechEncoderDecoderModel):
                 input_embeds.append(
                     torch.vstack([bos_token_embed.unsqueeze(0), soft_prompts, asr_sequence_embeds, end_prompt])
                 )
-            longest_sequence = max([embeds.shape[0] for embeds in input_embeds])
+            seq_lengths = torch.tensor([embeds.shape[0] for embeds in input_embeds])
+            longest_sequence = seq_lengths.max()
+            to_left_pad = longest_sequence - seq_lengths
             for idx, embeds in enumerate(input_embeds):
                 input_embeds[idx] = torch.vstack(
-                    [embeds, pad_token_embed.repeat(longest_sequence - embeds.shape[0], 1)]
+                    [pad_token_embed.repeat(longest_sequence - embeds.shape[0], 1), embeds]
                 )
+            att_mask = (torch.arange(longest_sequence).expand(b_size, longest_sequence).T >= to_left_pad).T
             input_embeds = torch.stack(input_embeds)
             if decoder_input_ids is not None:
                 if decoder_input_ids.shape[1] > 1:
                     input_embeds = self.decoder.get_input_embeddings()(decoder_input_ids[:, -1:])
-        return input_embeds, llm_labels
+                    att_mask = torch.concatenate(
+                        (att_mask, torch.ones((b_size, decoder_input_ids.shape[1] - 1), dtype=torch.bool)), dim=1
+                    )
+        return input_embeds, llm_labels, att_mask
 
     # pylint: disable=no-member
     def _prepare_encoder_decoder_kwargs_for_generation(
@@ -183,7 +191,9 @@ class LLMASRModel(SpeechEncoderDecoderModel):
         encoder_hidden_states = encoder_outputs[0]
 
         # Prepare decoder inputs
-        decoder_inputs_embeds, labels = self.prepare_decoder_inputs(encoder_outputs, labels, decoder_input_ids)
+        decoder_inputs_embeds, labels, decoder_attention_mask = self.prepare_decoder_inputs(
+            encoder_outputs, labels, decoder_input_ids
+        )
 
         # Decode
         decoder_outputs = self.decoder(
