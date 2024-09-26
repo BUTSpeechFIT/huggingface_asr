@@ -1,15 +1,15 @@
 #!/usr/bin/bash
 #SBATCH --nodes=1
-#SBATCH --gpus-per-node=2
-#SBATCH --tasks-per-node=2
+#SBATCH --gpus-per-node=1
+#SBATCH --tasks-per-node=1
 #SBATCH --cpus-per-task=7
 #SBATCH --output="outputs/librispeech_aed/output_%x_%j.out"
 #SBATCH --error="outputs/librispeech_aed/output_%x_%j.err"
-#SBATCH --partition=small-g
+#SBATCH --partition=standard-g
 #SBATCH --mem=120G
-#SBATCH --time=3-00:00:00
+#SBATCH --time=2:00:00
 
-EXPERIMENT="baseline_ebranchformer_v2.4_fp32"
+EXPERIMENT="baseline_ebranchformer_beam_decode"
 
 SRC_DIR="/project/${EC_PROJECT}/ipoloka/huggingface_asr"
 WORK_DIR="/scratch/${EC_PROJECT}/ipoloka/huggingface_asr"
@@ -38,38 +38,12 @@ args=(
   # General training arguments
   --output_dir="${EXPERIMENT_PATH}"
   --per_device_train_batch_size="64"
-  --per_device_eval_batch_size="32"
-  --num_train_epochs="240"
-  --group_by_length="True"
-  --do_train
+  --per_device_eval_batch_size="16"
+
   --do_evaluate
-  --load_best_model_at_end
-  --ddp_find_unused_parameters="False"
 
    # Data loader params
   --dataloader_num_workers="6"
-
-  # Optimizer related arguments
-  --optim="adamw_torch"
-  --learning_rate="2e-3"
-  --warmup_steps="40000"
-  --early_stopping_patience="15"
-  --weight_decay="1e-6"
-  --max_grad_norm="1.0"
-  --lsm_factor="0.1"
-  --gradient_accumulation_steps="1"
-
-  # Logging, saving and evaluation related arguments
-  --report_to="wandb"
-  --logging_steps="10"
-  --save_strategy="epoch"
-  --evaluation_strategy="epoch"
-  --wandb_predictions_to_save="500"
-  --greater_is_better="False"
-  --save_total_limit="5"
-  --metric_for_best_model="eval_librispeech_validation.other_wer"
-  --push_to_hub_final_model
-  --use_sclite_for_metrics
 
   # Data related arguments
   --max_duration_in_seconds="20.0"
@@ -89,17 +63,13 @@ args=(
   # Model related arguments
   --tokenizer_name="Lakoc/libri_5000_v2"
   --feature_extractor_name="Lakoc/log_80mel_extractor_16k"
-  --from_encoder_decoder_config
-  --base_encoder_model="Lakoc/fisher_ebranchformer_enc_12_layers_fixed"
-  --base_decoder_model="Lakoc/gpt2_tiny_decoder_6_layers"
-  --ctc_weight="0.3"
+  --from_pretrained="/scratch/project_465000836/ipoloka/huggingface_asr/experiments/baseline_ebranchformer_v2.1/checkpoint-103353"
 
   # Generation related arguments
   --predict_with_generate
-  --num_beams="1"
+  --num_beams="60"
   --max_length="512"
   --decoding_ctc_weight="0"
-  --eval_delay="2"
 )
 
 

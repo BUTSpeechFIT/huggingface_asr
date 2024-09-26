@@ -1,15 +1,15 @@
 #!/usr/bin/bash
 #SBATCH --nodes=1
-#SBATCH --gpus-per-node=2
-#SBATCH --tasks-per-node=2
+#SBATCH --gpus-per-node=4
+#SBATCH --tasks-per-node=4
 #SBATCH --cpus-per-task=7
 #SBATCH --output="outputs/librispeech_aed/output_%x_%j.out"
 #SBATCH --error="outputs/librispeech_aed/output_%x_%j.err"
 #SBATCH --partition=small-g
-#SBATCH --mem=120G
+#SBATCH --mem=200G
 #SBATCH --time=3-00:00:00
 
-EXPERIMENT="baseline_ebranchformer_v2.4_fp32"
+EXPERIMENT="baseline_ebranchformer_v2.4_fp32_gated"
 
 SRC_DIR="/project/${EC_PROJECT}/ipoloka/huggingface_asr"
 WORK_DIR="/scratch/${EC_PROJECT}/ipoloka/huggingface_asr"
@@ -46,13 +46,14 @@ args=(
   --load_best_model_at_end
   --ddp_find_unused_parameters="False"
 
+
    # Data loader params
   --dataloader_num_workers="6"
 
   # Optimizer related arguments
   --optim="adamw_torch"
   --learning_rate="2e-3"
-  --warmup_steps="40000"
+  --warmup_steps="20000"
   --early_stopping_patience="15"
   --weight_decay="1e-6"
   --max_grad_norm="1.0"
@@ -64,7 +65,6 @@ args=(
   --logging_steps="10"
   --save_strategy="epoch"
   --evaluation_strategy="epoch"
-  --wandb_predictions_to_save="500"
   --greater_is_better="False"
   --save_total_limit="5"
   --metric_for_best_model="eval_librispeech_validation.other_wer"
@@ -93,6 +93,7 @@ args=(
   --base_encoder_model="Lakoc/fisher_ebranchformer_enc_12_layers_fixed"
   --base_decoder_model="Lakoc/gpt2_tiny_decoder_6_layers"
   --ctc_weight="0.3"
+  --config_overrides="encoder_context_awareness_type=gated"
 
   # Generation related arguments
   --predict_with_generate

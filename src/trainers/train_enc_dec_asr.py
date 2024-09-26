@@ -7,7 +7,6 @@ from transformers import (
     AutoModelForCausalLM,
     AutoTokenizer,
     HfArgumentParser,
-    Seq2SeqTrainer,
     WhisperForConditionalGeneration,
 )
 from transformers.utils import logging
@@ -26,7 +25,7 @@ from utilities.training_arguments import (
     GenerationArguments,
     ModelArguments,
 )
-from utilities.training_utils import AdditionalLossTrackerTrainer
+from utilities.training_utils import CustomSeq2SeqTrainer
 
 if __name__ == "__main__":
     logging.set_verbosity_debug()
@@ -98,16 +97,27 @@ if __name__ == "__main__":
     )
 
     # 7. Initialize trainer
-    trainer_class = AdditionalLossTrackerTrainer if training_args.track_ctc_loss else Seq2SeqTrainer
-    trainer = trainer_class(
+    trainer = CustomSeq2SeqTrainer(
         args=training_args,
         model=model,
         callbacks=callbacks,
+        tokenizer=tokenizer,
         train_dataset=dataset[data_args.train_split],
         eval_dataset=training_eval_dataset,
         data_collator=data_collator,
         compute_metrics=lambda pred: compute_metrics(tokenizer, pred, gen_args.wandb_predictions_to_save),
     )
+
+    if training_args.start_by_eval:
+        do_evaluate(
+            trainer=trainer,
+            dataset=dataset,
+            model=model,
+            tokenizer=tokenizer,
+            gen_args=gen_args,
+            training_args=training_args,
+            data_args=data_args,
+        )
 
     # 8. Train model
     if training_args.do_train:

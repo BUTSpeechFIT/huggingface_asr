@@ -9,7 +9,7 @@
 #SBATCH --mem=120G
 #SBATCH --time=3-00:00:00
 
-EXPERIMENT="baseline_ebranchformer_v2.4_fp32"
+EXPERIMENT="baseline_ebranchformer_v2.3_fp32_continue"
 
 SRC_DIR="/project/${EC_PROJECT}/ipoloka/huggingface_asr"
 WORK_DIR="/scratch/${EC_PROJECT}/ipoloka/huggingface_asr"
@@ -41,6 +41,7 @@ args=(
   --per_device_eval_batch_size="32"
   --num_train_epochs="240"
   --group_by_length="True"
+#  --bf16
   --do_train
   --do_evaluate
   --load_best_model_at_end
@@ -89,10 +90,11 @@ args=(
   # Model related arguments
   --tokenizer_name="Lakoc/libri_5000_v2"
   --feature_extractor_name="Lakoc/log_80mel_extractor_16k"
-  --from_encoder_decoder_config
-  --base_encoder_model="Lakoc/fisher_ebranchformer_enc_12_layers_fixed"
-  --base_decoder_model="Lakoc/gpt2_tiny_decoder_6_layers"
+#  --from_encoder_decoder_config
+#  --base_encoder_model="Lakoc/fisher_ebranchformer_enc_12_layers_fixed"
+#  --base_decoder_model="Lakoc/gpt2_tiny_decoder_6_layers"
   --ctc_weight="0.3"
+  --from_pretrained="/scratch/project_465000836/ipoloka/huggingface_asr/experiments/baseline_ebranchformer_v2.3_fp32/checkpoint-113300"
 
   # Generation related arguments
   --predict_with_generate
