@@ -11,6 +11,7 @@ from transformers.models.wav2vec2.modeling_wav2vec2 import (
     Wav2Vec2Config,
     Wav2Vec2ForCTC,
     Wav2Vec2ForPreTraining,
+    Wav2Vec2GumbelVectorQuantizer,
 )
 from transformers.models.wav2vec2_conformer.modeling_wav2vec2_conformer import (
     Wav2Vec2ConformerConfig,
@@ -25,13 +26,13 @@ from transformers.models.wav2vec2_conformer.modeling_wav2vec2_conformer import (
 )
 from transformers.utils import logging
 
-from models.extractors import CustomFE
-from models.streaming_modules import CausalConv1d, FeatureExtractorForStreaming
+from models.extractors import CustomFE, CustomFEConfig
+from models.streaming_modules import CausalConv1d
 
 logger = logging.get_logger(__name__)
 
 
-class Wav2Vec2EBranchformerConfig(Wav2Vec2ConformerConfig, Wav2Vec2Config):
+class Wav2Vec2EBranchformerConfig(Wav2Vec2ConformerConfig, Wav2Vec2Config, CustomFEConfig):
     """Config for EBranhformer model extending conformer."""
 
     model_type = "wav2vec2-ebranchformer"
@@ -319,30 +320,49 @@ class Wav2Vec2EBranchformerEncoder(Wav2Vec2ConformerEncoder):
         self.pos_conv_embed = None
 
 
-class Wav2Vec2EBranchformerModel(CustomFE, FeatureExtractorForStreaming, Wav2Vec2ConformerModel):
+class Wav2Vec2EBranchformerModel(CustomFE, Wav2Vec2ConformerModel):
     def __init__(self, config: Wav2Vec2EBranchformerConfig):
-        super().__init__(config)
+        Wav2Vec2ConformerModel.__init__(self, config)
+
         self.encoder = Wav2Vec2EBranchformerEncoder(config)
+
+        self.overwrite_fe(config)
 
         # Initialize weights and apply final processing
         self.post_init()
 
 
-class Wav2Vec2EBranchformerForPreTraining(CustomFE, Wav2Vec2ForPreTraining):
+class Wav2Vec2GumbelVectorQuantizerCustom(Wav2Vec2GumbelVectorQuantizer):
+    """
+    Vector quantization using gumbel softmax. See `[CATEGORICAL REPARAMETERIZATION WITH
+    GUMBEL-SOFTMAX](https://arxiv.org/pdf/1611.01144.pdf) for more information.
+    """
+
+    def __init__(self, config):
+        super().__init__(config)
+        self.weight_proj = nn.Linear(config.hidden_size, self.num_groups * self.num_vars)
+
+
+class Wav2Vec2EBranchformerForPreTraining(Wav2Vec2ForPreTraining):
     config_class = Wav2Vec2EBranchformerConfig
     base_model_prefix = "wav2vec2"
 
     def __init__(self, config: Wav2Vec2EBranchformerConfig):
         super().__init__(config)
         self.wav2vec2 = Wav2Vec2EBranchformerModel(config)
+        self.quantizer = Wav2Vec2GumbelVectorQuantizerCustom(config)
+        if hasattr(self.wav2vec2, "masked_spec_embed"):
+            del self.wav2vec2.masked_spec_embed
         self.post_init()
 
 
-class Wav2Vec2EBranchformerForCTC(CustomFE, Wav2Vec2ForCTC):
+class Wav2Vec2EBranchformerForCTC(Wav2Vec2ForCTC):
     config_class = Wav2Vec2EBranchformerConfig
     base_model_prefix = "wav2vec2"
 
     def __init__(self, config: Wav2Vec2EBranchformerConfig):
         super().__init__(config)
         self.wav2vec2 = Wav2Vec2EBranchformerModel(config)
+        if hasattr(self.wav2vec2, "masked_spec_embed"):
+            del self.wav2vec2.masked_spec_embed
         self.post_init()

@@ -148,7 +148,9 @@ class DataCollatorForWav2Vec2Pretraining:
     mask_time_prob: Optional[float] = 0.65
     mask_time_length: Optional[int] = 10
     sampling_rate: Optional[int] = 16_000
+    tokenizer: PreTrainedTokenizer = None
     audio_path: str = None
+    text_path: str = None
     model_input_name: str = ""
     min_masks: int = 2
 
@@ -173,6 +175,16 @@ class DataCollatorForWav2Vec2Pretraining:
             return_tensors="pt",
         )
 
+        if self.tokenizer is not None and self.text_path is not None:
+            labels = self.tokenizer.batch_encode_plus(
+                [feature[self.text_path] for feature in features],
+                return_attention_mask=True,
+                padding="longest",
+                return_tensors="pt",
+            )
+            labels = labels["input_ids"].masked_fill(labels.attention_mask.ne(1), -100)
+            batch["labels"] = labels
+
         device = batch[self.feature_extractor.model_input_names[0]].device
         batch_size = batch[self.feature_extractor.model_input_names[0]].shape[0]
 
@@ -182,28 +194,42 @@ class DataCollatorForWav2Vec2Pretraining:
             else batch[self.feature_extractor.model_input_names[0]].shape[-1]
         )
         # pylint: disable=no-member
-        mask_indices_seq_length = self.model._get_feat_extract_output_lengths(input_len)
+        mask_indices_seq_length = self.model.base_model._get_feat_extract_output_lengths(input_len)
         # make sure masked sequence length is a Python scalar
         mask_indices_seq_length = int(mask_indices_seq_length)
 
         # make sure that no loss is computed on padded inputs
+        sub_attention_mask = False
         if batch.get("attention_mask") is not None:
             # compute real output lengths according to convolution formula
             # pylint: disable=no-member
-            batch["sub_attention_mask"] = self.model._get_feature_vector_attention_mask(
+            batch["sub_attention_mask"] = self.model.base_model._get_feature_vector_attention_mask(
                 mask_indices_seq_length, batch["attention_mask"]
             )
+            sub_attention_mask = True
 
         features_shape = (batch_size, mask_indices_seq_length)
 
-        # sample randomly masked indices
-        mask_time_indices = _compute_mask_indices(
-            features_shape,
-            self.mask_time_prob,
-            self.mask_time_length,
-            attention_mask=batch.get("sub_attention_mask"),
-            min_masks=self.min_masks,
-        )
+        # Igor: this caused problems in wav2vec2 FB so I put it in if here
+        if sub_attention_mask:
+            # sample randomly masked indices
+
+            mask_time_indices = _compute_mask_indices(
+                features_shape,
+                self.mask_time_prob,
+                self.mask_time_length,
+                attention_mask=batch.get("sub_attention_mask"),
+                min_masks=self.min_masks,
+            )
+
+        else:
+            # sample randomly masked indices
+            mask_time_indices = _compute_mask_indices(
+                features_shape,
+                self.mask_time_prob,
+                self.mask_time_length,
+                min_masks=self.min_masks,
+            )
 
         batch["mask_time_indices"] = torch.tensor(mask_time_indices, dtype=torch.long, device=device)
 
@@ -221,6 +247,7 @@ class DataCollatorForWav2Vec2Pretraining:
             batch[self.model_input_name] = batch[self.feature_extractor.model_input_names[0]]
             del batch[self.feature_extractor.model_input_names[0]]
 
-        del batch["sub_attention_mask"]
+        if sub_attention_mask:
+            del batch["sub_attention_mask"]
 
         return batch

@@ -1,19 +1,13 @@
 """Main training script for training of CTC ASR models."""
 import sys
 
-from transformers import (
-    AutoFeatureExtractor,
-    AutoTokenizer,
-    HfArgumentParser,
-    Trainer,
-    Wav2Vec2CTCTokenizer,
-)
+from transformers import AutoFeatureExtractor, AutoTokenizer, HfArgumentParser, Trainer
 from transformers.utils import logging
 
 from utilities.callbacks import init_callbacks
 from utilities.collators import SpeechCollatorWithPadding
 from utilities.data_utils import get_dataset
-from utilities.eval_utils import compute_metrics_ctc, get_most_likely_tokens
+from utilities.eval_utils import compute_metrics_ctc, ctc_beam_decode, ctc_greedy_decode
 from utilities.general_utils import do_evaluate, prepare_tokenizer_for_ctc
 from utilities.model_utils import instantiate_ctc_model
 from utilities.training_arguments import (
@@ -72,7 +66,13 @@ if __name__ == "__main__":
         train_dataset=dataset[data_args.train_split],
         eval_dataset=training_eval_dataset,
         data_collator=data_collator,
-        preprocess_logits_for_metrics=get_most_likely_tokens,
+        preprocess_logits_for_metrics=(
+            lambda predictions, labels: ctc_beam_decode(
+                predictions, labels, tokenizer, training_args.generation_num_beams
+            )
+        )
+        if training_args.generation_num_beams is not None and training_args.generation_num_beams > 1
+        else ctc_greedy_decode,
         compute_metrics=lambda pred: compute_metrics_ctc(tokenizer, pred, gen_args.wandb_predictions_to_save),
     )
 
@@ -87,7 +87,7 @@ if __name__ == "__main__":
             dataset=dataset,
             model=model,
             tokenizer=tokenizer,
-            gen_args=None,
+            gen_args=gen_args,
             data_args=data_args,
             training_args=training_args,
         )

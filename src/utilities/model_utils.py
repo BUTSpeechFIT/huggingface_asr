@@ -7,12 +7,14 @@ from typing import Dict
 import torch
 from transformers import (
     AutoConfig,
+    AutoModelForCausalLM,
+    AutoModelForCTC,
+    AutoModelForPreTraining,
     AutoModelForSpeechSeq2Seq,
     PretrainedConfig,
     PreTrainedModel,
     PreTrainedTokenizer,
     SequenceFeatureExtractor,
-    Speech2TextFeatureExtractor,
     SpeechEncoderDecoderModel,
     WhisperForConditionalGeneration,
     WhisperTokenizer,
@@ -20,25 +22,27 @@ from transformers import (
 from transformers.utils import logging
 
 from decoding.config import GenerationConfigCustom
-from models.auto_wrappers import (
-    CustomAutoModelForCTC,
-    CustomAutoModelForPretraining,
-    CustomModelForCausalLM,
-)
-from models.bestrq import (
+from models.auto_wrappers import CustomModelForCausalLM
+from models.bestrq import (  # BestRQTransformerForCTC,; BestRQTransformerForPreTraining,; BestRQTransformerForPreTrainingConfig,
     BestRQEBranchformerForCTC,
+    BestRQEBranchformerForCTCWithPreTraining,
+    BestRQEBranchformerForCTCWithPreTrainingConfig,
     BestRQEBranchformerForPreTraining,
     BestRQEBranchformerForPreTrainingConfig,
-    BestRQTransformerForCTC,
-    BestRQTransformerForPreTraining,
-    BestRQTransformerForPreTrainingConfig,
 )
 from models.ctc_encoder_plus_autoregressive_decoder import (
     JointCTCAttentionEncoderDecoder,
     JointCTCAttentionEncoderDecoderConfig,
 )
-from models.decoders.multi_head_gpt2 import GPT2LMMultiHeadModel
-from models.decoders.multi_head_gpt2_mixing import GPT2MultiHeadMixingConfig
+from models.decoders.multi_head_gpt2 import GPT2LMMultiHeadModel, GPT2MultiHeadConfig
+from models.decoders.multi_head_gpt2_mixing import (
+    GPT2LMMultiHeadModelMixing,
+    GPT2MultiHeadMixingConfig,
+)
+from models.decoders.residual_clasiffier_gpt2 import (
+    GPT2ResidualsLMHeadConfig,
+    GPT2ResidualsLMHeadModel,
+)
 from models.encoders.e_branchformer import (
     Wav2Vec2EBranchformerConfig,
     Wav2Vec2EBranchformerForCTC,
@@ -53,16 +57,28 @@ AutoConfig.register("joint_aed_ctc_speech-encoder-decoder", JointCTCAttentionEnc
 AutoModelForSpeechSeq2Seq.register(JointCTCAttentionEncoderDecoderConfig, JointCTCAttentionEncoderDecoder)
 
 AutoConfig.register("wav2vec2-ebranchformer", Wav2Vec2EBranchformerConfig)
-CustomAutoModelForCTC.register(Wav2Vec2EBranchformerConfig, Wav2Vec2EBranchformerForCTC)
-CustomAutoModelForPretraining.register(Wav2Vec2EBranchformerConfig, Wav2Vec2EBranchformerForPreTraining)
+AutoModelForCTC.register(Wav2Vec2EBranchformerConfig, Wav2Vec2EBranchformerForCTC)
+AutoModelForPreTraining.register(Wav2Vec2EBranchformerConfig, Wav2Vec2EBranchformerForPreTraining)
 
-AutoConfig.register("bestrq-transformer", BestRQTransformerForPreTrainingConfig)
-CustomAutoModelForCTC.register(BestRQTransformerForPreTrainingConfig, BestRQTransformerForCTC)
-CustomAutoModelForPretraining.register(BestRQTransformerForPreTrainingConfig, BestRQTransformerForPreTraining)
+# AutoConfig.register("bestrq-transformer", BestRQTransformerForPreTrainingConfig)
+# AutoModelForCTC.register(BestRQTransformerForPreTrainingConfig, BestRQTransformerForCTC)
+# AutoModelForPreTraining.register(BestRQTransformerForPreTrainingConfig, BestRQTransformerForPreTraining)
 
 AutoConfig.register("bestrq-ebranchformer", BestRQEBranchformerForPreTrainingConfig)
-CustomAutoModelForCTC.register(BestRQEBranchformerForPreTrainingConfig, BestRQEBranchformerForCTC)
-CustomAutoModelForPretraining.register(BestRQEBranchformerForPreTrainingConfig, BestRQEBranchformerForPreTraining)
+AutoModelForCTC.register(BestRQEBranchformerForPreTrainingConfig, BestRQEBranchformerForCTC)
+AutoModelForPreTraining.register(BestRQEBranchformerForPreTrainingConfig, BestRQEBranchformerForPreTraining)
+
+AutoConfig.register("bestrq-ebranchformer-enhanced", BestRQEBranchformerForCTCWithPreTrainingConfig)
+AutoModelForCTC.register(BestRQEBranchformerForCTCWithPreTrainingConfig, BestRQEBranchformerForCTCWithPreTraining)
+
+AutoConfig.register("gpt2-multi-head", GPT2MultiHeadConfig)
+CustomModelForCausalLM.register(GPT2MultiHeadConfig, GPT2LMMultiHeadModel)
+
+AutoConfig.register("gpt2-multi-head-mixing", GPT2MultiHeadMixingConfig)
+CustomModelForCausalLM.register(GPT2MultiHeadMixingConfig, GPT2LMMultiHeadModelMixing)
+
+AutoConfig.register("gpt2-residuals-head", GPT2ResidualsLMHeadConfig)
+CustomModelForCausalLM.register(GPT2ResidualsLMHeadConfig, GPT2ResidualsLMHeadModel)
 
 
 def average_checkpoints(experiment_dir: str) -> str:
@@ -140,10 +156,10 @@ def instantiate_ctc_model(
         "ctc_weight": model_args.ctc_weight,
         "ctc_loss_reduction": "mean",
         "vocab_size": len(tokenizer),
-        "expect_2d_input": model_args.expect_2d_input,
+        # "expect_2d_input": model_args.expect_2d_input,
     }
-    if base_model_config["expect_2d_input"] and isinstance(feature_extractor, Speech2TextFeatureExtractor):
-        base_model_config["second_dim_input_size"] = feature_extractor.num_mel_bins
+    # if base_model_config["expect_2d_input"] and isinstance(feature_extractor, Speech2TextFeatureExtractor):
+    #     base_model_config["second_dim_input_size"] = feature_extractor.num_mel_bins
 
     if model_args.from_pretrained:
         config = AutoConfig.from_pretrained(model_args.from_pretrained)
@@ -151,7 +167,7 @@ def instantiate_ctc_model(
         model_path = model_args.from_pretrained
         if model_args.average_checkpoints:
             model_path = average_checkpoints(model_path)
-        model = CustomAutoModelForCTC.from_pretrained(model_path, config=config)
+        model = AutoModelForCTC.from_pretrained(model_path, config=config)
     else:
         config = AutoConfig.from_pretrained(model_args.base_encoder_model)
         config.update(base_model_config)
@@ -161,7 +177,7 @@ def instantiate_ctc_model(
             parsed_dict = dict(x.split("=") for x in model_args.config_overrides.split(","))
             config.update(parsed_dict)
 
-        model = CustomAutoModelForCTC.from_config(config)
+        model = AutoModelForCTC.from_config(config)
 
     return model
 
@@ -179,15 +195,15 @@ def instantiate_aed_model(
         "decoder_vocab_size": len(tokenizer),
         "lsm_factor": model_args.lsm_factor,
         "shared_lm_head": model_args.shared_lm_head,
-        "encoder_expect_2d_input": model_args.expect_2d_input,
+        # "encoder_expect_2d_input": model_args.expect_2d_input,
         "decoder_start_token_id": tokenizer.bos_token_id,
         "decoder_pos_emb_fixed": model_args.decoder_pos_emb_fixed,
         "eos_token_id": tokenizer.eos_token_id,
         "bos_token_id": tokenizer.bos_token_id,
         "mask_token_id": tokenizer.mask_token_id,
     }
-    if base_model_config["encoder_expect_2d_input"] and isinstance(feature_extractor, Speech2TextFeatureExtractor):
-        base_model_config["encoder_second_dim_input_size"] = feature_extractor.num_mel_bins
+    # if base_model_config["encoder_expect_2d_input"] and isinstance(feature_extractor, Speech2TextFeatureExtractor):
+    #     base_model_config["encoder_second_dim_input_size"] = feature_extractor.num_mel_bins
 
     # 4. Initialize seq2seq model
     if model_args.from_pretrained:
@@ -240,24 +256,24 @@ def instantiate_speech_encoder_model(
 ) -> PreTrainedModel:
     base_model_config = {
         "layerdrop": 0.0,
-        "expect_2d_input": model_args.expect_2d_input,
+        # "expect_2d_input": model_args.expect_2d_input,
     }
-    if base_model_config["expect_2d_input"] and isinstance(feature_extractor, Speech2TextFeatureExtractor):
-        base_model_config["second_dim_input_size"] = feature_extractor.num_mel_bins
+    # if base_model_config["expect_2d_input"] and isinstance(feature_extractor, Speech2TextFeatureExtractor):
+    #     base_model_config["second_dim_input_size"] = feature_extractor.num_mel_bins
     if model_args.from_pretrained:
         config = AutoConfig.from_pretrained(model_args.from_pretrained)
         config.update(base_model_config)
         model_path = model_args.from_pretrained
         if model_args.average_checkpoints:
             model_path = average_checkpoints(model_path)
-        model = CustomAutoModelForPretraining.from_pretrained(model_path, config=config)
+        model = AutoModelForPreTraining.from_pretrained(model_path, config=config)
     else:
         config = AutoConfig.from_pretrained(model_args.base_encoder_model)
         config.update(base_model_config)
         if model_args.config_overrides is not None:
             logger.info(f"Overriding config: {model_args.config_overrides}")
             config.update_from_string(model_args.config_overrides)
-        model = CustomAutoModelForPretraining.from_config(config)
+        model = AutoModelForPreTraining.from_config(config)
     return model
 
 

@@ -3,6 +3,7 @@ from dataclasses import dataclass, field
 from typing import List, Optional, Union
 
 import multiprocess
+import torch
 from transformers import Seq2SeqTrainingArguments
 
 
@@ -34,7 +35,6 @@ class ModelArguments:
     average_checkpoints: Optional[bool] = field(default=False, metadata={"help": "Whether to average checkpoints."})
 
     """Model architecture related arguments."""
-    expect_2d_input: Optional[bool] = field(default=False, metadata={"help": "Whether to expect 2d input for encoder."})
     ctc_weight: Optional[float] = field(default=0, metadata={"help": "Weight of CTC loss."})
     lsm_factor: Optional[float] = field(default=0, metadata={"help": "Label smoothing coefficient for CE loss."})
     shared_lm_head: Optional[bool] = field(default=False, metadata={"help": "Whether to share LM head params."})
@@ -90,9 +90,17 @@ class GeneralTrainingArguments(Seq2SeqTrainingArguments):
     )
     start_by_eval: Optional[bool] = field(default=False, metadata={"help": "Whether to start by evaluation."})
 
+    push_to_hub_final_model: Optional[bool] = field(
+        default=False, metadata={"help": "Whether to push the final model to the hub."}
+    )
+    use_sclite_for_metrics: Optional[bool] = field(
+        default=False, metadata={"help": "Whether to use sclite for evaluation."}
+    )
+
     def __post_init__(self):
         super().__post_init__()
         if self.use_start_method_spawn:
+            torch.multiprocessing.set_start_method("spawn", force=True)
             multiprocessing.set_start_method("spawn", force=True)
             # pylint: disable=no-member
             multiprocess.set_start_method("spawn", force=True)
@@ -133,7 +141,7 @@ class GenerationArguments:
     num_predictions_to_return: Optional[int] = field(default=1, metadata={"help": "Number of predictions to return."})
     nbest_path_to_save: Optional[str] = field(default="nbests", metadata={"help": "Path to save nbest hypotheses."})
     save_output_states: Optional[bool] = field(default=False, metadata={"help": "Whether to save output states."})
-    post_process_predicitons: Optional[bool] = field(
+    post_process_predictions: Optional[bool] = field(
         default=False, metadata={"help": "Whether to post process predictions."}
     )
     apply_eos_space_trick: Optional[bool] = field(default=False, metadata={"help": "Whether to apply eos space trick."})
@@ -223,6 +231,9 @@ class DataTrainingArguments:
     )
     load_pure_dataset_only: Optional[bool] = field(
         default=False, metadata={"help": "Whether to load only the pure dataset without any preprocessing."}
+    )
+    merge_validation_splits: Optional[bool] = field(
+        default=True, metadata={"help": "Whether to merge validation splits."}
     )
 
 

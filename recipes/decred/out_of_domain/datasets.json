@@ -1,0 +1,67 @@
+[  {
+    "dataset_name": "google/fleurs",
+    "dataset_id": "fleurs",
+    "load_from_disk": false,
+    "train_splits": [
+    ],
+    "validation_splits": [
+    ],
+    "test_splits": [
+      "test"
+    ],
+    "text_column_name": "transcription",
+    "audio_column_name": "audio",
+    "length_column_name": "input_len",
+    "text_transformations": [
+      "remove_punctuation",
+      "do_lower_case"
+    ],
+    "additional_args": {
+      "name": "en_us"
+    }
+  },
+   {
+    "dataset_name": "speechcolab/gigaspeech",
+    "dataset_id": "gigaspeech",
+    "load_from_disk": false,
+    "train_splits": [
+    ],
+    "validation_splits": [
+    ],
+    "test_splits": [
+      "test"
+    ],
+    "text_column_name": "text",
+    "audio_column_name": "audio",
+    "length_column_name": "input_len",
+    "text_transformations": [
+      "remove_punctuation",
+      "do_lower_case"
+    ],
+    "additional_args": {
+      "name": "xs"
+    }
+  },
+  {
+    "dataset_name": "edinburghcstr/ami",
+    "dataset_id": "ami_corpus",
+    "load_from_disk": false,
+    "train_splits": [
+    ],
+    "validation_splits": [
+    ],
+    "test_splits": [
+      "test"
+    ],
+    "text_column_name": "text",
+    "audio_column_name": "audio",
+    "length_column_name": "input_len",
+    "text_transformations": [
+      "remove_punctuation",
+      "do_lower_case"
+    ],
+    "additional_args": {
+      "name": "ihm"
+    }
+  }
+]

@@ -105,13 +105,17 @@ class DataPreprocessingManagerCallback(TrainerCallback):
             audio = transform(audio, **fn_call_params)
         return audio
 
-    def default_transform(self, batch, transform_key):
-        return {
-            self.audio_column_name: [
-                self.transformer(audio_object_stripper(audio), self.transforms[transform_key])
-                for audio in batch[self.audio_column_name]
-            ]
-        }
+    def default_transform(self, batch, transform_key, min_audio_length=8000):
+        out_dict = {self.audio_column_name: []}
+        for audio in batch[self.audio_column_name]:
+            audio_arr = audio_object_stripper(audio)
+            if not isinstance(audio_arr, np.ndarray):
+                audio_arr = audio_arr.numpy()
+            if audio_arr.shape[0] < min_audio_length:
+                logger.warning(f"Audio array with shape {audio_arr.shape} detected. Padding it with zeros.")
+                audio_arr = np.pad(audio_arr, (0, min_audio_length - audio_arr.shape[0]))
+            out_dict[self.audio_column_name].append(self.transformer(audio_arr, self.transforms[transform_key]))
+        return out_dict
 
     def propagate_state_to_transforms(self, state: TrainerState):
         for split_transforms in self.transforms.values():

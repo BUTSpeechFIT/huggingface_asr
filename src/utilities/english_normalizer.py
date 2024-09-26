@@ -1790,6 +1790,7 @@ class EnglishNormalizer(EnglishTextNormalizer):
             "{left-brace": "{",
             "}right-brace": "}",
         }
+        self.ignore_patterns = r"\b(hmm|mm|mhm|huh|hum|oh|mmm|uh|um)\b"
 
     def __call__(self, s: str):
         s = s.lower()
@@ -1807,7 +1808,10 @@ class EnglishNormalizer(EnglishTextNormalizer):
         s = re.sub(r"\s+'", "'", s)  # standardize when there's a space before an apostrophe
 
         # standardize brackets for special tokens (%noise), [noise], <noise> -> ([noise])
-        s = re.sub(r"(\[|<|\(%|\*)(\w+)[]>)*]", r"([\2])", s)
+        s = re.sub(r"\(?(\[|<|\(%|\*)(\w+)[]>)*]\)?", r"([\2])", s)
+
+        s = re.sub(r"(\(\[hesitation\]\))(-\(\[hesitation\]\))+", "([hesitation])", s)  # remove multiple hesitations
+
         for pattern, replacement in self.replacers.items():
             s = re.sub(pattern, replacement, s)
 

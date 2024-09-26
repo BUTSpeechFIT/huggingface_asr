@@ -1,16 +1,17 @@
 """Main training script for training of attention based encoder decoder ASR models."""
 import sys
 
+from huggingface_hub import ModelCard
 from transformers import (
     AutoFeatureExtractor,
     AutoModelForCausalLM,
     AutoTokenizer,
     HfArgumentParser,
-    Seq2SeqTrainer,
     WhisperForConditionalGeneration,
 )
 from transformers.utils import logging
 
+import wandb
 from decoding.config import GenerationConfigCustom
 from utilities.callbacks import init_callbacks
 from utilities.collators import SpeechCollatorWithPadding
@@ -24,7 +25,7 @@ from utilities.training_arguments import (
     GenerationArguments,
     ModelArguments,
 )
-from utilities.training_utils import AdditionalLossTrackerTrainer
+from utilities.training_utils import CustomSeq2SeqTrainer
 
 if __name__ == "__main__":
     logging.set_verbosity_debug()
@@ -96,16 +97,27 @@ if __name__ == "__main__":
     )
 
     # 7. Initialize trainer
-    trainer_class = AdditionalLossTrackerTrainer if training_args.track_ctc_loss else Seq2SeqTrainer
-    trainer = trainer_class(
+    trainer = CustomSeq2SeqTrainer(
         args=training_args,
         model=model,
         callbacks=callbacks,
+        tokenizer=tokenizer,
         train_dataset=dataset[data_args.train_split],
         eval_dataset=training_eval_dataset,
         data_collator=data_collator,
         compute_metrics=lambda pred: compute_metrics(tokenizer, pred, gen_args.wandb_predictions_to_save),
     )
+
+    if training_args.start_by_eval:
+        do_evaluate(
+            trainer=trainer,
+            dataset=dataset,
+            model=model,
+            tokenizer=tokenizer,
+            gen_args=gen_args,
+            training_args=training_args,
+            data_args=data_args,
+        )
 
     # 8. Train model
     if training_args.do_train:
@@ -122,6 +134,7 @@ if __name__ == "__main__":
             training_args=training_args,
             data_args=data_args,
         )
+
     # 10. N-best generation
     if training_args.do_generate:
         do_generate(
@@ -133,3 +146,13 @@ if __name__ == "__main__":
             data_args=data_args,
             gen_config=gen_config,
         )
+
+    if training_args.push_to_hub_final_model and trainer.is_local_process_zero():
+        trainer.push_to_hub()
+        if wandb.run is not None:
+            card = ModelCard.load(trainer.hub_model_id)
+            card.text = card.text + f"\n### Wandb run\n{wandb.run.url}"
+            card.push_to_hub(trainer.hub_model_id)
+
+        tokenizer.push_to_hub(trainer.hub_model_id)
+        feature_extractor.push_to_hub(trainer.hub_model_id)

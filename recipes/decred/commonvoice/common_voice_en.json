@@ -1,0 +1,25 @@
+[
+  {
+    "dataset_name": "/flash/project_465000836/ipoloka/cv_13_en_prepared",
+    "dataset_id": "common_voice_13_en",
+    "load_from_disk": true,
+    "train_splits": [
+      "train"
+    ],
+    "validation_splits": [
+      "validation"
+    ],
+    "test_splits": [
+      "common_voice_13_en_test"
+    ],
+    "text_column_name": "text",
+    "audio_column_name": "audio",
+    "length_column_name": "input_len",
+    "text_transformations": [
+      "remove_punctuation",
+      "do_lower_case"
+    ],
+    "additional_args": {
+    }
+  }
+]

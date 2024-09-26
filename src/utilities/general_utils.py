@@ -1,6 +1,7 @@
 import json
 import math
 import os
+import time
 from tempfile import NamedTemporaryFile
 from typing import Any, Callable, Dict, List, Optional, Tuple, Union
 
@@ -145,6 +146,7 @@ def do_evaluate(
                 trainer.args.per_device_eval_batch_size / (model.generation_config.num_beams / num_beams_orig)
             )
     for split in data_args.test_splits:
+        start_time = time.time()
         if isinstance(trainer, Seq2SeqTrainer):
             predictions = trainer.predict(
                 dataset[split],
@@ -154,9 +156,14 @@ def do_evaluate(
             predictions = trainer.predict(
                 dataset[split],
             )
+        end_time = time.time()
+        tokens_produced = (predictions.predictions != tokenizer.pad_token_id).sum()
         logger.info(f"Metrics for {split} split: {predictions.metrics}")
+        logger.info(f"Time taken for evaluation: {end_time - start_time} seconds")
+        logger.info(f"Tokens produced: {tokens_produced}")
+        logger.info(f"Tokens per second: {tokens_produced / (end_time - start_time)}")
 
-        if gen_args.post_process_predicitons and data_args.text_transformations is not None:
+        if gen_args.post_process_predictions and data_args.text_transformations is not None:
             callable_transform = function_aggregator(
                 [
                     text_transform_partial(
