@@ -58,8 +58,8 @@ cd $SRC_DIR || exit
 args=(
   # General training arguments
   --output_dir=$EXPERIMENT_PATH
-  --per_device_train_batch_size="128"
-  --per_device_eval_batch_size="128"
+  --per_device_train_batch_size="64"
+  --per_device_eval_batch_size="64"
   --dataloader_num_workers="8"
   --num_train_epochs="50"
   --group_by_length="True"
