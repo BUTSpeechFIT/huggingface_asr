@@ -9,7 +9,7 @@
 #SBATCH --time=24:00:00
 #SBATCH --exclusive
 
-EXPERIMENT="wav2vec2_pretrain_pure_voxpopuli"
+EXPERIMENT="voxpopuli_czech3_pretrain_small_original_causal"
 SRC_DIR="/project/${EC_PROJECT}/ipoloka/huggingface_asr"
 WORK_DIR="/scratch/${EC_PROJECT}/ipoloka/huggingface_asr"
 RECIPE_DIR="${SRC_DIR}/recipes/voxpopuli/czech"
@@ -49,8 +49,8 @@ srun --unbuffered --kill-on-bad-exit singularity exec --bind /usr/sbin:/usr/sbin
 	--dataset_name="facebook/voxpopuli" \
 	--dataset_config_names cs \
 	--dataset_split_names train \
-	--model_name_or_path="patrickvonplaten/wav2vec2-base-v2" \
-	--output_dir="./wav2vec2-pretrained-demo" \
+	--model_name_or_path="Lakoc/ebranchformer_6_128h_for_pretraining_2d" \
+	--output_dir="./wav2vec2-pretrained-demo_ebranchformer" \
 	--max_train_steps="20000" \
 	--num_warmup_steps="32000" \
 	--gradient_accumulation_steps="1" \
@@ -66,4 +66,5 @@ srun --unbuffered --kill-on-bad-exit singularity exec --bind /usr/sbin:/usr/sbin
 	--adam_beta2="0.98" \
 	--adam_epsilon="1e-06" \
 	--mask_time_prob="0.65" \
-	--mask_time_length="10"
+	--mask_time_length="10" \
+	--pad_to_multiple_of=100
