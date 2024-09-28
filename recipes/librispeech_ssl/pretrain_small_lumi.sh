@@ -6,11 +6,11 @@
 #SBATCH --output="outputs/librispeech_ssl/output_%x_%j.out"
 #SBATCH --error="outputs/librispeech_ssl/output_%x_%j.err"
 #SBATCH --partition=standard-g
-#SBATCH --mem=0G
+#SBATCH --mem=200G
 #SBATCH --time=2-00:00:00
 
 
-EXPERIMENT="bestrq_lumi_libri_small_proper"
+EXPERIMENT="bestrq_lumi_libri_small_proper4"
 PROJECT="librispeech_ssl"
 
 SRC_DIR="/project/${EC_PROJECT}/ipoloka/huggingface_asr"
@@ -107,4 +107,4 @@ args=(
 
 
 srun --unbuffered --kill-on-bad-exit  singularity exec $SIFPYTORCH \
-"${SRC_DIR}/cluster_utilities/LUMI/start_multinode_job_inside_env.sh" src/trainers/pretrain.py "${args[@]}"
+"${SRC_DIR}/cluster_utilities/LUMI/start_multinode_job_inside_env_pure_python.sh" src/trainers/pretrain.py "${args[@]}"
