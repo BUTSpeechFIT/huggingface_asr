@@ -96,6 +96,7 @@ class GeneralTrainingArguments(Seq2SeqTrainingArguments):
     use_sclite_for_metrics: Optional[bool] = field(
         default=False, metadata={"help": "Whether to use sclite for evaluation."}
     )
+    freeze_encoder: Optional[bool] = field(default=False, metadata={"help": "Whether to freeze encoder."})
 
     def __post_init__(self):
         super().__post_init__()

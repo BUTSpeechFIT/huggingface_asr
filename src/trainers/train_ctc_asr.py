@@ -4,11 +4,12 @@ import sys
 from transformers import AutoFeatureExtractor, AutoTokenizer, HfArgumentParser, Trainer
 from transformers.utils import logging
 
+from models.bestrq import BestRQEBranchformerForCTC
 from utilities.callbacks import init_callbacks
 from utilities.collators import SpeechCollatorWithPadding
 from utilities.data_utils import get_dataset
 from utilities.eval_utils import compute_metrics_ctc, ctc_beam_decode, ctc_greedy_decode
-from utilities.general_utils import do_evaluate, prepare_tokenizer_for_ctc
+from utilities.general_utils import do_evaluate
 from utilities.model_utils import instantiate_ctc_model
 from utilities.training_arguments import (
     DataTrainingArguments,
@@ -38,10 +39,16 @@ if __name__ == "__main__":
 
     # 2. Create feature extractor and tokenizer
     feature_extractor = AutoFeatureExtractor.from_pretrained(training_args.feature_extractor_name)
-    tokenizer = prepare_tokenizer_for_ctc(AutoTokenizer.from_pretrained(training_args.tokenizer_name))
+    tokenizer = AutoTokenizer.from_pretrained(training_args.tokenizer_name)
 
     # 3. Instantiate model
     model = instantiate_ctc_model(model_args, tokenizer, feature_extractor)
+
+    if training_args.freeze_encoder:
+        model.freeze_encoder()
+
+    if not isinstance(model, BestRQEBranchformerForCTC):
+        raise ValueError("Model must be an instance of BestRQEBranchformerForCTC.")
 
     # 4. Initialize callbacks
     callbacks = init_callbacks(data_args, training_args, dataset, feature_extractor)
@@ -72,7 +79,9 @@ if __name__ == "__main__":
             )
         )
         if training_args.generation_num_beams is not None and training_args.generation_num_beams > 1
-        else ctc_greedy_decode,
+        else lambda predictions, labels: ctc_greedy_decode(  # pylint: disable=E1121
+            predictions, len(tokenizer.get_vocab()), model.config.pad_token_id
+        ),
         compute_metrics=lambda pred: compute_metrics_ctc(tokenizer, pred, gen_args.wandb_predictions_to_save),
     )
 

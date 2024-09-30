@@ -153,7 +153,6 @@ def instantiate_ctc_model(
         "bos_token_id": tokenizer.bos_token_id,
         "mask_token_id": tokenizer.mask_token_id,
         "layerdrop": 0.0,
-        "ctc_weight": model_args.ctc_weight,
         "ctc_loss_reduction": "mean",
         "vocab_size": len(tokenizer),
         # "expect_2d_input": model_args.expect_2d_input,
