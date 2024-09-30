@@ -1,3 +1,4 @@
+import itertools as it
 from typing import Dict, List
 
 import torch
@@ -33,8 +34,13 @@ def get_metrics(labels: List[str], preds: List[str]):
     return {"cer": cer(labels, preds), **metrics}
 
 
-def ctc_greedy_decode(logits: torch.Tensor, _: torch.Tensor) -> torch.Tensor:
-    return torch.argmax(logits, dim=-1)
+def ctc_greedy_decode(logits: torch.Tensor, blank, pad_token_id) -> torch.Tensor:
+    idxs = torch.argmax(logits, dim=-1)
+    for i, prediction in enumerate(idxs):
+        deduplicated = [k for k, g in it.groupby(prediction) if k != blank]
+        idxs[i, : len(deduplicated)] = torch.tensor(deduplicated)
+        idxs[i, len(deduplicated) :] = pad_token_id
+    return idxs
 
 
 def ctc_beam_decode(logits: torch.Tensor, _: torch.Tensor, tokenizer, beam_size) -> torch.Tensor:
