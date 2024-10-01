@@ -16,3 +16,5 @@ packaging
 pandas
 librosa
 torchaudio
+flashlight
+flashlight-text
