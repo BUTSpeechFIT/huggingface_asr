@@ -1,4 +1,5 @@
 import sys
+import os
 
 from datasets import load_dataset
 from huggingface_hub import repo_exists
@@ -26,6 +27,7 @@ def train_tokenizer(
     mask_token,
     vocab_size=5000,
     apply_regularization=False,
+    output_dir=None
 ):
     if apply_regularization:
         raise NotImplementedError
@@ -77,10 +79,13 @@ def train_tokenizer(
         pad_token=pad_token,
         unk_token=unk_token,
         mask_token=mask_token,
-        # sep_token="▁" if tokenizer_type == "unigram" else " ",
+        sep_token="▁" if tokenizer_type == "unigram" else " ",
     )
 
-    wrapped_tokenizer.push_to_hub(tokenizer_name)  # pylint: disable=not-callable
+    if ("/" in tokenizer_name) or (output_dir is None):
+        wrapped_tokenizer.push_to_hub(tokenizer_name)  # pylint: disable=not-callable
+    else:
+        wrapped_tokenizer.save_pretrained(os.path.join(output_dir, tokenizer_name))  # pylint: disable=not-callable
 
     return tokenizer
 
@@ -129,4 +134,5 @@ if __name__ == "__main__":
         tokenizer_args.pad_token,
         tokenizer_args.mask_token,
         tokenizer_args.vocab_size,
+        output_dir = training_args.output_dir
     )

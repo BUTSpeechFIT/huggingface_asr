@@ -82,7 +82,11 @@ class AudioFolderVAD(folder_based_builder.FolderBasedBuilder):
             files, metadata_files, split_name, add_metadata, add_labels
         ):
             # pylint: disable=no-member
-            waveform, sample_rate = torchaudio.load(example["audio"])
+            try:
+                waveform, sample_rate = torchaudio.load(example["audio"])
+            except:
+                print(f'Error loading audio: {example_id}, {example}, {example["audio"]}. Skipping it!')
+                continue
 
             annotation = self.vad_pipeline({"waveform": waveform, "sample_rate": sample_rate})
 

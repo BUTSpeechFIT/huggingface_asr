@@ -18,3 +18,4 @@ librosa
 torchaudio
 flashlight
 flashlight-text
+torch_audiomentations
