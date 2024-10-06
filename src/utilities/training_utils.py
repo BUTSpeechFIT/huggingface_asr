@@ -82,6 +82,8 @@ class GradAwareTrainer(Trainer):
     def get_grad_norm(self, model: nn.Module) -> torch.Tensor:
         total_norm = 0
         for name, p in model.named_parameters():
+            if p.grad is None:
+                continue
             param_norm = p.grad.detach().data.norm(2)
             total_norm += param_norm.item() ** 2
         total_norm = total_norm**0.5

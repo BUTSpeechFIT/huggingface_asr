@@ -125,6 +125,8 @@ class InputNormalization(torch.nn.Module):
         avg_factor=None,
         requires_grad=False,
         update_until_epoch=3,
+        input_dim=80,
+        should_update=True,
     ):
         super().__init__()
         self.mean_norm = mean_norm
@@ -132,8 +134,8 @@ class InputNormalization(torch.nn.Module):
         self.norm_type = norm_type
         self.avg_factor = avg_factor
         self.requires_grad = requires_grad
-        self.glob_mean = torch.tensor([0])
-        self.glob_std = torch.tensor([0])
+        self.glob_mean = nn.Parameter(torch.zeros(input_dim, requires_grad=requires_grad))
+        self.glob_std = nn.Parameter(torch.ones(input_dim, requires_grad=requires_grad))
         self.spk_dict_mean = {}
         self.spk_dict_std = {}
         self.spk_dict_count = {}
@@ -141,6 +143,7 @@ class InputNormalization(torch.nn.Module):
         self.count = 0
         self.eps = 1e-10
         self.update_until_epoch = update_until_epoch
+        self.should_update = should_update
 
     def forward(self, x, lengths, spk_ids=torch.tensor([]), epoch=0):
         """Returns the tensor with the surrounding context.
@@ -190,7 +193,7 @@ class InputNormalization(torch.nn.Module):
             if self.norm_type == "speaker":
                 spk_id = int(spk_ids[snt_id][0])
 
-                if self.training:
+                if self.training and self.should_update:
                     if spk_id not in self.spk_dict_mean:
                         # Initialization of the dictionary
                         self.spk_dict_mean[spk_id] = current_mean
@@ -235,10 +238,10 @@ class InputNormalization(torch.nn.Module):
                 out = (x - current_mean.data) / (current_std.data)
 
             if self.norm_type == "global":
-                if self.training:
+                if self.training and self.should_update:
                     if self.count == 0:
-                        self.glob_mean = current_mean
-                        self.glob_std = current_std
+                        self.glob_mean.data = current_mean
+                        self.glob_std.data = current_std
 
                     elif epoch is None or epoch < self.update_until_epoch:
                         if self.avg_factor is None:
@@ -246,11 +249,13 @@ class InputNormalization(torch.nn.Module):
                         else:
                             self.weight = self.avg_factor
 
-                        self.glob_mean = (1 - self.weight) * self.glob_mean.to(
+                        self.glob_mean.data = (1 - self.weight) * self.glob_mean.to(
                             current_mean
                         ) + self.weight * current_mean
 
-                        self.glob_std = (1 - self.weight) * self.glob_std.to(current_std) + self.weight * current_std
+                        self.glob_std.data = (1 - self.weight) * self.glob_std.to(
+                            current_std
+                        ) + self.weight * current_std
 
                     self.glob_mean.detach()
                     self.glob_std.detach()
@@ -418,7 +423,7 @@ class BestRQMask:
 class BestRQModel(nn.Module):
     def __init__(self, config):
         super().__init__(config)
-        self.norm = InputNormalization(update_until_epoch=1)
+        self.norm = InputNormalization(update_until_epoch=1, input_dim=config.best_rq_in_dim // 4)
         self.rpq = RandomProjectionQuantizer(config)
         self.classifiers = nn.ModuleList(
             nn.Linear(config.hidden_size, config.best_rq_codebook_size) for _ in range(config.best_rq_num_books)
@@ -525,6 +530,29 @@ class BestRQEBranchformerForPreTraining(BestRQModel, Wav2Vec2PreTrainedModel):
 
 class BestRQEBranchformerForCTC(Wav2Vec2EBranchformerForCTC):
     config_class = BestRQEBranchformerForPreTrainingConfig
+
+    def __init__(self, config: BestRQEBranchformerForPreTrainingConfig):
+        super().__init__(config)
+        self.norm = InputNormalization(update_until_epoch=1, input_dim=config.best_rq_in_dim // 4, should_update=False)
+
+    def forward(
+        self,
+        input_values: Optional[torch.Tensor],
+        attention_mask: Optional[torch.Tensor] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
+        labels: Optional[torch.Tensor] = None,
+    ) -> Union[Tuple, CausalLMOutput]:
+        input_values = self.norm(input_values, attention_mask.sum(dim=1), epoch=2)
+        return super().forward(
+            input_values,
+            attention_mask=attention_mask,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            return_dict=return_dict,
+            labels=labels,
+        )
 
 
 class BestRQEBranchformerForCTCWithPreTrainingConfig(Wav2Vec2EBranchformerConfig, BestRQConfig):

@@ -79,7 +79,7 @@ if __name__ == "__main__":
             )
         )
         if training_args.generation_num_beams is not None and training_args.generation_num_beams > 1
-        else lambda predictions, labels: ctc_greedy_decode(  # pylint: disable=E1121
+        else lambda predictions, labels: ctc_greedy_decode(
             predictions, len(tokenizer.get_vocab()), model.config.pad_token_id
         ),
         compute_metrics=lambda pred: compute_metrics_ctc(tokenizer, pred, gen_args.wandb_predictions_to_save),
