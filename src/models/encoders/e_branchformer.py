@@ -6,8 +6,14 @@ from typing import Optional, Tuple, Union
 import torch
 import torch.utils.checkpoint
 from torch import nn
+from torch import Tensor
 from transformers.activations import ACT2FN
 from transformers.modeling_outputs import CausalLMOutput
+from transformers.integrations.deepspeed import is_deepspeed_zero3_enabled
+from transformers.modeling_outputs import (
+    BaseModelOutput,
+    Wav2Vec2BaseModelOutput,
+)
 from transformers.models.wav2vec2.modeling_wav2vec2 import (
     _HIDDEN_STATES_START_POSITION,
     Wav2Vec2Config,
@@ -70,31 +76,34 @@ class Wav2Vec2EBranchformerSelfAttention(Wav2Vec2ConformerSelfAttention):
         super().__init__(config)
         self.is_causal = config.is_causal
 
-    def get_causal_mask(self, i, j, device):
-        return torch.ones((i, j), device=device, dtype=torch.bool).triu(j - i + 1)
-
     def forward(
         self,
         hidden_states: torch.Tensor,
         attention_mask: Optional[torch.Tensor] = None,
         relative_position_embeddings: Optional[torch.Tensor] = None,
+        cached_key: Optional[torch.Tensor] = None,
+        cached_value: Optional[torch.Tensor] = None,
+        left_context_len: int = 0,
         output_attentions: bool = False,
     ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Tuple[torch.Tensor]]]:
+        """
+        both streaming + non-streaming version
+
+        for streaming, call with: (cached_key, cached_value, left_context_len)
+        """
+
         # self-attention mechanism
-        batch_size, _, __ = hidden_states.size()
+        batch_size, num_frames, hid_dim = hidden_states.size()
 
         # make sure query/key states can be != value states
         query_key_states = hidden_states
         value_states = hidden_states
 
+        # still relevant ?
         if self.position_embeddings_type == "rotary":
-            if relative_position_embeddings is None:
-                raise ValueError(
-                    "`relative_position_embeddings` has to be defined when `self.position_embeddings_type == 'rotary'"
-                )
-            query_key_states = self._apply_rotary_embedding(query_key_states, relative_position_embeddings)
+            raise ValueError("position_embeddings_type == 'rotary' not supported")
 
-        # project query_key_states and value_states
+        # project query_key_states and value_states => (batch, time1, head, d_k)
         query = self.linear_q(query_key_states).view(batch_size, -1, self.num_heads, self.head_size)
         key = self.linear_k(query_key_states).view(batch_size, -1, self.num_heads, self.head_size)
         value = self.linear_v(value_states).view(batch_size, -1, self.num_heads, self.head_size)
@@ -103,6 +112,32 @@ class Wav2Vec2EBranchformerSelfAttention(Wav2Vec2ConformerSelfAttention):
         query = query.transpose(1, 2)
         key = key.transpose(1, 2)
         value = value.transpose(1, 2)
+
+        # prepend the context of 'key' matrix
+        if cached_key != None:
+            assert(cached_key.shape[2] == left_context_len)
+            key = torch.cat([cached_key, key], dim=2)
+
+            # update the cached_key
+            if left_context_len > 0:
+                cached_key = key[..., -left_context_len:, :]
+            elif left_context_len == 0:
+                shape = list(key.shape)
+                shape[-2] = 0
+                cached_key = torch.zeros(shape, device=key.device)
+
+        # prepend the context of 'value' matrix
+        if cached_value != None:
+            assert(cached_value.shape[2] == left_context_len)
+            value = torch.cat([cached_value, value], dim=2)
+
+            # update the cached_key
+            if left_context_len > 0:
+                cached_value = value[..., -left_context_len:, :]
+            elif left_context_len == 0:
+                shape = list(value.shape)
+                shape[-2] = 0
+                cached_value = torch.zeros(shape, device=key.device)
 
         if self.position_embeddings_type == "relative":
             if relative_position_embeddings is None:
@@ -118,14 +153,7 @@ class Wav2Vec2EBranchformerSelfAttention(Wav2Vec2ConformerSelfAttention):
         else:
             scores = torch.matmul(query, key.transpose(-2, -1)) / math.sqrt(self.head_size)
 
-        if self.is_causal:
-            causal_mask = self.get_causal_mask(query.size(-2), key.size(-2), device=query.device)
-            if attention_mask is None:
-                attention_mask = causal_mask * -torch.finfo(query.dtype).max
-            else:
-                attention_mask = attention_mask.masked_fill(causal_mask, -torch.finfo(query.dtype).max)
-
-        # apply attention_mask if necessary
+        # apply attention_mask if necessary (prepared in Encoder class)
         if attention_mask is not None:
             scores = scores + attention_mask
 
@@ -140,7 +168,7 @@ class Wav2Vec2EBranchformerSelfAttention(Wav2Vec2ConformerSelfAttention):
         hidden_states = hidden_states.transpose(1, 2).reshape(batch_size, -1, self.num_heads * self.head_size)
         hidden_states = self.linear_out(hidden_states)
 
-        return hidden_states, probs
+        return hidden_states, probs, (cached_key, cached_value,)
 
 
 class ConvolutionalSpatialGatingUnit(torch.nn.Module):
@@ -281,6 +309,9 @@ class Wav2Vec2EBranchformerEncoderLayer(nn.Module):
         hidden_states: torch.FloatTensor,
         attention_mask: Optional[torch.Tensor] = None,
         relative_position_embeddings: Optional[torch.Tensor] = None,
+        cached_key: Optional[torch.Tensor] = None,
+        cached_value: Optional[torch.Tensor] = None,
+        left_context_len: int = 0,
         output_attentions: bool = False,
     ):
         # 1. Optional ff1
@@ -295,10 +326,13 @@ class Wav2Vec2EBranchformerEncoderLayer(nn.Module):
 
         # 3. Self-Attention branch
         global_branch = self.self_attn_layer_norm(global_branch)
-        global_branch, attn_weigts = self.self_attn(
+        global_branch, attn_weigts, (cached_key, cached_value) = self.self_attn.forward(
             hidden_states=global_branch,
             attention_mask=attention_mask,
             relative_position_embeddings=relative_position_embeddings,
+            cached_key=cached_key,
+            cached_value=cached_value,
+            left_context_len=left_context_len,
             output_attentions=output_attentions,
         )
         global_branch = self.self_attn_dropout(global_branch)
@@ -326,7 +360,7 @@ class Wav2Vec2EBranchformerEncoderLayer(nn.Module):
 
         # 8. Final layer norm
         hidden_states = self.final_layer_norm(hidden_states)
-        return hidden_states, attn_weigts
+        return hidden_states, attn_weigts, (cached_key, cached_value)
 
 
 class Wav2Vec2EBranchformerEncoder(Wav2Vec2ConformerEncoder):
@@ -336,6 +370,314 @@ class Wav2Vec2EBranchformerEncoder(Wav2Vec2ConformerEncoder):
             [Wav2Vec2EBranchformerEncoderLayer(config) for _ in range(config.num_hidden_layers)]
         )
         self.pos_conv_embed = None
+
+    def get_causal_mask(self, i, j, device):
+        return torch.ones((i, j), device=device, dtype=torch.bool).triu(j - i + 1)
+
+    def build_attention_mask(
+        self,
+        hidden_states: Tensor,
+        attention_lens: Optional[Tensor] = None,
+        chunk_size: int = -1,
+        left_context_len: int = 0,
+        is_streaming_inference: bool = False,
+    ) -> Tensor:
+        """
+        build attention mask
+
+        attention_lens: 2D tensor with shape (batch_size, embed_time),
+                        1.0 for segment frames, 0.0 for padding after segment
+
+        we use 3 types:
+        - streaming inference: unlimited access of SelfAttention
+        - training without chunks: causal mask
+        - training with chunks: block-diagonal mask (small look-ahead, left context)
+        """
+
+        if attention_lens is None:
+            logger.error("Missing `attention_lens`, cannot create `attention_mask` for SelfAttention module.")
+            return None
+
+        assert chunk_size == -1 or chunk_size > 0, chunk_size
+        assert left_context_len >= 0, left_context_len
+
+        if is_streaming_inference:
+            # streaming_decode mask -> unlimited access within the chunk's length (no causal masking)
+            batch_size = attention_lens.shape[0]
+            time1 = attention_lens.shape[-1]
+            time2 = time1 + left_context_len
+
+            # extend attention_lens for `left_context_len`
+            left_attention_lens = torch.ones(
+                batch_size, left_context_len, dtype=attention_lens.dtype, device=attention_lens.device,
+            )
+            attention_lens = torch.cat([left_attention_lens, attention_lens], dim=1)
+
+            # expand the attention_mask to "attention-prob" shape
+            attention_mask = 1.0 - attention_lens[:, None, None, :].to(dtype=hidden_states.dtype)
+            attention_mask = attention_mask * torch.finfo(hidden_states.dtype).min
+            attention_mask = attention_mask.expand(batch_size, 1, time1, time2)
+
+            # Note: allowing attention look-ahead within the current chunk (no causal mask used)
+            return attention_mask
+
+        if chunk_size == -1:
+            # training mask, no chunking -> length masking & causal masking
+            attention_mask = 1.0 - attention_lens[:, None, None, :].to(dtype=hidden_states.dtype)
+            attention_mask = attention_mask.expand(
+                attention_mask.shape[0], 1, attention_mask.shape[-1], attention_mask.shape[-1]
+            )
+
+            if self.is_causal:
+                causal_mask = self.get_causal_mask(
+                    attention_mask.shape[-1], attention_mask.shape[-1], device=query.attention_mask,
+                )
+                attention_mask = torch.logical_or(attention_mask, causal_mask)
+
+            # set the negative value
+            attention_mask = attention_mask * torch.finfo(hidden_states.dtype).min
+            return attention_mask
+
+        else:
+            # training mask, chunk_size set -> length masking & block-diaglonal mask
+            attention_mask = 1.0 - attention_lens[:, None, None, :].to(dtype=hidden_states.dtype)
+            attention_mask = attention_mask.expand(
+                attention_mask.shape[0], 1, attention_mask.shape[-1], attention_mask.shape[-1]
+            )
+
+            # block diagonal mask
+            num_chunks = math.ceil(attention_mask.shape[-1] / chunk_size)
+            block_diagonal_mask = torch.ones(
+                attention_mask.shape[-1], attention_mask.shape[-1], device=attention_mask.device,
+            )
+            for i in range(num_chunks):
+                block_diagonal_mask[
+                    i*chunk_size : (i+1)*chunk_size,
+                    max(i*chunk_size - left_context_len, 0) : (i+1)*chunk_size
+                ] = 0.0
+
+            # superpose the masks
+            attention_mask = torch.logical_or(attention_mask, block_diagonal_mask)
+
+            # mask-out lines after end of utterance
+            lens = attention_lens.sum(dim=1)
+            for ii, len_ii in enumerate(lens):
+                attention_mask[ii,:, len_ii:,:] = 1.0
+
+            # set the negative value
+            attention_mask = attention_mask * torch.finfo(hidden_states.dtype).min
+            return attention_mask
+
+    def forward(
+        self,
+        hidden_states: Tensor,
+        attention_lens: Optional[Tensor] = None,
+        chunk_size: int = -1,
+        left_context_len: int = 0,
+        output_attentions: bool = False,
+        output_hidden_states: bool = False,
+        return_dict: bool = True,
+    ):
+        """
+        copied from transformers/models/wav2vec2_conformer/modeling_wav2vec2_conformer.py
+        class Wav2Vec2ConformerEncoder
+
+        modified to support block diagonal attention with left context
+        """
+        all_hidden_states = () if output_hidden_states else None
+        all_self_attentions = () if output_attentions else None
+
+        assert chunk_size == -1 or chunk_size > 0, chunk_size
+        assert left_context_len >= 0, left_context_len
+
+        # make sure padded tokens output 0
+        hidden_states[~attention_lens] = 0.0
+
+        attention_mask = self.build_attention_mask(
+            hidden_states=hidden_states,
+            attention_lens=attention_lens,
+            chunk_size=chunk_size,
+            left_context_len=left_context_len,
+            is_streaming_inference=False,
+        )
+
+        hidden_states = self.dropout(hidden_states)
+
+        if self.embed_positions is not None:
+            relative_position_embeddings = self.embed_positions(hidden_states)
+        else:
+            relative_position_embeddings = None
+
+        deepspeed_zero3_is_enabled = is_deepspeed_zero3_enabled()
+
+        for i, layer in enumerate(self.layers):
+            if output_hidden_states:
+                all_hidden_states = all_hidden_states + (hidden_states,)
+
+            # add LayerDrop (see https://arxiv.org/abs/1909.11556 for description)
+            dropout_probability = torch.rand([])
+
+            skip_the_layer = True if self.training and (dropout_probability < self.config.layerdrop) else False
+            if not skip_the_layer or deepspeed_zero3_is_enabled:
+                # under deepspeed zero3 all gpus must run in sync
+                if self.gradient_checkpointing and self.training:
+                    layer_outputs = self._gradient_checkpointing_func(
+                        layer.__call__,
+                        hidden_states,
+                        attention_mask,
+                        relative_position_embeddings,
+                        output_attentions,
+                    )
+                else:
+                    layer_outputs = layer(
+                        hidden_states,
+                        attention_mask=attention_mask,
+                        relative_position_embeddings=relative_position_embeddings,
+                        output_attentions=output_attentions,
+                    )
+                hidden_states = layer_outputs[0]
+
+            if skip_the_layer:
+                layer_outputs = (None, None)
+
+            if output_attentions:
+                all_self_attentions = all_self_attentions + (layer_outputs[1],)
+
+        hidden_states = self.layer_norm(hidden_states)
+        if output_hidden_states:
+            all_hidden_states = all_hidden_states + (hidden_states,)
+
+        if not return_dict:
+            return tuple(v for v in [hidden_states, all_hidden_states, all_self_attentions] if v is not None)
+        return BaseModelOutput(
+            last_hidden_state=hidden_states,
+            hidden_states=all_hidden_states,
+            attentions=all_self_attentions,
+        )
+
+
+    @torch.jit.export
+    def get_init_states(
+        self,
+        batch_size: int = 1,
+        left_context_frames: int = 64,  # embedding time
+        device: torch.device = torch.device("cpu"),
+    ) -> list[Tensor]:
+        """
+        Get initial streaming states.
+        A list of cached tensors of all encoder layers. For layer-i states[i*2:(i+1)*2]
+        is (cached_key, cached_value).
+        """
+        # Create only the state of the encoder, `processed_lens` are added in
+        # `ebranchformer/streaming_decode.py:get_init_states()`.
+
+        streaming_states = []
+
+        num_layers = self.config.num_hidden_layers
+        num_attention_heads = self.config.num_attention_heads
+        head_dim = self.config.hidden_size // num_attention_heads
+
+        for layer in range(num_layers):
+            # layout: (batch, head, time1, d_k)
+            cached_key = torch.zeros(
+                (batch_size, num_attention_heads, left_context_frames, head_dim),
+                device=device,
+            )
+            cached_value = torch.zeros(
+                (batch_size, num_attention_heads, left_context_frames, head_dim),
+                device=device,
+            )
+            streaming_states += [
+                cached_key,
+                cached_value,
+            ]
+
+        return streaming_states
+
+    def streaming_forward(
+        self,
+        hidden_states: Tensor,
+        attention_lens: Optional[Tensor],
+        streaming_states: list[Tensor],
+        left_context_len: int = 64,
+        output_attentions: bool = False,
+    ) -> tuple[Tensor, list[Tensor], list[Tensor]]:
+        """
+        Encoder forward function through for streaming ASR.
+
+        hidden_states: pre-encoder outputs, layout (batch, time, dim_encoder).
+        attention_mask: chunk lengths encoded as binary matrix with shape (batch, time).
+                        Related to SelfAttention time masking.
+        streaming_states: vector of stacked states (self-attention keys and values, 1+1 per layer).
+        left_context_len: length of the left_context in the SelfAttention for streaming
+                          (unit is encoder timestep 40ms).
+        output_attentions: whether to export attention matrices from the SelfAttention modules.
+
+        Returns:
+            tuple(hidden_states, list(streaming_states), list(attention_out))
+
+        """
+
+        assert len(streaming_states) == 2*len(self.layers), \
+                (len(streaming_states), 2*len(self.layers))
+        assert attention_lens is not None
+
+        new_streaming_states = []
+        attention_out = []
+
+        # make sure padded tokens output 0
+        if attention_lens is not None:
+            hidden_states[~attention_lens] = 0.0
+
+        attention_mask = self.build_attention_mask(
+            hidden_states=hidden_states,
+            attention_lens=attention_lens,
+            left_context_len=left_context_len,
+            is_streaming_inference=True,
+        )
+
+        hidden_states = self.dropout(hidden_states)
+
+        if self.embed_positions is not None:
+            batch_size, num_frames, hid_dim = hidden_states.size()
+            device = hidden_states.device
+            dtype = hidden_states.dtype
+
+            # Create empty Tensor `ext_key_shape`, corrseponds to shape of `torch.cat([cached_key, key])`
+            # in Wav2Vec2EBranchformerSelfAttention, so the dims of `relative_position_embeddings` match...
+            left_context_len = streaming_states[0].shape[2]  # length of `cached_key`
+            ext_key_shape = torch.zeros((batch_size, num_frames+left_context_len, hid_dim), dtype=dtype, device=device)
+
+            relative_position_embeddings = self.embed_positions(ext_key_shape)
+        else:
+            relative_position_embeddings = None
+
+        for i, layer in enumerate(self.layers):
+            # get streaming state
+            cached_key, cached_value = streaming_states[2*i : 2*(i+1)]
+
+            # streaming_forward()
+            layer_outputs = layer.forward(
+                hidden_states=hidden_states,
+                attention_mask=attention_mask,
+                relative_position_embeddings=relative_position_embeddings,
+                cached_key=cached_key,
+                cached_value=cached_value,
+                left_context_len=left_context_len,
+                output_attentions=output_attentions,
+            )
+            hidden_states, attn_weights, (cached_key, cached_value) = layer_outputs
+
+            # collect new states
+            new_streaming_states += [ cached_key, cached_value ]
+
+            # collect attention matrices
+            if output_attentions:
+                attention_out.append(attn_weights)
+
+        hidden_states = self.layer_norm(hidden_states)
+
+        return hidden_states, new_streaming_states, attention_out
 
 
 class Wav2Vec2EBranchformerModel(CustomFE, Wav2Vec2ConformerModel):
@@ -348,6 +690,150 @@ class Wav2Vec2EBranchformerModel(CustomFE, Wav2Vec2ConformerModel):
 
         # Initialize weights and apply final processing
         self.post_init()
+
+    def forward(
+        self,
+        input_values: Optional[torch.Tensor],
+        attention_mask: Optional[torch.Tensor] = None,
+        mask_time_indices: Optional[torch.FloatTensor] = None,
+        chunk_size: int = -1,
+        left_context_len: int = 0,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
+    ) -> Union[Tuple, Wav2Vec2BaseModelOutput]:
+        """
+        Copied from transformers/models/wav2vec2_conformer/modeling_wav2vec2_conformer.py,
+        class Wav2Vec2ConformerModel
+
+        extended with `chunk_size` and `left_context_len`
+        """
+
+        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
+        output_hidden_states = (
+            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+        )
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+
+        extract_features = self.feature_extractor(input_values)
+        extract_features = extract_features.transpose(1, 2)
+
+        if attention_mask is not None:
+            # compute reduced attention_mask corresponding to feature vectors
+            attention_mask = self._get_feature_vector_attention_mask(
+                extract_features.shape[1], attention_mask, add_adapter=False
+            )
+
+        hidden_states, extract_features = self.feature_projection(extract_features)
+        hidden_states = self._mask_hidden_states(
+            hidden_states, mask_time_indices=mask_time_indices, attention_mask=attention_mask
+        )
+
+        # convert (chunk_size,left_context) length: fbank -> embedding time
+        chunk_size = self._get_feat_extract_output_lengths(
+            input_lengths=chunk_size,
+            add_adapter=False,
+        )
+        left_context_len = self._get_feat_extract_output_lengths(
+            input_lengths=left_context_len,
+            add_adapter=False,
+        )
+
+        encoder_outputs = self.encoder.forward(
+            hidden_states,
+            attention_lens=attention_mask,
+            chunk_size=chunk_size,
+            left_context_len=left_context_len,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            return_dict=return_dict,
+        )
+
+        hidden_states = encoder_outputs[0]
+
+        if self.adapter is not None:
+            hidden_states = self.adapter(hidden_states)
+
+        if not return_dict:
+            return (hidden_states, extract_features) + encoder_outputs[1:]
+
+        return Wav2Vec2BaseModelOutput(
+            last_hidden_state=hidden_states,
+            extract_features=extract_features,
+            hidden_states=encoder_outputs.hidden_states,
+            attentions=encoder_outputs.attentions,
+        )
+
+
+    def streaming_forward(
+        self,
+        input_values: torch.FloatTensor,
+        streaming_states: list[torch.Tensor],
+        left_context_len: int,
+        mask_time_indices: Optional[torch.FloatTensor] = None,
+        attention_mask: Optional[torch.Tensor] = None,
+        output_attentions: bool = False,
+    ) -> tuple[Tensor, list[Tensor], list[Tensor]]:
+
+        """
+        Forward function for streaming ASR.
+
+        input_values: fbank features, layout (batch, dim_fea, time).
+        streaming_states: vector of stacked states (self-attention keys and values, 1+1 per layer).
+        left_context_len: length of the left_context in the SelfAttention for streaming (unit is 10ms).
+        mask_time_indices: currently unused from outside, related to Spec-augment masking.
+        attention_mask: chunk lengths encoded as binary matrix with shape (batch, time).
+                        Related to SelfAttention time masking.
+        output_attentions: whether to export attention matrices from the SelfAttention modules.
+
+        Returns:
+            tuple(hidden_states, list(streaming_states), list(attention_out))
+
+        """
+        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
+
+        extract_features = self.feature_extractor(input_values)
+        # (batch, dim_fea, time) -> (batch, time, dim_fea)
+        extract_features = extract_features.transpose(1, 2)
+
+        if attention_mask is not None:
+            # compute reduced attention_mask corresponding to feature vectors
+            # (convert: 'input' 10ms steps -> 'feature' 40ms steps)
+            attention_mask = self._get_feature_vector_attention_mask(
+                extract_features.shape[1], attention_mask, add_adapter=False
+            )
+
+        # apply feature_projection
+        hidden_states, extract_features_norm = self.feature_projection(extract_features)
+
+        #torch.save(hidden_states.cpu(), "pre_encoder_output_ch5000.pt")
+        #breakpoint()
+
+        pre_encoder_output = hidden_states.clone()  # DEBUG, to be removed!
+
+        # apply Spec-augment
+        hidden_states = self._mask_hidden_states(
+            hidden_states, mask_time_indices=mask_time_indices, attention_mask=attention_mask
+        )
+
+        # convert left_context length: fbank -> embedding time
+        left_context_len = self._get_feat_extract_output_lengths(
+            input_lengths=left_context_len,
+            add_adapter=False,
+        )
+
+        hidden_states, new_streaming_states, attention_out = self.encoder.streaming_forward(
+            hidden_states=hidden_states,
+            attention_lens=attention_mask,
+            streaming_states=streaming_states,
+            left_context_len=left_context_len,
+            output_attentions=output_attentions,
+        )
+
+        if self.adapter is not None:
+            hidden_states = self.adapter(hidden_states)
+
+        return hidden_states, new_streaming_states, attention_out, pre_encoder_output
 
 
 class Wav2Vec2GumbelVectorQuantizerCustom(Wav2Vec2GumbelVectorQuantizer):
@@ -510,3 +996,23 @@ class Wav2Vec2EBranchformerForCTC(Wav2Vec2ForCTC):
         return CausalLMOutput(
             loss=loss, logits=logits, hidden_states=outputs.hidden_states, attentions=outputs.attentions
         )
+
+alex_proposed_model_interface = """
+
+def forward(
+    self,
+    input_ids: torch.LongTensor = None,  # LM rescoring ?
+    attention_mask: Optional[torch.Tensor] = None,
+    position_ids; Optional[torch.LongTensor] = None,  # ???
+    past_key_values: Optional[Union[Cache, List[torch.FloatTensor]]] = None,  # context
+    inputs_embeds: Optional[torch.FloatTensor] = None,  # hidden_values
+    use_cache: Optional[bool] = None,  # what is the cache, past_key_values or sth. more ?
+    output_attentions: Optional[bool] = None,
+    output_hidden_states: Optional[bool] = None,
+    return_dict: Optional[bool] = None,
+    cache_position: Optional[torch.LongTensor] = None,
+) -> Union[Tuple, BaseModelOutputWithPast]:
+    ...
+
+"""
+
