@@ -7,7 +7,7 @@
 #$ -o /mnt/scratch/tmp/ipoloka/outputs/ssl_ec_libri/$JOB_NAME_$JOB_ID.out
 #$ -e /mnt/scratch/tmp/ipoloka/outputs/ssl_ec_libri/$JOB_NAME_$JOB_ID.err
 
-EXPERIMENT="bestrq_sge_small_input_norm_v2.3"
+EXPERIMENT="bestrq_small_v1"
 PROJECT="librispeech_ssl"
 
 SRC_DIR="/mnt/matylda5/ipoloka/projects/huggingface_asr"
@@ -31,7 +31,7 @@ export HF_HOME="/mnt/scratch/tmp/ipoloka/hf_cache/"
 export PYTHONPATH="${PYTHONPATH}:${SRC_DIR}/src"
 export WANDB_PROJECT=$PROJECT
 export WANDB_RUN_ID="${EXPERIMENT}"
-export N_GPUS=2
+export N_GPUS=3
 
 cd $SRC_DIR || exit
 
@@ -53,7 +53,7 @@ args=(
   --early_stopping_patience="20"
   --weight_decay="1e-6"
   --max_grad_norm="1.0"
-  --gradient_accumulation_steps="2"
+  --gradient_accumulation_steps="1"
 
   # Logging, saving and evaluation related arguments
   --report_to="wandb"
@@ -73,15 +73,13 @@ args=(
   --datasets_creation_config="${RECIPE_DIR}/librispeech_ssl.json"
   --writer_batch_size="50"
   --split_long_segments_to_chunks
-  --cut_validation_from_train
-  --validation_slice="10%"
 
   # Preprocessing related arguments
   --data_preprocessing_config="${SRC_DIR}/configs/default_data_preprocessing2d_pure.json"
 
   # Model related arguments
-  --base_encoder_model="Lakoc/ebranchformer_6_128h_2d_bestrq_lessbooks"
-  --feature_extractor_name="Lakoc/fe_mel_wo_norm"
+  --base_encoder_model="Lakoc/bestrq_ebranchformer_6l_128h_4x1024x16cb_80x256x2d"
+  --feature_extractor_name="Lakoc/fe_mel_80_global_stats"
   )
 
 

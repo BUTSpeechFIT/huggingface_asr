@@ -1,16 +1,16 @@
 [
-    {
+  {
     "dataset_name": "librispeech_asr",
     "dataset_id": "librispeech",
     "load_from_disk": false,
     "train_splits": [
       "train.clean.100",
       "train.clean.360",
-      "train.other.500",
-      "validation.clean",
-      "validation.other"
+      "train.other.500"
     ],
     "validation_splits": [
+      "validation.clean",
+      "validation.other"
     ],
     "test_splits": [
     ],

@@ -7,7 +7,6 @@ from typing import Dict
 import torch
 from transformers import (
     AutoConfig,
-    AutoModelForCausalLM,
     AutoModelForCTC,
     AutoModelForPreTraining,
     AutoModelForSpeechSeq2Seq,
@@ -23,10 +22,8 @@ from transformers.utils import logging
 
 from decoding.config import GenerationConfigCustom
 from models.auto_wrappers import CustomModelForCausalLM
-from models.bestrq import (  # BestRQTransformerForCTC,; BestRQTransformerForPreTraining,; BestRQTransformerForPreTrainingConfig,
+from models.bestrq import (
     BestRQEBranchformerForCTC,
-    BestRQEBranchformerForCTCWithPreTraining,
-    BestRQEBranchformerForCTCWithPreTrainingConfig,
     BestRQEBranchformerForPreTraining,
     BestRQEBranchformerForPreTrainingConfig,
 )
@@ -53,32 +50,6 @@ from utilities.training_arguments import ModelArguments
 
 logger = logging.get_logger("transformers")
 
-AutoConfig.register("joint_aed_ctc_speech-encoder-decoder", JointCTCAttentionEncoderDecoderConfig)
-AutoModelForSpeechSeq2Seq.register(JointCTCAttentionEncoderDecoderConfig, JointCTCAttentionEncoderDecoder)
-
-AutoConfig.register("wav2vec2-ebranchformer", Wav2Vec2EBranchformerConfig)
-AutoModelForCTC.register(Wav2Vec2EBranchformerConfig, Wav2Vec2EBranchformerForCTC)
-AutoModelForPreTraining.register(Wav2Vec2EBranchformerConfig, Wav2Vec2EBranchformerForPreTraining)
-
-# AutoConfig.register("bestrq-transformer", BestRQTransformerForPreTrainingConfig)
-# AutoModelForCTC.register(BestRQTransformerForPreTrainingConfig, BestRQTransformerForCTC)
-# AutoModelForPreTraining.register(BestRQTransformerForPreTrainingConfig, BestRQTransformerForPreTraining)
-
-AutoConfig.register("bestrq-ebranchformer", BestRQEBranchformerForPreTrainingConfig)
-AutoModelForCTC.register(BestRQEBranchformerForPreTrainingConfig, BestRQEBranchformerForCTC)
-AutoModelForPreTraining.register(BestRQEBranchformerForPreTrainingConfig, BestRQEBranchformerForPreTraining)
-
-AutoConfig.register("bestrq-ebranchformer-enhanced", BestRQEBranchformerForCTCWithPreTrainingConfig)
-AutoModelForCTC.register(BestRQEBranchformerForCTCWithPreTrainingConfig, BestRQEBranchformerForCTCWithPreTraining)
-
-AutoConfig.register("gpt2-multi-head", GPT2MultiHeadConfig)
-CustomModelForCausalLM.register(GPT2MultiHeadConfig, GPT2LMMultiHeadModel)
-
-AutoConfig.register("gpt2-multi-head-mixing", GPT2MultiHeadMixingConfig)
-CustomModelForCausalLM.register(GPT2MultiHeadMixingConfig, GPT2LMMultiHeadModelMixing)
-
-AutoConfig.register("gpt2-residuals-head", GPT2ResidualsLMHeadConfig)
-CustomModelForCausalLM.register(GPT2ResidualsLMHeadConfig, GPT2ResidualsLMHeadModel)
 
 
 def average_checkpoints(experiment_dir: str) -> str:
@@ -163,6 +134,10 @@ def instantiate_ctc_model(
     if model_args.from_pretrained:
         config = AutoConfig.from_pretrained(model_args.from_pretrained)
         config.update(base_model_config)
+        if model_args.config_overrides is not None:
+            logger.info(f"Overriding config: {model_args.config_overrides}")
+            parsed_dict = dict(x.split("=") for x in model_args.config_overrides.split(","))
+            config.update(parsed_dict)
         model_path = model_args.from_pretrained
         if model_args.average_checkpoints:
             model_path = average_checkpoints(model_path)

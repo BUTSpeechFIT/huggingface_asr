@@ -20,6 +20,7 @@ from transformers.utils import (
     is_torch_xla_available,
     logging,
 )
+from transformers.feature_extraction_utils import PreTrainedFeatureExtractor
 
 from models.ctc_encoder_plus_autoregressive_decoder import (
     JointCTCAttentionEncoderDecoder,
@@ -41,7 +42,7 @@ class AdditionalLossTrackerTrainer(Seq2SeqTrainer):
     """Custom trainer to log both losses"""
 
     def compute_loss(
-        self, model: JointCTCAttentionEncoderDecoder, inputs: BatchFeature, return_outputs=False
+            self, model: JointCTCAttentionEncoderDecoder, inputs: BatchFeature, return_outputs=False
     ) -> Union[float, Tuple[float, BatchFeature]]:
         """
         MAX: Subclassed to compute training accuracy.
@@ -86,7 +87,7 @@ class GradAwareTrainer(Trainer):
                 continue
             param_norm = p.grad.detach().data.norm(2)
             total_norm += param_norm.item() ** 2
-        total_norm = total_norm**0.5
+        total_norm = total_norm ** 0.5
         return total_norm
 
     def training_step(self, model: nn.Module, inputs: Dict[str, Union[torch.Tensor, Any]]) -> torch.Tensor:
@@ -116,21 +117,21 @@ class GradAwareTrainer(Trainer):
 
 class CustomSeq2SeqTrainer(GradAwareTrainer, Seq2SeqTrainer):
     def __init__(
-        self,
-        *args,
-        **kwargs,
+            self,
+            *args,
+            **kwargs,
     ):
         super().__init__(*args, **kwargs)
         self.dev_output_dir = os.path.join(self.args.output_dir, "dev")
         os.makedirs(self.dev_output_dir, exist_ok=True)
 
     def evaluation_loop(
-        self,
-        dataloader: DataLoader,
-        description: str,
-        prediction_loss_only: Optional[bool] = None,
-        ignore_keys: Optional[List[str]] = None,
-        metric_key_prefix: str = "eval",
+            self,
+            dataloader: DataLoader,
+            description: str,
+            prediction_loss_only: Optional[bool] = None,
+            ignore_keys: Optional[List[str]] = None,
+            metric_key_prefix: str = "eval",
     ) -> EvalLoopOutput:
         # pylint: disable=no-member
         output = super().evaluation_loop(dataloader, description, prediction_loss_only, ignore_keys, metric_key_prefix)
@@ -159,20 +160,27 @@ class CustomSeq2SeqTrainer(GradAwareTrainer, Seq2SeqTrainer):
         return output
 
 
-class SSLTrainer(GradAwareTrainer):
+class SaveFeatureExtractorTrainer(Trainer):
+    def save_model(self, output_dir: Optional[str] = None, _internal_call: bool = False):
+        super().save_model(output_dir, _internal_call)
+        self.data_collator.feature_extractor.save_pretrained(output_dir)
+
+
+class SSLTrainer(GradAwareTrainer, SaveFeatureExtractorTrainer):
     def __init__(
-        self,
-        model: Union[PreTrainedModel, nn.Module] = None,
-        args: TrainingArguments = None,
-        data_collator: Optional[DataCollator] = None,
-        train_dataset: Optional[Dataset] = None,
-        eval_dataset: Optional[Union[Dataset, Dict[str, Dataset]]] = None,
-        tokenizer: Optional[PreTrainedTokenizerBase] = None,
-        model_init: Optional[Callable[[], PreTrainedModel]] = None,
-        compute_metrics: Optional[Callable[[EvalPrediction], Dict]] = None,
-        callbacks: Optional[List[TrainerCallback]] = None,
-        optimizers: Tuple[torch.optim.Optimizer, torch.optim.lr_scheduler.LambdaLR] = (None, None),
-        preprocess_logits_for_metrics: Optional[Callable[[torch.Tensor, torch.Tensor], torch.Tensor]] = None,
+            self,
+            model: Union[PreTrainedModel, nn.Module] = None,
+            args: TrainingArguments = None,
+            data_collator: Optional[DataCollator] = None,
+            train_dataset: Optional[Dataset] = None,
+            eval_dataset: Optional[Union[Dataset, Dict[str, Dataset]]] = None,
+            tokenizer: Optional[PreTrainedTokenizerBase] = None,
+            feature_extractor: Optional[PreTrainedFeatureExtractor] = None,
+            model_init: Optional[Callable[[], PreTrainedModel]] = None,
+            compute_metrics: Optional[Callable[[EvalPrediction], Dict]] = None,
+            callbacks: Optional[List[TrainerCallback]] = None,
+            optimizers: Tuple[torch.optim.Optimizer, torch.optim.lr_scheduler.LambdaLR] = (None, None),
+            preprocess_logits_for_metrics: Optional[Callable[[torch.Tensor, torch.Tensor], torch.Tensor]] = None,
     ):
         super().__init__(
             model,
@@ -194,6 +202,7 @@ class SSLTrainer(GradAwareTrainer):
 
         self.can_return_loss = True
         self.metadata = {"train": {}, "eval": {}}
+        self.feature_extractor = feature_extractor
 
     def compute_loss(self, model, inputs, return_outputs=False):
         """
@@ -382,10 +391,10 @@ class SSLTrainer(GradAwareTrainer):
             self.control = self.callback_handler.on_save(self.args, self.state, self.control)
 
     def evaluation_loop(
-        self,
-        eval_dataloader: DataLoader,
-        *args,
-        **kwargs,
+            self,
+            eval_dataloader: DataLoader,
+            *args,
+            **kwargs,
     ) -> EvalLoopOutput:
         # pylint: disable=no-member
         output = super().evaluation_loop(eval_dataloader, *args, **kwargs)
