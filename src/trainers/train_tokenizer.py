@@ -32,7 +32,7 @@ def train_tokenizer(
 
     if tokenizer_type == "BPE":
         tokenizer = Tokenizer(BPE())
-        tokenizer.pre_tokenizer = pre_tokenizers.ByteLevel(add_prefix_space=False)
+        tokenizer.pre_tokenizer = pre_tokenizers.ByteLevel(unk_token=unk_token)
         trainer = trainers.BpeTrainer(
             vocab_size=vocab_size,
             special_tokens=[bos_token, eos_token, unk_token, pad_token, mask_token],

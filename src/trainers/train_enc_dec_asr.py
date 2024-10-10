@@ -26,6 +26,7 @@ from utilities.training_arguments import (
     ModelArguments,
 )
 from utilities.training_utils import CustomSeq2SeqTrainer
+from utilities.bind import bind_all
 
 if __name__ == "__main__":
     logging.set_verbosity_debug()
@@ -33,6 +34,9 @@ if __name__ == "__main__":
     parser = HfArgumentParser((ModelArguments, DataTrainingArguments, GeneralTrainingArguments, GenerationArguments))
 
     model_args, data_args, training_args, gen_args = parser.parse_args_into_dataclasses()
+
+    # 0. Bind auto classes
+    bind_all()
 
     # 1. Collect, preprocess dataset and extract evaluation dataset
     dataset, training_eval_dataset = get_dataset(

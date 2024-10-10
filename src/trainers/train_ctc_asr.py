@@ -4,7 +4,6 @@ import sys
 from transformers import AutoFeatureExtractor, AutoTokenizer, HfArgumentParser, Trainer
 from transformers.utils import logging
 
-from models.bestrq import BestRQEBranchformerForCTC
 from utilities.callbacks import init_callbacks
 from utilities.collators import SpeechCollatorWithPadding
 from utilities.data_utils import get_dataset
@@ -18,12 +17,17 @@ from utilities.training_arguments import (
     ModelArguments,
 )
 
+from utilities.bind import bind_all
+
 if __name__ == "__main__":
     logging.set_verbosity_debug()
     logger = logging.get_logger("transformers")
     parser = HfArgumentParser((ModelArguments, DataTrainingArguments, GeneralTrainingArguments, GenerationArguments))
 
     model_args, data_args, training_args, gen_args = parser.parse_args_into_dataclasses()
+
+    # 0. Bind auto classes
+    bind_all()
 
     # 1. Collect, preprocess dataset and extract evaluation dataset
     dataset, training_eval_dataset = get_dataset(
@@ -46,9 +50,6 @@ if __name__ == "__main__":
 
     if training_args.freeze_encoder:
         model.freeze_encoder()
-
-    if not isinstance(model, BestRQEBranchformerForCTC):
-        raise ValueError("Model must be an instance of BestRQEBranchformerForCTC.")
 
     # 4. Initialize callbacks
     callbacks = init_callbacks(data_args, training_args, dataset, feature_extractor)
