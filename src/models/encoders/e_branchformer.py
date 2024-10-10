@@ -148,6 +148,7 @@ class Wav2Vec2EBranchformerSelfAttention(Wav2Vec2ConformerSelfAttention):
         cached_value: torch.Tensor,
         left_context_len: int,
         key_padding_mask: Optional[torch.Tensor] = None,
+        attention_mask: Optional[torch.Tensor] = None,
         relative_position_embeddings: Optional[torch.Tensor] = None,  # TODO: suspicious length received.
         output_attentions: bool = False,
     ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Tuple[torch.Tensor]]]:
@@ -174,26 +175,33 @@ class Wav2Vec2EBranchformerSelfAttention(Wav2Vec2ConformerSelfAttention):
         key = key.transpose(1, 2)
         value = value.transpose(1, 2)
 
-        # DEBUG THIS !!!
-        logger.info(f"key.shape {key.shape}, cached_key.shape {cached_key.shape}")
-        logger.info(f"value.shape {value.shape}, cached_value.shape {cached_value.shape}")
-
+        #logger.info(f"key.shape {key.shape}, cached_key.shape {cached_key.shape}")
+        #logger.info(f"value.shape {value.shape}, cached_value.shape {cached_value.shape}")
         # breakpoint()  # check `torch.cat` works as expected...
 
         # prepend the context of 'key' matrix
-
         assert(cached_key.shape[2] == left_context_len)
         key = torch.cat([cached_key, key], dim=2)
+
         # update the cached_key
-        cached_key = key[..., -left_context_len:, :]
+        if left_context_len > 0:
+            cached_key = key[..., -left_context_len:, :]
+        elif left_context_len == 0:
+            shape = list(key.shape)
+            shape[-2] = 0
+            cached_key = torch.zeros(shape, device=key.device)
 
         # prepend the context of 'value' matrix
         assert(cached_value.shape[2] == left_context_len)
         value = torch.cat([cached_value, value], dim=2)
-        # update the cached_key
-        cached_value = value[..., -left_context_len:, :]
 
-        # breakpoint()  # check context passing...
+        # update the cached_key
+        if left_context_len > 0:
+            cached_value = value[..., -left_context_len:, :]
+        elif left_context_len == 0:
+            shape = list(value.shape)
+            shape[-2] = 0
+            cached_value = torch.zeros(shape, device=key.device)
 
         if self.position_embeddings_type == "relative":
             if relative_position_embeddings is None:
@@ -211,7 +219,13 @@ class Wav2Vec2EBranchformerSelfAttention(Wav2Vec2ConformerSelfAttention):
         else:
             scores = torch.matmul(query, key.transpose(-2, -1)) / math.sqrt(self.head_size)
 
-        # no attenetion mask needed, it is a chunk! (limited future visible)
+
+        # NOT HAVING CAUSAL MAX! JUST THE TIME-BOUNDING OF THE CHUNK!!!
+
+        # apply attention_mask if necessary
+        if attention_mask is not None:
+            scores = scores + attention_mask
+
 
         # => (batch, head, time1, time2)
         probs = torch.softmax(scores, dim=-1)
@@ -408,7 +422,7 @@ class Wav2Vec2EBranchformerEncoderLayer(nn.Module):
         cached_value: torch.Tensor,
         left_context_len: int,
         key_padding_mask: Optional[torch.Tensor] = None,
-        #attention_mask: Optional[torch.Tensor] = None,
+        attention_mask: Optional[torch.Tensor] = None,
         relative_position_embeddings: Optional[torch.Tensor] = None,
         output_attentions: bool = False,
     ):
@@ -430,6 +444,7 @@ class Wav2Vec2EBranchformerEncoderLayer(nn.Module):
             cached_value=cached_value,
             left_context_len=left_context_len,
             key_padding_mask=key_padding_mask,
+            attention_mask=attention_mask,
             relative_position_embeddings=relative_position_embeddings,
             output_attentions=output_attentions,
         )
@@ -512,16 +527,19 @@ class Wav2Vec2EBranchformerEncoder(Wav2Vec2ConformerEncoder):
         streaming_states=list[Tensor],
         left_context_len=int,
         output_attentions: bool = False,
-    ) -> tuple[Tensor, list[Tensor]]:
+    ) -> tuple[Tensor, list[Tensor], list[Tensor]]:
 
         assert len(streaming_states) == 2*len(self.layers), \
                 (len(streaming_states), 2*len(self.layers))
 
         new_streaming_states = []
+        attention_out = []
 
         if attention_mask is not None:
             # make sure padded tokens output 0
             hidden_states[~attention_mask] = 0.0
+
+            # TODO: extend the mask by `left_context_len` HERE !!!
 
             # extend attention_mask
             attention_mask = 1.0 - attention_mask[:, None, None, :].to(dtype=hidden_states.dtype)
@@ -529,6 +547,16 @@ class Wav2Vec2EBranchformerEncoder(Wav2Vec2ConformerEncoder):
             attention_mask = attention_mask.expand(
                 attention_mask.shape[0], 1, attention_mask.shape[-1], attention_mask.shape[-1]
             )
+            # attention_mask is not (time, time) matrix, inputs frames are masked (vertical stripe)
+
+        # breakpoint()  # see what happened with attention mask ?
+        #
+        # YOU CAN PLOT ATTENTION MASK AT THIS POINT
+        # import matplotlib.pyplot as plt
+        # data = attention_mask[0][0].cpu()
+        # data[data!=0.0] = 1.0  # convert -1e38 values.
+        # plt.figure(figsize=(16,12)); plt.imshow(data, cmap='gray')
+        # plt.colorbar(); plt.savefig("attention_mask.png")
 
         hidden_states = self.dropout(hidden_states)
 
@@ -558,7 +586,7 @@ class Wav2Vec2EBranchformerEncoder(Wav2Vec2ConformerEncoder):
                 cached_value=cached_value,
                 left_context_len=left_context_len,
                 key_padding_mask=None,
-                #attention_mask=attention_mask,
+                attention_mask=attention_mask,
                 relative_position_embeddings=relative_position_embeddings,
                 output_attentions=output_attentions,
             )
@@ -567,9 +595,13 @@ class Wav2Vec2EBranchformerEncoder(Wav2Vec2ConformerEncoder):
             # collect new states
             new_streaming_states += [ cached_key, cached_value ]
 
+            # collect attention matrices
+            if output_attentions:
+                attention_out.append(attn_weights)
+
         hidden_states = self.layer_norm(hidden_states)
 
-        return hidden_states, new_streaming_states
+        return hidden_states, new_streaming_states, attention_out
 
 
 class Wav2Vec2EBranchformerModel(CustomFE, Wav2Vec2ConformerModel):
@@ -592,7 +624,8 @@ class Wav2Vec2EBranchformerModel(CustomFE, Wav2Vec2ConformerModel):
         mask_time_indices: Optional[torch.FloatTensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
         output_attentions: bool = False,
-    ):
+    ) -> tuple[Tensor, list[Tensor], list[Tensor]]:
+
         """
         Forward function for streaming ASR.
 
@@ -603,6 +636,9 @@ class Wav2Vec2EBranchformerModel(CustomFE, Wav2Vec2ConformerModel):
         attention_mask: currently unused from outside, related to SelfAttention masking.
         output_attentions: whether to export attention matrices from the SelfAttention modules.
 
+        Returns:
+            tuple(hidden_states, list(streaming_states), list(attention_out))
+
         """
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
 
@@ -611,15 +647,16 @@ class Wav2Vec2EBranchformerModel(CustomFE, Wav2Vec2ConformerModel):
         # (batch, dim_fea, time) -> (batch, time, dim_fea)
         extract_features = extract_features.transpose(1, 2)
 
-        logger.info(f"input_values.shape {input_values.shape}, extract_features.shape {extract_features.shape}")
+        #logger.info(f"input_values.shape {input_values.shape}, extract_features.shape {extract_features.shape}")
 
-        #if attention_mask is not None:
-        #    # compute reduced attention_mask corresponding to feature vectors
-        #    attention_mask = self._get_feature_vector_attention_mask(
-        #        extract_features.shape[1], attention_mask, add_adapter=False
-        #    )
-        attention_mask = None
+        if attention_mask is not None:
+            # compute reduced attention_mask corresponding to feature vectors
+            # (convert: 'input' 10ms steps -> 'feature' 40ms steps)
+            attention_mask = self._get_feature_vector_attention_mask(
+                extract_features.shape[1], attention_mask, add_adapter=False
+            )
 
+        # Apply Spec-augment
         hidden_states, extract_features = self.feature_projection(extract_features)
         hidden_states = self._mask_hidden_states(
             hidden_states, mask_time_indices=mask_time_indices, attention_mask=attention_mask
@@ -631,7 +668,7 @@ class Wav2Vec2EBranchformerModel(CustomFE, Wav2Vec2ConformerModel):
             add_adapter=False,
         )
 
-        hidden_states, new_streaming_states = self.encoder.streaming_forward(
+        hidden_states, new_streaming_states, attention_out = self.encoder.streaming_forward(
             hidden_states=hidden_states,
             attention_mask=attention_mask,
             streaming_states=streaming_states,
@@ -639,16 +676,16 @@ class Wav2Vec2EBranchformerModel(CustomFE, Wav2Vec2ConformerModel):
             output_attentions=output_attentions,
         )
 
-        logger.info(f"input_values.shape {input_values.shape}, extract_features.shape {extract_features.shape}, hidden_states.shape {hidden_states.shape}")
-        logger.info(f"new_streaming_states[0].shape {new_streaming_states[0].shape}")
-        logger.info(f"new_streaming_states[0][0][0] {new_streaming_states[0][0][0]}")
+        #logger.info(f"input_values.shape {input_values.shape}, extract_features.shape {extract_features.shape}, hidden_states.shape {hidden_states.shape}")
+        #logger.info(f"new_streaming_states[0].shape {new_streaming_states[0].shape}")
+        #logger.info(f"new_streaming_states[0][0][0] {new_streaming_states[0][0][0]}")
 
         # breakpoint()  # check new_streaming_states are ok...
 
         if self.adapter is not None:
             hidden_states = self.adapter(hidden_states)
 
-        return hidden_states, new_streaming_states
+        return hidden_states, new_streaming_states, attention_out
 
 
 class Wav2Vec2GumbelVectorQuantizerCustom(Wav2Vec2GumbelVectorQuantizer):
