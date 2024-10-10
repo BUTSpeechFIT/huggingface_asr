@@ -358,50 +358,51 @@ class Wav2Vec2EBranchformerForPreTraining(Wav2Vec2ForPreTraining):
         self.post_init()
 
 
-
-class Wav2Vec2EBranchformerEncoderLayerWrapper(Wav2Vec2EBranchformerEncoderLayer):
-    def __init__(self, config: Wav2Vec2EBranchformerConfig, wav2vec2: Wav2Vec2EBranchformerModel):
-        super().__init__(config)
-        self.wav2vec2 = wav2vec2
-
-    def forward(
-            self,
-            hidden_states: torch.FloatTensor,
-            attention_mask: Optional[torch.Tensor] = None,
-            relative_position_embeddings: Optional[torch.Tensor] = None,
-            output_attentions: bool = False,
-            input_values: Optional[torch.Tensor] = None,
-    ):
-
-        if self.wav2vec2.encoder.embed_positions is not None:
-            relative_position_embeddings = self.wav2vec2.encoder.embed_positions(hidden_states)
-        else:
-            relative_position_embeddings = None
-        extract_features = self.wav2vec2.feature_extractor(input_values)
-        extract_features = extract_features.transpose(1, 2)
-        if attention_mask is not None:
-            # compute reduced attention_mask corresponding to feature vectors
-            attention_mask = self.wav2vec2._get_feature_vector_attention_mask(
-                extract_features.shape[1], attention_mask, add_adapter=False
-            )
-        if attention_mask is not None:
-            # make sure padded tokens output 0
-            hidden_states[~attention_mask] = 0.0
-
-            # extend attention_mask
-            attention_mask = 1.0 - attention_mask[:, None, None, :].to(dtype=hidden_states.dtype)
-            attention_mask = attention_mask * torch.finfo(hidden_states.dtype).min
-            attention_mask = attention_mask.expand(
-                attention_mask.shape[0], 1, attention_mask.shape[-1], attention_mask.shape[-1]
-            )
-
-        return super().forward(
-            hidden_states=hidden_states,
-            attention_mask=attention_mask,
-            relative_position_embeddings=relative_position_embeddings,
-            output_attentions=output_attentions,
-        )
-
+#
+#
+# class Wav2Vec2EBranchformerEncoderLayerWrapper(Wav2Vec2EBranchformerEncoderLayer):
+#     def __init__(self, config: Wav2Vec2EBranchformerConfig, wav2vec2: Wav2Vec2EBranchformerModel):
+#         super().__init__(config)
+#         self.wav2vec2 = wav2vec2
+#
+#     def forward(
+#             self,
+#             hidden_states: torch.FloatTensor,
+#             attention_mask: Optional[torch.Tensor] = None,
+#             relative_position_embeddings: Optional[torch.Tensor] = None,
+#             output_attentions: bool = False,
+#             input_values: Optional[torch.Tensor] = None,
+#     ):
+#
+#         # if self.wav2vec2.encoder.embed_positions is not None:
+#         #     relative_position_embeddings = self.wav2vec2.encoder.embed_positions(hidden_states)
+#         # else:
+#         #     relative_position_embeddings = None
+#         extract_features = self.wav2vec2.feature_extractor(input_values)
+#         extract_features = extract_features.transpose(1, 2)
+#         if attention_mask is not None:
+#             # compute reduced attention_mask corresponding to feature vectors
+#             attention_mask = self.wav2vec2._get_feature_vector_attention_mask(
+#                 extract_features.shape[1], attention_mask, add_adapter=False
+#             )
+#         if attention_mask is not None:
+#             # make sure padded tokens output 0
+#             hidden_states[~attention_mask] = 0.0
+#
+#             # extend attention_mask
+#             attention_mask = 1.0 - attention_mask[:, None, None, :].to(dtype=hidden_states.dtype)
+#             attention_mask = attention_mask * torch.finfo(hidden_states.dtype).min
+#             attention_mask = attention_mask.expand(
+#                 attention_mask.shape[0], 1, attention_mask.shape[-1], attention_mask.shape[-1]
+#             )
+#
+#         return super().forward(
+#             hidden_states=hidden_states,
+#             attention_mask=attention_mask,
+#             relative_position_embeddings=relative_position_embeddings,
+#             output_attentions=output_attentions,
+#         )
+#
 
 
 class Wav2Vec2EBranchformerForCTC(Wav2Vec2ForCTC):
@@ -412,10 +413,6 @@ class Wav2Vec2EBranchformerForCTC(Wav2Vec2ForCTC):
         super().__init__(config)
         self.wav2vec2 = Wav2Vec2EBranchformerModel(config)
         self.blank_projection = nn.Linear(config.hidden_size, 1)
-        self.additional_layer = Wav2Vec2EBranchformerEncoderLayerWrapper(config, self.wav2vec2)
-        layer_weights = torch.zeros(config.num_hidden_layers + 1)
-        layer_weights[-1] = 1.0
-        self.per_layer_weights = nn.Parameter(layer_weights)
         self.post_init()
 
     def freeze_encoder(self):
@@ -448,18 +445,7 @@ class Wav2Vec2EBranchformerForCTC(Wav2Vec2ForCTC):
             output_hidden_states=True,
             return_dict=True,
         )
-        #
-        # hidden_states = (
-        #     torch.stack(outputs.hidden_states)
-        #     * nn.functional.softmax(self.per_layer_weights, dim=-1)[:, None, None, None]
-        # ).sum(dim=0)
-        #
-        # hidden_states = self.additional_layer(
-        #     hidden_states=hidden_states,
-        #     attention_mask=attention_mask,
-        #     output_attentions=output_attentions,
-        #     input_values=input_values
-        # )[0]
+
         hidden_states = outputs.last_hidden_state
 
         hidden_states = self.dropout(hidden_states)

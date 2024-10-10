@@ -20,9 +20,9 @@ from transformers.utils import logging
 
 from models.encoders.e_branchformer import (
     Wav2Vec2EBranchformerConfig,
+    Wav2Vec2EBranchformerEncoderLayer,
     Wav2Vec2EBranchformerForCTC,
     Wav2Vec2EBranchformerModel,
-    Wav2Vec2EBranchformerEncoderLayerWrapper
 )
 
 logger = logging.get_logger(__name__)
@@ -32,7 +32,7 @@ class BestRQConfig(PretrainedConfig):
     # model_type = "bestrq-ebranchformer"
 
     def __init__(
-            self, best_rq_codebook_size=8192, best_rq_codebook_dim=16, best_rq_num_books=1, best_rq_in_dim=320, **kwargs
+        self, best_rq_codebook_size=8192, best_rq_codebook_dim=16, best_rq_num_books=1, best_rq_in_dim=320, **kwargs
     ):
         super().__init__(**kwargs)
         self.best_rq_codebook_size = best_rq_codebook_size
@@ -82,11 +82,11 @@ class RandomProjectionQuantizer(nn.Module):
 
 class BestRQMask:
     def _mask_hidden_states(
-            self,
-            hidden_states: torch.FloatTensor,
-            mask_time_indices: Optional[torch.FloatTensor] = None,
-            attention_mask: Optional[torch.FloatTensor] = None,
-            std: float = 0.1,
+        self,
+        hidden_states: torch.FloatTensor,
+        mask_time_indices: Optional[torch.FloatTensor] = None,
+        attention_mask: Optional[torch.FloatTensor] = None,
+        std: float = 0.1,
     ):
         """
         Masks extracted features along time axis and/or along feature axis according to
@@ -106,13 +106,13 @@ class BestRQModel(nn.Module):
         )
 
     def forward(
-            self,
-            input_values: Optional[torch.Tensor],
-            attention_mask: Optional[torch.Tensor] = None,
-            mask_time_indices: Optional[torch.BoolTensor] = None,
-            output_attentions: Optional[bool] = None,
-            output_hidden_states: Optional[bool] = None,
-            return_dict: Optional[bool] = None,
+        self,
+        input_values: Optional[torch.Tensor],
+        attention_mask: Optional[torch.Tensor] = None,
+        mask_time_indices: Optional[torch.BoolTensor] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
     ) -> Union[Tuple, Wav2Vec2ForPreTrainingOutput]:
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
@@ -155,11 +155,13 @@ class BestRQModel(nn.Module):
 class BestRQEBranchformerForPreTrainingConfig(Wav2Vec2EBranchformerConfig, BestRQConfig):
     model_type = "bestrq-ebranchformer"
 
-    def __init__(self,
-                 finetune_with_additional_layer=False,
-                 finetune_with_layer_mixing=False,
-                 freeze_norm_for_finetunning=False,
-                 **kwargs):
+    def __init__(
+        self,
+        finetune_with_additional_layer=False,
+        finetune_with_layer_mixing=False,
+        freeze_norm_for_finetunning=False,
+        **kwargs,
+    ):
         super().__init__(**kwargs)
         self.finetune_with_additional_layer = finetune_with_additional_layer
         self.finetune_with_layer_mixing = finetune_with_layer_mixing
@@ -195,7 +197,7 @@ class BestRQEBranchformerForCTC(Wav2Vec2EBranchformerForCTC):
         self.blank_projection = nn.Linear(config.hidden_size, 1)
 
         if config.finetune_with_additional_layer:
-            self.additional_layer = Wav2Vec2EBranchformerEncoderLayerWrapper(config, self.wav2vec2)
+            self.additional_layer = Wav2Vec2EBranchformerEncoderLayer(config)
 
         if config.finetune_with_layer_mixing:
             layer_weights = torch.zeros(config.num_hidden_layers + 1)
@@ -208,13 +210,13 @@ class BestRQEBranchformerForCTC(Wav2Vec2EBranchformerForCTC):
             param.requires_grad = False
 
     def forward(
-            self,
-            input_values: Optional[torch.Tensor],
-            attention_mask: Optional[torch.Tensor] = None,
-            output_attentions: Optional[bool] = None,
-            output_hidden_states: Optional[bool] = None,
-            return_dict: Optional[bool] = None,
-            labels: Optional[torch.Tensor] = None,
+        self,
+        input_values: Optional[torch.Tensor],
+        attention_mask: Optional[torch.Tensor] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
+        labels: Optional[torch.Tensor] = None,
     ) -> Union[Tuple, CausalLMOutput]:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size, target_length)`, *optional*):
@@ -236,18 +238,39 @@ class BestRQEBranchformerForCTC(Wav2Vec2EBranchformerForCTC):
 
         if self.config.finetune_with_layer_mixing:
             hidden_states = (
-                    torch.stack(outputs.hidden_states)
-                    * nn.functional.softmax(self.per_layer_weights, dim=-1)[:, None, None, None]
+                torch.stack(outputs.hidden_states)
+                * nn.functional.softmax(self.per_layer_weights, dim=-1)[:, None, None, None]
             ).sum(dim=0)
         else:
             hidden_states = outputs.last_hidden_state
 
         if self.config.finetune_with_additional_layer:
+            if self.wav2vec2.encoder.embed_positions is not None:
+                relative_position_embeddings = self.wav2vec2.encoder.embed_positions(hidden_states)
+            else:
+                relative_position_embeddings = None
+            extract_features = self.wav2vec2.feature_extractor(input_values)
+            extract_features = extract_features.transpose(1, 2)
+            if attention_mask is not None:
+                # compute reduced attention_mask corresponding to feature vectors
+                attention_mask = self.wav2vec2._get_feature_vector_attention_mask(
+                    extract_features.shape[1], attention_mask, add_adapter=False
+                )
+            if attention_mask is not None:
+                # make sure padded tokens output 0
+                hidden_states[~attention_mask] = 0.0
+
+                # extend attention_mask
+                attention_mask = 1.0 - attention_mask[:, None, None, :].to(dtype=hidden_states.dtype)
+                attention_mask = attention_mask * torch.finfo(hidden_states.dtype).min
+                attention_mask = attention_mask.expand(
+                    attention_mask.shape[0], 1, attention_mask.shape[-1], attention_mask.shape[-1]
+                )
             hidden_states = self.additional_layer(
                 hidden_states=hidden_states,
                 attention_mask=attention_mask,
                 output_attentions=output_attentions,
-                input_values=input_values
+                relative_position_embeddings=relative_position_embeddings,
             )[0]
 
         hidden_states = self.dropout(hidden_states)
