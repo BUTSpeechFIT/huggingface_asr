@@ -36,7 +36,6 @@ def train_tokenizer(
         trainer = trainers.BpeTrainer(
             vocab_size=vocab_size,
             special_tokens=[bos_token, eos_token, unk_token, pad_token, mask_token],
-            unk_token=unk_token,
         )
         tokenizer.decoder = decoders.ByteLevel()
     elif tokenizer_type == "unigram":
