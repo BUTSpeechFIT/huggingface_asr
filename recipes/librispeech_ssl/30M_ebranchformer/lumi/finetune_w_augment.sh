@@ -10,7 +10,7 @@
 #SBATCH --time=2-00:00:00
 
 
-EXPERIMENT="bestrq_30M_ebranchformer_pretrained"
+EXPERIMENT="bestrq_30M_ebranchformer_pretrained_with_augment"
 PROJECT="librispeech_ssl_v1_ft"
 
 SRC_DIR="/project/${EC_PROJECT}/ipoloka/huggingface_asr"
@@ -78,7 +78,7 @@ args=(
   --writer_batch_size="50"
 
   # Preprocessing related arguments
-  --data_preprocessing_config="${SRC_DIR}/configs/default_data_preprocessing2d_pure.json"
+  --data_preprocessing_config="${RECIPE_DIR}/data_preprocessing2d_augment.json"
 
   # Model related arguments
   --from_pretrained="/scratch/project_465000836/ipoloka/huggingface_asr/experiments/bestrq_30M_ebranchformer_6_128h_2d_bestrq_lessbooks/checkpoint-86584/"
