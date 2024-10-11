@@ -253,22 +253,23 @@ class BestRQEBranchformerForCTC(Wav2Vec2EBranchformerForCTC):
             extract_features = extract_features.transpose(1, 2)
             if attention_mask is not None:
                 # compute reduced attention_mask corresponding to feature vectors
-                attention_mask = self.wav2vec2._get_feature_vector_attention_mask(
+                attention_mask_local = self.wav2vec2._get_feature_vector_attention_mask(
                     extract_features.shape[1], attention_mask, add_adapter=False
                 )
-            if attention_mask is not None:
                 # make sure padded tokens output 0
-                hidden_states[~attention_mask] = 0.0
+                hidden_states[~attention_mask_local] = 0.0
 
                 # extend attention_mask
-                attention_mask = 1.0 - attention_mask[:, None, None, :].to(dtype=hidden_states.dtype)
-                attention_mask = attention_mask * torch.finfo(hidden_states.dtype).min
-                attention_mask = attention_mask.expand(
-                    attention_mask.shape[0], 1, attention_mask.shape[-1], attention_mask.shape[-1]
+                attention_mask_local = 1.0 - attention_mask_local[:, None, None, :].to(dtype=hidden_states.dtype)
+                attention_mask_local = attention_mask_local * torch.finfo(hidden_states.dtype).min
+                attention_mask_local = attention_mask_local.expand(
+                    attention_mask_local.shape[0], 1, attention_mask_local.shape[-1], attention_mask_local.shape[-1]
                 )
+            else:
+                attention_mask_local = None
             hidden_states = self.additional_layer(
                 hidden_states=hidden_states,
-                attention_mask=attention_mask,
+                attention_mask=attention_mask_local,
                 output_attentions=output_attentions,
                 relative_position_embeddings=relative_position_embeddings,
             )[0]
