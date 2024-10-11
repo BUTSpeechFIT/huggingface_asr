@@ -31,8 +31,8 @@ def train_tokenizer(
         raise NotImplementedError
 
     if tokenizer_type == "BPE":
-        tokenizer = Tokenizer(BPE())
-        tokenizer.pre_tokenizer = pre_tokenizers.ByteLevel(unk_token=unk_token)
+        tokenizer = Tokenizer(BPE(unk_token=unk_token))
+        tokenizer.pre_tokenizer = pre_tokenizers.ByteLevel()
         trainer = trainers.BpeTrainer(
             vocab_size=vocab_size,
             special_tokens=[bos_token, eos_token, unk_token, pad_token, mask_token],
