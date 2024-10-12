@@ -10,7 +10,7 @@
 #SBATCH --time=2-00:00:00
 
 
-EXPERIMENT="bestrq_30M_ebranchformer_pretrained_frozen_libri100"
+EXPERIMENT="bestrq_30M_ebranchformer_pretrained_frozen_libri100_v2"
 PROJECT="librispeech_ssl_v1_ft"
 
 SRC_DIR="/project/${EC_PROJECT}/ipoloka/huggingface_asr"
@@ -50,10 +50,11 @@ args=(
   --do_train
   --do_evaluate
   --load_best_model_at_end
+  --metric_for_best_model="eval_wer"
 
   # Optimizer related arguments
   --optim="adamw_torch"
-  --learning_rate="2e-3"
+  --learning_rate="2e-4"
   --warmup_steps="500"
   --early_stopping_patience="5"
   --weight_decay="1e-6"
