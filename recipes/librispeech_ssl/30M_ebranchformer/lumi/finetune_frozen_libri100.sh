@@ -77,7 +77,7 @@ args=(
   --pad_to_multiples_of="100"
   --datasets_creation_config="${RECIPE_DIR}/librispeech_100h.json"
   --writer_batch_size="50"
-  --test_splits librispeech_test.clean librispeech_test.other librispeech_validation.clean librispeech_validation.other
+  --test_splits librispeech_test.clean librispeech_test.other
 
 
   # Preprocessing related arguments

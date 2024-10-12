@@ -12,9 +12,7 @@
     ],
     "test_splits": [
       "test.clean",
-      "test.other",
-      "validation.clean",
-      "validation.other"
+      "test.other"
     ],
     "text_column_name": "text",
     "audio_column_name": "audio",
