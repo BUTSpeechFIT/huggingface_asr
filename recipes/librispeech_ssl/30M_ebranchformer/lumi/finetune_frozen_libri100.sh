@@ -85,7 +85,7 @@ args=(
   --data_preprocessing_config="${SRC_DIR}/configs/default_data_preprocessing2d_pure.json"
 
   # Model related arguments
-  --from_pretrained="/scratch/project_465000836/ipoloka/huggingface_asr/experiments/bestrq_30M_ebranchformer_pretrained_with_augment/checkpoint-52608/"
+  --from_pretrained="/scratch/project_465000836/ipoloka/huggingface_asr/experiments/bestrq_30M_ebranchformer_6_128h_2d_bestrq_lessbooks/checkpoint-164400"
   --feature_extractor_name="Lakoc/fe_mel_80_global_stats_librispeech"
   --tokenizer_name="Lakoc/libri_1000"
   --freeze_encoder
