@@ -85,13 +85,20 @@ class AudioFolderVAD(folder_based_builder.FolderBasedBuilder):
             # pylint: disable=no-member
             waveform, sample_rate = torchaudio.load(example["audio"])
 
+            # Thid solves issue with ffmpeg "Invalid data found when processing input"
+            try:
+                waveform, sample_rate = torchaudio.load(example["audio"])
+            except:
+                logger.warn(f'Error loading audio: {example_id}, {example}, {example["audio"]}. Skipping it!')
+                continue
+
             if sample_rate != self.sampling_rate:
                 waveform = resample(waveform, orig_freq = sample_rate, new_freq = self.sampling_rate)
-                logger.info(f'{example["audio"]} sampling rate is {sample_rate} -> resampling to {self.sampling_rate}')
+                logger.warn(f'{example["audio"]} sampling rate is {sample_rate} -> resampling to {self.sampling_rate}')
 
             if waveform.shape[0] > 1:
                 waveform = torch.mean(waveform, dim=0, keepdim=True)
-                logger.info(f'{example["audio"]} has {waveform.shape[0]} channels -> down mixing to mono')
+                logger.warn(f'{example["audio"]} has {waveform.shape[0]} channels -> down mixing to mono')
 
             annotation = self.vad_pipeline({"waveform": waveform, "sample_rate": self.sampling_rate})
 
