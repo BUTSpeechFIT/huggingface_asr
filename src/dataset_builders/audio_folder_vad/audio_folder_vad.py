@@ -4,6 +4,7 @@ from typing import TYPE_CHECKING, List, Optional, Union
 import datasets
 import torch
 import torchaudio
+from torchaudio.functional import resample
 from datasets.packaged_modules.folder_based_builder import folder_based_builder
 from datasets.splits import SplitGenerator
 from datasets.tasks import AudioClassification
@@ -84,10 +85,18 @@ class AudioFolderVAD(folder_based_builder.FolderBasedBuilder):
             # pylint: disable=no-member
             waveform, sample_rate = torchaudio.load(example["audio"])
 
-            annotation = self.vad_pipeline({"waveform": waveform, "sample_rate": sample_rate})
+            if sample_rate != self.sampling_rate:
+                waveform = resample(waveform, orig_freq = sample_rate, new_freq = self.sampling_rate)
+                logger.info(f'{example["audio"]} sampling rate is {sample_rate} -> resampling to {self.sampling_rate}')
+
+            if waveform.shape[0] > 1:
+                waveform = torch.mean(waveform, dim=0, keepdim=True)
+                logger.info(f'{example["audio"]} has {waveform.shape[0]} channels -> down mixing to mono')
+
+            annotation = self.vad_pipeline({"waveform": waveform, "sample_rate": self.sampling_rate})
 
             for segment in annotation.itersegments():
-                chunk = waveform[:, int(segment.start * sample_rate) : int(segment.end * sample_rate)].squeeze().numpy()
+                chunk = waveform[:, int(segment.start * self.sampling_rate) : int(segment.end * self.sampling_rate)].squeeze().numpy()
                 chunk_shape = chunk.shape
 
                 if len(chunk_shape) > 1 and chunk_shape[0] > 1:
@@ -95,7 +104,7 @@ class AudioFolderVAD(folder_based_builder.FolderBasedBuilder):
 
                 yield f"{example_id}_{segment.start:.2f}_{segment.end:.2f}", {
                     **example,
-                    "audio": audio_encoder.encode_example({"array": chunk, "sampling_rate": sample_rate}),
+                    "audio": audio_encoder.encode_example({"array": chunk, "sampling_rate": self.sampling_rate}),
                     "input_len": len(chunk) / self.sampling_rate,
                 }
 
