@@ -1,5 +1,6 @@
 """Main training script for training of attention based encoder decoder ASR models."""
 import sys
+import random
 
 from transformers import AutoFeatureExtractor, HfArgumentParser
 from transformers.utils import logging
@@ -20,7 +21,11 @@ from utilities.training_utils import SSLTrainer
 
 def process_batch(batch, feature_extractor):
     speech = [audio_object_stripper(sample) for sample in batch]
-    outputs = feature_extractor(speech, return_attention_mask=True, padding=True, sampling_rate=16000,
+
+    # Filter out really small audios which may construct batch from which statistics cannot be estimated.
+    filtered_speech = [sample for sample in speech if sample.shape[0] > 10]
+
+    outputs = feature_extractor(filtered_speech, return_attention_mask=True, padding=True, sampling_rate=16000,
                                 return_tensors="pt")
 
     x_active = torch.vstack(
@@ -60,6 +65,12 @@ if __name__ == "__main__":
         feature_extractor.do_ceptral_normalize = False
 
     train_set = dataset[data_args.train_split]
+    random.seed(42)
+    # Randomly select indices
+    if data_args.data_mvn_samples_size > -1:
+        indices = random.sample(range(len(train_set)), k=data_args.data_mvn_samples_size)
+        train_set = train_set.select(indices)
+    
     train_set = train_set.map(
         process_batch,
         batched=True,

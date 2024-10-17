@@ -236,6 +236,9 @@ class DataTrainingArguments:
     merge_validation_splits: Optional[bool] = field(
         default=True, metadata={"help": "Whether to merge validation splits."}
     )
+    data_mvn_samples_size: Optional[int] = field(
+        default=-1, metadata={"help": "Amount of data samples used for mean and variance normalization statistices. -1 means all. Other value means random sampling."}
+    )
 
 
 @dataclass
