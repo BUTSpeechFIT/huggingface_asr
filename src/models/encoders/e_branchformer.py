@@ -385,21 +385,20 @@ class Wav2Vec2EBranchformerEncoder(Wav2Vec2ConformerEncoder):
 
         if is_streaming_inference:
             # streaming_decode mask -> unlimited access within the chunk's length (no causal masking)
-            time1 = attention_mask.shape[-1]
+            batch_size = attention_lens.shape[0]
+            time1 = attention_lens.shape[-1]
             time2 = time1 + left_context_len
 
             # extend attention_lens for `left_context_len`
             left_attention_lens = torch.ones(
-                attention_lens.shape[0], left_context_len, dtype=attention_mask.dtype, device=attention_mask.device,
+                batch_size, left_context_len, dtype=attention_lens.dtype, device=attention_lens.device,
             )
             attention_lens = torch.cat([left_attention_lens, attention_lens], dim=1)
 
             # expand the attention_mask to "attention-prob" shape
             attention_mask = 1.0 - attention_lens[:, None, None, :].to(dtype=hidden_states.dtype)
             attention_mask = attention_mask * torch.finfo(hidden_states.dtype).min
-            attention_mask = attention_mask.expand(
-                attention_mask.shape[0], 1, attention_mask.shape[-1], attention_mask.shape[-1]
-            )
+            attention_mask = attention_mask.expand(batch_size, 1, time1, time2)
 
             # Note: allowing attention look-ahead within the current chunk (no causal mask used)
             return attention_mask
@@ -603,7 +602,7 @@ class Wav2Vec2EBranchformerEncoder(Wav2Vec2ConformerEncoder):
 
         assert len(streaming_states) == 2*len(self.layers), \
                 (len(streaming_states), 2*len(self.layers))
-        assert attention_out is not None
+        assert attention_lens is not None
 
         new_streaming_states = []
         attention_out = []
@@ -615,6 +614,7 @@ class Wav2Vec2EBranchformerEncoder(Wav2Vec2ConformerEncoder):
         attention_mask = self.build_attention_mask(
             hidden_states=hidden_states,
             attention_lens=attention_lens,
+            left_context_len=left_context_len,
             is_streaming_inference=True,
         )
 
@@ -639,14 +639,13 @@ class Wav2Vec2EBranchformerEncoder(Wav2Vec2ConformerEncoder):
             cached_key, cached_value = streaming_states[2*i : 2*(i+1)]
 
             # streaming_forward()
-            layer_outputs = layer.streaming_forward(
+            layer_outputs = layer.forward(
                 hidden_states=hidden_states,
+                attention_mask=attention_mask,
+                relative_position_embeddings=relative_position_embeddings,
                 cached_key=cached_key,
                 cached_value=cached_value,
                 left_context_len=left_context_len,
-                key_padding_mask=None,
-                attention_mask=attention_mask,
-                relative_position_embeddings=relative_position_embeddings,
                 output_attentions=output_attentions,
             )
             hidden_states, attn_weights, (cached_key, cached_value) = layer_outputs
@@ -847,3 +846,24 @@ class Wav2Vec2EBranchformerForCTC(Wav2Vec2ForCTC):
         if hasattr(self.wav2vec2, "masked_spec_embed"):
             del self.wav2vec2.masked_spec_embed
         self.post_init()
+
+
+alex_proposed_model_interface = """
+
+def forward(
+    self,
+    input_ids: torch.LongTensor = None,  # LM rescoring ?
+    attention_mask: Optional[torch.Tensor] = None,
+    position_ids; Optional[torch.LongTensor] = None,  # ???
+    past_key_values: Optional[Union[Cache, List[torch.FloatTensor]]] = None,  # context
+    inputs_embeds: Optional[torch.FloatTensor] = None,  # hidden_values
+    use_cache: Optional[bool] = None,  # what is the cache, past_key_values or sth. more ?
+    output_attentions: Optional[bool] = None,
+    output_hidden_states: Optional[bool] = None,
+    return_dict: Optional[bool] = None,
+    cache_position: Optional[torch.LongTensor] = None,
+) -> Union[Tuple, BaseModelOutputWithPast]:
+    ...
+
+"""
+
