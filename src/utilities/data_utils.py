@@ -217,11 +217,15 @@ def extract_lens_batched(audios: List[List[float]], len_column: str, sampling_ra
 
 def resample_audio(audio: np.ndarray, sampling_rate: int, target_sampling_rate: int, key: str = "array") -> np.ndarray:
     """Resamples audio to target sampling rate."""
-    return librosa.resample(
-        audio[key] if isinstance(audio, dict) and key in audio else audio,
-        orig_sr=sampling_rate,
-        target_sr=target_sampling_rate,
-    )
+    if isinstance(audio, dict) and key in audio:
+        audio[key] = librosa.resample(audio[key], orig_sr=sampling_rate, target_sr=target_sampling_rate)
+    else:
+        audio = librosa.resample(
+            audio,
+            orig_sr=sampling_rate,
+            target_sr=target_sampling_rate,
+        )
+    return audio
 
 
 def prepare_dataset(
