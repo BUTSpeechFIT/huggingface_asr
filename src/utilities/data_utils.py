@@ -485,7 +485,7 @@ def load_multiple_datasets(
                 length_column_name=dataset_config.get("length_column_name"),
                 text_column_name=dataset_config.get("text_column_name"),
                 audio_column_name=dataset_config.get("audio_column_name"),
-                preprocessing_num_workers=num_proc,
+                preprocessing_num_workers=dataset_config.get("num_proc", num_proc),
                 writer_batch_size=writer_batch_size,
                 train_split=new_train_split_name,
                 text_transformations=dataset_config.get("text_transformations"),
