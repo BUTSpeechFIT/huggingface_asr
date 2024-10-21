@@ -1,21 +1,21 @@
 #!/usr/bin/bash
 #SBATCH --nodes=1
-#SBATCH --gpus-per-node=2
-#SBATCH --tasks-per-node=2
+#SBATCH --gpus-per-node=4
+#SBATCH --tasks-per-node=4
 #SBATCH --cpus-per-task=7
-#SBATCH --output="outputs/librispeech_ssl/output_%x_%j.out"
-#SBATCH --error="outputs/librispeech_ssl/output_%x_%j.err"
+#SBATCH --output="outputs/librispeech/ssl/output_%x_%j.out"
+#SBATCH --error="outputs/librispeech/ssl/output_%x_%j.err"
 #SBATCH --partition=small-g
 #SBATCH --mem=200G
 #SBATCH --time=2-00:00:00
 
 
-EXPERIMENT="bestrq_90M_ebranchformer_pretrained_frozen_libri100"
+EXPERIMENT="bestrq_90M_ebranchformer_pretrained"
 PROJECT="librispeech_ssl_v1_ft"
 
 SRC_DIR="/project/${EC_PROJECT}/ipoloka/huggingface_asr"
 WORK_DIR="/scratch/${EC_PROJECT}/ipoloka/huggingface_asr"
-RECIPE_DIR="${SRC_DIR}/recipes/librispeech_ssl"
+RECIPE_DIR="${SRC_DIR}/recipes/librispeech"
 EXPERIMENT_PATH="${WORK_DIR}/experiments/${EXPERIMENT}"
 
 export HF_HOME="/scratch/project/open-28-57/lakoc/huggingface_cache"
@@ -76,7 +76,7 @@ args=(
   --remove_unused_columns="False"
   --preprocessing_num_workers="16"
   --pad_to_multiples_of="100"
-  --datasets_creation_config="${RECIPE_DIR}/librispeech_100h.json"
+  --datasets_creation_config="${RECIPE_DIR}/librispeech.json"
   --writer_batch_size="50"
   --test_splits librispeech_test.clean librispeech_test.other
 
@@ -88,8 +88,8 @@ args=(
   --from_pretrained="/scratch/project_465000836/ipoloka/huggingface_asr/experiments/bestrq_90M_ebranchformer_v2/checkpoint-89182/"
   --feature_extractor_name="Lakoc/fe_mel_80_global_stats_librispeech"
   --tokenizer_name="Lakoc/libri_1000"
-  --freeze_encoder
-  --config_overrides="finetune_with_additional_layer=True,finetune_with_layer_mixing=True"
+#  --freeze_encoder
+#  --config_overrides="finetune_with_additional_layer=True,finetune_with_layer_mixing=True"
   )
 
 

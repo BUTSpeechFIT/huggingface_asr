@@ -3,19 +3,19 @@
 #SBATCH --gpus-per-node=4
 #SBATCH --tasks-per-node=4
 #SBATCH --cpus-per-task=7
-#SBATCH --output="outputs/librispeech_ssl/output_%x_%j.out"
-#SBATCH --error="outputs/librispeech_ssl/output_%x_%j.err"
+#SBATCH --output="outputs/librispeech/ssl/output_%x_%j.out"
+#SBATCH --error="outputs/librispeech/ssl/output_%x_%j.err"
 #SBATCH --partition=small-g
 #SBATCH --mem=200G
 #SBATCH --time=2-00:00:00
 
 
-EXPERIMENT="bestrq_30M_ebranchformer_pretrained"
+EXPERIMENT="bestrq_30M_ebranchformer_pretrained_same_wu"
 PROJECT="librispeech_ssl_v1_ft"
 
 SRC_DIR="/project/${EC_PROJECT}/ipoloka/huggingface_asr"
 WORK_DIR="/scratch/${EC_PROJECT}/ipoloka/huggingface_asr"
-RECIPE_DIR="${SRC_DIR}/recipes/librispeech_ssl"
+RECIPE_DIR="${SRC_DIR}/recipes/librispeech"
 EXPERIMENT_PATH="${WORK_DIR}/experiments/${EXPERIMENT}"
 
 export HF_HOME="/scratch/project/open-28-57/lakoc/huggingface_cache"
@@ -53,7 +53,7 @@ args=(
   # Optimizer related arguments
   --optim="adamw_torch"
   --learning_rate="2e-3"
-  --warmup_steps="500"
+  --warmup_steps="5000"
   --early_stopping_patience="20"
   --weight_decay="1e-6"
   --max_grad_norm="1.0"
