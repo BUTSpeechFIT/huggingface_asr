@@ -360,20 +360,21 @@ def prepare_dataset(
                     desc=f"Applying {transformation_name} transformation",
                 )
 
-    logger.info("Casting audio column to Audio, and length column to float32")
+    logger.info("Casting length column to float64")
     feature_types = dataset[list(dataset.keys())[0]].features
-    if audio_column_name is not None:
-        feature_types[audio_column_name] = Audio(sampling_rate=sampling_rate)
     if length_column_name is not None:
-        feature_types[length_column_name] = Value(dtype="float32")
+        feature_types[length_column_name] = Value(dtype="float64", id=None)
     for split in dataset:
-        dataset[split] = distributed_process(
-            dataset[split],
-            process_by="cast",
-            writer_batch_size=writer_batch_size,
-            num_proc=preprocessing_num_workers,
-            features=feature_types,
-        )
+        if dataset[split].features[length_column_name].dtype != "float64":
+            dataset[split] = distributed_process(
+                dataset[split],
+                process_by="cast",
+                writer_batch_size=writer_batch_size,
+                num_proc=preprocessing_num_workers
+                if len(dataset[split]) > preprocessing_num_workers * writer_batch_size
+                else 1,
+                features=feature_types,
+            )
 
     logger.info(str(dataset))
     return dataset
