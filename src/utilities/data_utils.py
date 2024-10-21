@@ -261,7 +261,7 @@ def prepare_dataset(
             function=resample_audio,
             num_proc=preprocessing_num_workers,
             input_columns=[audio_column_name],
-            batched=True,
+            batched=False,
             batch_size=writer_batch_size // 4,
             writer_batch_size=writer_batch_size,
             fn_kwargs={"sampling_rate": orig_sampling_rate, "target_sampling_rate": sampling_rate},
