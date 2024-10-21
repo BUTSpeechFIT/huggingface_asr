@@ -2,14 +2,7 @@ import sys
 
 from datasets import load_dataset
 from huggingface_hub import repo_exists
-from tokenizers import (
-    Tokenizer,
-    decoders,
-    normalizers,
-    pre_tokenizers,
-    processors,
-    trainers,
-)
+from tokenizers import Tokenizer, decoders, pre_tokenizers, processors, trainers
 from tokenizers.models import BPE, Unigram
 from transformers import HfArgumentParser, PreTrainedTokenizerFast
 from transformers.utils import logging
@@ -38,12 +31,11 @@ def train_tokenizer(
         raise NotImplementedError
 
     if tokenizer_type == "BPE":
-        tokenizer = Tokenizer(BPE())
-        tokenizer.pre_tokenizer = pre_tokenizers.ByteLevel(add_prefix_space=False)
+        tokenizer = Tokenizer(BPE(unk_token=unk_token))
+        tokenizer.pre_tokenizer = pre_tokenizers.ByteLevel()
         trainer = trainers.BpeTrainer(
             vocab_size=vocab_size,
             special_tokens=[bos_token, eos_token, unk_token, pad_token, mask_token],
-            unk_token=unk_token,
         )
         tokenizer.decoder = decoders.ByteLevel()
     elif tokenizer_type == "unigram":
@@ -66,9 +58,6 @@ def train_tokenizer(
         # trainer = WordLevelTrainer(special_tokens=spl_tokens)
         raise NotImplementedError
 
-    tokenizer.normalizer = normalizers.Sequence(
-        [normalizers.Replace("``", '"'), normalizers.Replace("''", '"'), normalizers.Lowercase()]
-    )
     tokenizer.train_from_iterator(text_iterator, trainer=trainer)
 
     tokenizer.post_processor = processors.TemplateProcessing(
@@ -87,6 +76,7 @@ def train_tokenizer(
         pad_token=pad_token,
         unk_token=unk_token,
         mask_token=mask_token,
+        # sep_token="▁" if tokenizer_type == "unigram" else " ",
     )
 
     wrapped_tokenizer.push_to_hub(tokenizer_name)  # pylint: disable=not-callable
@@ -107,32 +97,11 @@ if __name__ == "__main__":
         sys.exit(0)
 
     # 1. Collect, preprocess dataset and extract evaluation dataset
-    dataset = get_dataset(
-        datasets_creation_config_path=data_args.datasets_creation_config,
-        dataset_name=data_args.dataset_name,
-        dataset_config=data_args.dataset_config,
-        preprocessing_num_workers=data_args.preprocessing_num_workers,
-        writer_batch_size=data_args.writer_batch_size,
-        sampling_rate=data_args.sampling_rate,
-        max_input_len=data_args.max_duration_in_seconds,
-        min_input_len=data_args.min_duration_in_seconds,
+    dataset, _ = get_dataset(
+        data_args=data_args,
         len_column=training_args.length_column_name,
-        text_column=data_args.text_column_name,
-        audio_column=data_args.audio_column_name,
-        train_split=data_args.train_split,
-        validation_split=data_args.validation_split,
-        unk_token=data_args.unk_token,
-        fix_apostrophes=data_args.fix_apostrophes,
-        remove_train_unks=data_args.remove_train_unks,
-        do_lower_case=data_args.do_lower_case,
-        remove_punctuation=data_args.remove_punctuation,
     )
 
-    training_eval_dataset = (
-        dataset[data_args.validation_split].select(range(data_args.validation_slice))
-        if data_args.validation_slice
-        else dataset[data_args.validation_split]
-    )
     logger.info(f"Dataset processed successfully.{dataset}")
 
     if training_args.preprocess_dataset_only:
@@ -155,7 +124,7 @@ if __name__ == "__main__":
         text,
         tokenizer_args.bos_token,
         tokenizer_args.eos_token,
-        data_args.unk_token,
+        tokenizer_args.unk_token,
         tokenizer_args.pad_token,
         tokenizer_args.mask_token,
         tokenizer_args.vocab_size,

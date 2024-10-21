@@ -125,6 +125,15 @@ class GPT2LMMultiHeadModel(GPT2LMHeadModel):
 
         lm_logits = self.lm_head(hidden_states[-1])
         loss = None
+        if labels is None and self.config.average_logits:
+            lm_logits = lm_logits * self.head_weights[-1]
+            for index, lm_head, lm_weight in zip(
+                [*self.head_locations],
+                [*self.additional_lm_heads],
+                self.head_weights[:-1],
+            ):
+                lm_logits += lm_weight * lm_head(hidden_states[index])
+
         if labels is not None:
             loss = torch.tensor(0.0, device=hidden_states[-1].device)
             lm_logits = []

@@ -7,7 +7,7 @@ from transformers.utils import logging
 from utilities.callbacks import init_callbacks
 from utilities.collators import SpeechCollatorWithPadding
 from utilities.data_utils import get_dataset
-from utilities.eval_utils import compute_metrics_ctc
+from utilities.eval_utils import compute_metrics_ctc, ctc_beam_decode, ctc_greedy_decode
 from utilities.general_utils import do_evaluate
 from utilities.model_utils import instantiate_ctc_model
 from utilities.training_arguments import (
@@ -17,6 +17,8 @@ from utilities.training_arguments import (
     ModelArguments,
 )
 
+from utilities.bind import bind_all
+
 if __name__ == "__main__":
     logging.set_verbosity_debug()
     logger = logging.get_logger("transformers")
@@ -24,34 +26,14 @@ if __name__ == "__main__":
 
     model_args, data_args, training_args, gen_args = parser.parse_args_into_dataclasses()
 
-    # 1. Collect, preprocess dataset and extract evaluation dataset
-    dataset = get_dataset(
-        datasets_creation_config_path=data_args.datasets_creation_config,
-        dataset_name=data_args.dataset_name,
-        dataset_config=data_args.dataset_config,
-        preprocessing_num_workers=data_args.preprocessing_num_workers,
-        writer_batch_size=data_args.writer_batch_size,
-        sampling_rate=data_args.sampling_rate,
-        max_input_len=data_args.max_duration_in_seconds,
-        min_input_len=data_args.min_duration_in_seconds,
-        len_column=training_args.length_column_name,
-        text_column=data_args.text_column_name,
-        audio_column=data_args.audio_column_name,
-        train_split=data_args.train_split,
-        validation_split=data_args.validation_split,
-        unk_token=data_args.unk_token,
-        fix_apostrophes=data_args.fix_apostrophes,
-        remove_train_unks=data_args.remove_train_unks,
-        do_lower_case=data_args.do_lower_case,
-        remove_punctuation=data_args.remove_punctuation,
-    )
+    # 0. Bind auto classes
+    bind_all()
 
-    if data_args.validation_slice:
-        training_eval_dataset = dataset[data_args.validation_split].shuffle().select(range(data_args.validation_slice))
-        # Ensure that transformations are also attached to the sliced validation dataset
-        dataset[data_args.validation_split + str(data_args.validation_slice)] = training_eval_dataset
-    else:
-        training_eval_dataset = dataset[data_args.validation_split]
+    # 1. Collect, preprocess dataset and extract evaluation dataset
+    dataset, training_eval_dataset = get_dataset(
+        data_args=data_args,
+        len_column=training_args.length_column_name,
+    )
 
     logger.info(f"Dataset processed successfully.{dataset}")
 
@@ -66,6 +48,9 @@ if __name__ == "__main__":
     # 3. Instantiate model
     model = instantiate_ctc_model(model_args, tokenizer, feature_extractor)
 
+    if training_args.freeze_encoder:
+        model.freeze_encoder()
+
     # 4. Initialize callbacks
     callbacks = init_callbacks(data_args, training_args, dataset, feature_extractor)
 
@@ -78,6 +63,8 @@ if __name__ == "__main__":
         audio_path=data_args.audio_column_name,
         text_path=data_args.text_column_name,
         model_input_name=model.main_input_name,
+        mask_unks=training_args.mask_unks,
+        pad_to_multiple_of=data_args.pad_to_multiples_of,
     )
 
     trainer = Trainer(
@@ -87,6 +74,15 @@ if __name__ == "__main__":
         train_dataset=dataset[data_args.train_split],
         eval_dataset=training_eval_dataset,
         data_collator=data_collator,
+        preprocess_logits_for_metrics=(
+            lambda predictions, labels: ctc_beam_decode(
+                predictions, labels, tokenizer, training_args.generation_num_beams
+            )
+        )
+        if training_args.generation_num_beams is not None and training_args.generation_num_beams > 1
+        else lambda predictions, labels: ctc_greedy_decode(
+            predictions, len(tokenizer.get_vocab()), model.config.pad_token_id
+        ),
         compute_metrics=lambda pred: compute_metrics_ctc(tokenizer, pred, gen_args.wandb_predictions_to_save),
     )
 
@@ -101,8 +97,7 @@ if __name__ == "__main__":
             dataset=dataset,
             model=model,
             tokenizer=tokenizer,
-            gen_args=None,
+            gen_args=gen_args,
             data_args=data_args,
             training_args=training_args,
-            eos_token_id=tokenizer.eos_token_id,
         )

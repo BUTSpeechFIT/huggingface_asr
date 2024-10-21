@@ -41,7 +41,7 @@
         "return_tensors": "pt"
       },
       "return_behaviour": [
-        "input_features[0]"
+        "input_values[0]"
       ]
     }
   ]

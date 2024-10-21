@@ -1,11 +1,13 @@
 import importlib
 import json
+from ctypes import c_bool
 from dataclasses import field, make_dataclass
 from functools import partial
 from typing import Dict, List, Tuple, Union
 
 import numpy as np
 import torch
+import torch.multiprocessing as mp
 from datasets import DatasetDict
 from transformers import (
     EarlyStoppingCallback,
@@ -27,19 +29,39 @@ from utilities.training_arguments import DataTrainingArguments, GeneralTrainingA
 logger = logging.get_logger("transformers")
 
 
+class GumbelTemperatureCallback(TrainerCallback):
+    def __init__(self, gumbel_temperature_decay: float, min_gumbel_temperature: float, max_gumbel_temperature: float):
+        super().__init__()
+        self.gumbel_temperature_decay = gumbel_temperature_decay
+        self.min_gumbel_temperature = min_gumbel_temperature
+        self.max_gumbel_temperature = max_gumbel_temperature
+        self.current_gumbel_temperature = max_gumbel_temperature
+
+    def on_train_begin(self, args: TrainingArguments, state: TrainerState, control: TrainerControl, **kwargs):
+        self.current_gumbel_temperature = self.max_gumbel_temperature
+        kwargs["model"].set_gumbel_temperature(self.current_gumbel_temperature)
+
+    def on_step_end(self, args: TrainingArguments, state: TrainerState, control: TrainerControl, **kwargs):
+        self.current_gumbel_temperature = max(
+            self.max_gumbel_temperature * self.gumbel_temperature_decay**state.global_step,
+            self.min_gumbel_temperature,
+        )
+        kwargs["model"].set_gumbel_temperature(self.current_gumbel_temperature)
+
+
 class DelayedStartWrapper:
     def __init__(self, callback: FunctionReturnWrapper, delay_steps: int):
         self.callback = callback
         self.start_at = delay_steps
-        self.active = False
+        self.active = mp.Value(c_bool, False)
 
     def new_step(self, step: int):
-        if step >= self.start_at and not self.active:
+        if step >= self.start_at and not self.active.value:
             logger.info(f"Activated preprocessing function: {str(self.callback.func)}")
-            self.active = True
+            self.active.value = True
 
     def __call__(self, *args, **kwargs):
-        if self.active:
+        if self.active.value:
             return self.callback(*args, **kwargs)
         return args[0]
 
@@ -83,13 +105,22 @@ class DataPreprocessingManagerCallback(TrainerCallback):
             audio = transform(audio, **fn_call_params)
         return audio
 
-    def default_transform(self, batch, transform_key):
-        return {
-            self.audio_column_name: [
-                self.transformer(audio_object_stripper(audio), self.transforms[transform_key])
-                for audio in batch[self.audio_column_name]
-            ]
-        }
+    def default_transform(self, batch, transform_key, min_audio_length=8000):
+        out_dict = {self.audio_column_name: []}
+        for audio in batch[self.audio_column_name]:
+            audio_arr = audio_object_stripper(audio)
+            if not isinstance(audio_arr, np.ndarray):
+                audio_arr = audio_arr.numpy()
+            if audio_arr.shape[0] < min_audio_length:
+                logger.warning(f"Audio array with shape {audio_arr.shape} detected. Padding it with zeros.")
+                audio_arr = np.pad(audio_arr, (0, min_audio_length - audio_arr.shape[0]))
+            out_dict[self.audio_column_name].append(self.transformer(audio_arr, self.transforms[transform_key]))
+        return out_dict
+
+    def propagate_state_to_transforms(self, state: TrainerState):
+        for split_transforms in self.transforms.values():
+            for transform in split_transforms:
+                transform[0].new_step(state.global_step)
 
     def on_init_end(self, args: TrainingArguments, state: TrainerState, control: TrainerControl, **kwargs):
         for split in self.dataset.keys():
@@ -99,14 +130,14 @@ class DataPreprocessingManagerCallback(TrainerCallback):
                 columns=[self.audio_column_name],
                 output_all_columns=True,
             )
-        for split_transforms in self.transforms.values():
-            for transform in split_transforms:
-                transform[0].new_step(state.global_step)
+        self.propagate_state_to_transforms(state)
+
+    def on_train_begin(self, args: TrainingArguments, state: TrainerState, control: TrainerControl, **kwargs):
+        """This ensures that the preprocessing functions are aware of the correct step even when restarting."""
+        self.propagate_state_to_transforms(state)
 
     def on_step_begin(self, args: TrainingArguments, state: TrainerState, control: TrainerControl, **kwargs):
-        for split_transforms in self.transforms.values():
-            for transform in split_transforms:
-                transform[0].new_step(state.global_step)
+        self.propagate_state_to_transforms(state)
 
 
 class AdditionalLossPrinterCallback(TrainerCallback):
@@ -136,35 +167,32 @@ def init_callbacks(
     callbacks = []
     if data_args.data_preprocessing_config:
         with open(data_args.data_preprocessing_config) as config_handle:
-            callbacks.append(
-                DataPreprocessingManagerCallback(
-                    preprocessing_config=json.load(config_handle),
-                    dataset=dataset,
-                    audio_column_name=data_args.audio_column_name,
-                    feature_extractor=feature_extractor,
-                )
-            )
+            config = json.load(config_handle)
     else:
-        default_preprocessing = [
-            {
-                "name": "feature_extractor",
-                "steps_before_activation": 0,
-                "fn_call_params": {
-                    "return_attention_mask": False,
-                    "sampling_rate": 16000,
-                    "return_tensors": "pt",
-                },
-                "return_behaviour": ["input_features[0]"],
-            }
-        ]
-        callbacks.append(
-            DataPreprocessingManagerCallback(
-                preprocessing_config={"default_preprocessing": default_preprocessing},
-                dataset=dataset,
-                audio_column_name=data_args.audio_column_name,
-                feature_extractor=feature_extractor,
-            )
+        config = {
+            "default_preprocessing": [
+                {
+                    "name": "feature_extractor",
+                    "steps_before_activation": 0,
+                    "fn_call_params": {
+                        "return_attention_mask": False,
+                        "sampling_rate": 16000,
+                        "return_tensors": "pt",
+                    },
+                    "return_behaviour": ["input_features[0]"],
+                }
+            ]
+        }
+
+    callbacks.append(
+        DataPreprocessingManagerCallback(
+            preprocessing_config=config,
+            dataset=dataset,
+            audio_column_name=data_args.audio_column_name,
+            feature_extractor=feature_extractor,
         )
+    )
+
     if training_args.early_stopping_patience > -1:
         callbacks.append(EarlyStoppingCallback(early_stopping_patience=training_args.early_stopping_patience))
     if training_args.track_ctc_loss:
