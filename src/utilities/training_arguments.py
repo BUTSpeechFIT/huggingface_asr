@@ -237,7 +237,6 @@ class DataTrainingArguments:
         default=True, metadata={"help": "Whether to merge validation splits."}
     )
     do_resample: Optional[bool] = field(default=False, metadata={"help": "Whether to resample audio files."})
-    orig_sampling_rate: Optional[int] = field(default=16_000, metadata={"help": "Target sampling rate for resampling."})
 
 
 @dataclass
