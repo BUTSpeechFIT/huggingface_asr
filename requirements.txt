@@ -9,7 +9,7 @@ numpy==1.24.4
 pandas==2.0.2
 safetensors==0.4.5
 tokenizers==0.20.1
-torch==2.1.0
+torch==2.5.0
 torch_xla==2.5.0
 torchaudio==2.1.0
 tqdm==4.66.5
