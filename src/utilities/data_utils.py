@@ -237,7 +237,7 @@ def prepare_dataset(
     split_long_segments_to_chunks: bool,
     sampling_rate: int,
     do_resample: bool,
-    target_sampling_rate: int,
+    orig_sampling_rate: int,
     max_input_len: float,
     min_input_len: float,
     reshuffle_at_start: bool,
@@ -248,6 +248,21 @@ def prepare_dataset(
             context.wait_before()
             dataset = dataset.shuffle(seed=42)
             context.wait_after()
+
+    # 0. Resample audio to target sampling rate
+    if audio_column_name is not None and do_resample:
+        dataset = distributed_process(
+            dataset,
+            process_by="map",
+            function=resample_audio,
+            num_proc=preprocessing_num_workers,
+            input_columns=[audio_column_name],
+            batched=True,
+            batch_size=writer_batch_size // 4,
+            writer_batch_size=writer_batch_size,
+            fn_kwargs={"sampling_rate": orig_sampling_rate, "target_sampling_rate": sampling_rate},
+            desc="Resampling audio to target sampling rate",
+        )
 
     if audio_column_name is not None and split_long_segments_to_chunks:
         if length_column_name is not None and length_column_name not in set().union(*dataset.column_names.values()):
@@ -280,21 +295,6 @@ def prepare_dataset(
                 "sampling_rate": sampling_rate,
             },
             desc=f"Splitting segments to chunks of size {max_input_len}s",
-        )
-
-    # 0. Resample audio to target sampling rate
-    if do_resample:
-        dataset = distributed_process(
-            dataset,
-            process_by="map",
-            function=resample_audio,
-            num_proc=preprocessing_num_workers,
-            input_columns=[audio_column_name],
-            batched=True,
-            batch_size=writer_batch_size // 4,
-            writer_batch_size=writer_batch_size,
-            fn_kwargs={"sampling_rate": sampling_rate, "target_sampling_rate": target_sampling_rate},
-            desc="Resampling audio to target sampling rate",
         )
 
     # 1. Preprocess audio columns
@@ -512,7 +512,7 @@ def load_multiple_datasets(
                 text_transformations=dataset_config.get("text_transformations"),
                 sampling_rate=sampling_rate,
                 do_resample=dataset_config.get("do_resample", False),
-                target_sampling_rate=dataset_config.get("target_sampling_rate", sampling_rate),
+                orig_sampling_rate=dataset_config.get("orig_sampling_rate", sampling_rate),
                 max_input_len=max_input_len,
                 min_input_len=min_input_len,
                 split_long_segments_to_chunks=split_long_segments_to_chunks,
@@ -645,7 +645,7 @@ def get_dataset(
                 train_split=data_args.train_split,
                 sampling_rate=data_args.sampling_rate,
                 do_resample=data_args.do_resample,
-                target_sampling_rate=data_args.target_sampling_rate,
+                orig_sampling_rate=data_args.orig_sampling_rate,
                 max_input_len=data_args.max_duration_in_seconds,
                 min_input_len=data_args.min_duration_in_seconds,
                 text_transformations=data_args.text_transformations,
