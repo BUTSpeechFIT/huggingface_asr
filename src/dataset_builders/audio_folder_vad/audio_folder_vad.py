@@ -95,7 +95,7 @@ class AudioFolderVAD(folder_based_builder.FolderBasedBuilder):
 
                 yield f"{example_id}_{segment.start:.2f}_{segment.end:.2f}", {
                     **example,
-                    "audio": audio_encoder.encode_example({"array": chunk, "sampling_rate": sample_rate}),
+                    "audio": audio_encoder.encode_example({"array": chunk, "sampling_rate": self.sampling_rate}),
                     "input_len": len(chunk) / self.sampling_rate,
                 }
 

@@ -1,30 +1,24 @@
 """Main training script for training of attention based encoder decoder ASR models."""
 import sys
 
+import torch
 from transformers import AutoFeatureExtractor, HfArgumentParser
 from transformers.utils import logging
-import torch
-from models.bestrq import BestRQModel
-from utilities.callbacks import GumbelTemperatureCallback, init_callbacks
-from utilities.collators import DataCollatorForWav2Vec2Pretraining
-from utilities.data_utils import get_dataset, audio_object_stripper
-from utilities.model_utils import instantiate_speech_encoder_model
-from utilities.training_arguments import (
-    DataTrainingArguments,
-    GenerationArguments,
-    ModelArguments,
-    PretrainingArguments,
-)
-from utilities.training_utils import SSLTrainer
+
+from utilities.data_utils import audio_object_stripper, get_dataset
+from utilities.training_arguments import DataTrainingArguments, PretrainingArguments
 
 
 def process_batch(batch, feature_extractor):
     speech = [audio_object_stripper(sample) for sample in batch]
-    outputs = feature_extractor(speech, return_attention_mask=True, padding=True, sampling_rate=16000,
-                                return_tensors="pt")
+
+    outputs = feature_extractor(
+        speech, return_attention_mask=True, padding=True, sampling_rate=16000, return_tensors="pt"
+    )
 
     x_active = torch.vstack(
-        [x[:mask.sum().item()] for x, mask in zip(outputs["input_features"], outputs["attention_mask"])])
+        [x[: mask.sum().item()] for x, mask in zip(outputs["input_features"], outputs["attention_mask"])]
+    )
     mean = x_active.mean(dim=0)
     std = x_active.std(dim=0)
     return {"means": mean[None, ...], "stds": std[None, ...]}
