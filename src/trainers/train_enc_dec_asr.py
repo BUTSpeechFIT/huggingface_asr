@@ -13,6 +13,7 @@ from transformers.utils import logging
 
 import wandb
 from decoding.config import GenerationConfigCustom
+from utilities.bind import bind_all
 from utilities.callbacks import init_callbacks
 from utilities.collators import SpeechCollatorWithPadding
 from utilities.data_utils import get_dataset
@@ -26,7 +27,6 @@ from utilities.training_arguments import (
     ModelArguments,
 )
 from utilities.training_utils import CustomSeq2SeqTrainer
-from utilities.bind import bind_all
 
 if __name__ == "__main__":
     logging.set_verbosity_debug()
@@ -55,7 +55,7 @@ if __name__ == "__main__":
     tokenizer = AutoTokenizer.from_pretrained(training_args.tokenizer_name)
 
     # 3. Instantiate model
-    model = instantiate_aed_model(model_args, tokenizer, feature_extractor)
+    model = instantiate_aed_model(model_args, tokenizer)
 
     # 4. Update generation config
     gen_config = GenerationConfigCustom(
