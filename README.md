@@ -1,5 +1,5 @@
 # Extension of the HuggingFace Transformers for Automatic Speech Recognition
-
+This repository is still under active development. Proper README and documentation will be added soon.
 ## Setup
 
 1. BUT SGE Cluster setup

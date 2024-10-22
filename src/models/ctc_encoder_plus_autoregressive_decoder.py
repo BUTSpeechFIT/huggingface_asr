@@ -25,6 +25,8 @@ from transformers.utils import logging
 from decoding.ctc_scorer import CTCRescorerLogitsProcessor, LogSoftmaxProcessor
 from decoding.shallow_fussion import LMRescorerLogitsProcessor
 from models.auto_wrappers import CustomModelForCausalLM
+from models.decoders.multi_head_gpt2 import GPT2LMMultiHeadModel
+from models.decoders.multi_head_gpt2_mixing import GPT2LMMultiHeadModelMixing
 
 logger = logging.get_logger("transformers")
 
@@ -125,7 +127,7 @@ class JointCTCAttentionEncoderDecoder(SpeechEncoderDecoderModel):
             )
         self.enc_loss_weight = config.ctc_weight
         self.dec_loss_weight = 1 - config.ctc_weight
-        self.lsm_factor = config.lsm_factor
+        self.lsm_factor = config.decoder.lsm_factor
 
         if config.shared_lm_head:
             self.encoder.lm_head.weight = self.decoder.lm_head.weight
@@ -301,6 +303,8 @@ class JointCTCAttentionEncoderDecoder(SpeechEncoderDecoderModel):
         if (labels is not None) and (decoder_input_ids is None and decoder_inputs_embeds is None):
             decoder_input_ids = shift_tokens_right(labels, self.config.pad_token_id, self.config.decoder_start_token_id)
 
+        is_custom_decoder = isinstance(self.decoder, GPT2LMMultiHeadModel)
+
         # Decode
         decoder_outputs = self.decoder(
             input_ids=decoder_input_ids,
@@ -315,6 +319,7 @@ class JointCTCAttentionEncoderDecoder(SpeechEncoderDecoderModel):
             use_cache=use_cache,
             past_key_values=past_key_values,
             return_dict=return_dict,
+            labels=labels if is_custom_decoder else None,
             **kwargs_decoder,
         )
 
@@ -322,10 +327,13 @@ class JointCTCAttentionEncoderDecoder(SpeechEncoderDecoderModel):
         loss = enc_loss = dec_loss = None
 
         if labels is not None:
-            loss_fct = CrossEntropyLoss(label_smoothing=self.lsm_factor)
             enc_loss = encoder_outputs.loss if return_dict else encoder_outputs[0]
-            dec_logits = decoder_outputs.logits if return_dict else decoder_outputs[0]
-            dec_loss = loss_fct(dec_logits.reshape(-1, self.decoder.config.vocab_size), labels.reshape(-1))
+            if is_custom_decoder:
+                dec_loss = decoder_outputs.loss
+            else:
+                loss_fct = CrossEntropyLoss(label_smoothing=self.lsm_factor)
+                dec_logits = decoder_outputs.logits if return_dict else decoder_outputs[0]
+                dec_loss = loss_fct(dec_logits.reshape(-1, self.decoder.config.vocab_size), labels.reshape(-1))
             loss = self.enc_loss_weight * enc_loss + self.dec_loss_weight * dec_loss
 
         if not return_dict:
