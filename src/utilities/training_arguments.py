@@ -236,6 +236,7 @@ class DataTrainingArguments:
     merge_validation_splits: Optional[bool] = field(
         default=True, metadata={"help": "Whether to merge validation splits."}
     )
+    do_resample: Optional[bool] = field(default=False, metadata={"help": "Whether to resample audio files."})
 
 
 @dataclass

@@ -45,6 +45,7 @@ class GPT2LMMultiHeadModel(GPT2LMHeadModel):
             self.head_locations = []
             self.additional_lm_heads = nn.ModuleList([])
             self.head_weights = [1.0]
+        self.lsm_factor = config.lsm_factor
         self.post_init()
 
     def tie_weights(self):
@@ -137,7 +138,7 @@ class GPT2LMMultiHeadModel(GPT2LMHeadModel):
         if labels is not None:
             loss = torch.tensor(0.0, device=hidden_states[-1].device)
             lm_logits = []
-            loss_fct = CrossEntropyLoss()
+            loss_fct = CrossEntropyLoss(label_smoothing=self.lsm_factor)
 
             for index, lm_head, lm_weight in zip(
                 [*self.head_locations, -1],

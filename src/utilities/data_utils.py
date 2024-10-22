@@ -4,6 +4,7 @@ import os
 import re
 from typing import Dict, List, Optional, Tuple, Union
 
+import librosa
 import numpy as np
 import torch.distributed
 from datasets import (
@@ -226,6 +227,7 @@ def prepare_dataset(
     text_transformations: Optional[List[str]],
     split_long_segments_to_chunks: bool,
     sampling_rate: int,
+    do_resample: bool,
     max_input_len: float,
     min_input_len: float,
     reshuffle_at_start: bool,
@@ -236,6 +238,10 @@ def prepare_dataset(
             context.wait_before()
             dataset = dataset.shuffle(seed=42)
             context.wait_after()
+
+    # 0. Resample audio to target sampling rate
+    if audio_column_name is not None and do_resample:
+        dataset = dataset.cast_column(audio_column_name, Audio(sampling_rate=sampling_rate))
 
     if audio_column_name is not None and split_long_segments_to_chunks:
         if length_column_name is not None and length_column_name not in set().union(*dataset.column_names.values()):
@@ -354,20 +360,21 @@ def prepare_dataset(
                     desc=f"Applying {transformation_name} transformation",
                 )
 
-    logger.info("Casting audio column to Audio, and length column to float32")
+    logger.info("Casting length column to float64")
     feature_types = dataset[list(dataset.keys())[0]].features
-    if audio_column_name is not None:
-        feature_types[audio_column_name] = Audio(sampling_rate=sampling_rate)
     if length_column_name is not None:
-        feature_types[length_column_name] = Value(dtype="float32")
+        feature_types[length_column_name] = Value(dtype="float64", id=None)
     for split in dataset:
-        dataset[split] = distributed_process(
-            dataset[split],
-            process_by="cast",
-            writer_batch_size=writer_batch_size,
-            num_proc=preprocessing_num_workers,
-            features=feature_types,
-        )
+        if dataset[split].features[length_column_name].dtype != "float64":
+            dataset[split] = distributed_process(
+                dataset[split],
+                process_by="cast",
+                writer_batch_size=writer_batch_size,
+                num_proc=preprocessing_num_workers
+                if len(dataset[split]) > preprocessing_num_workers * writer_batch_size
+                else 1,
+                features=feature_types,
+            )
 
     logger.info(str(dataset))
     return dataset
@@ -479,11 +486,12 @@ def load_multiple_datasets(
                 length_column_name=dataset_config.get("length_column_name"),
                 text_column_name=dataset_config.get("text_column_name"),
                 audio_column_name=dataset_config.get("audio_column_name"),
-                preprocessing_num_workers=num_proc,
+                preprocessing_num_workers=dataset_config.get("num_proc", num_proc),
                 writer_batch_size=writer_batch_size,
                 train_split=new_train_split_name,
                 text_transformations=dataset_config.get("text_transformations"),
                 sampling_rate=sampling_rate,
+                do_resample=dataset_config.get("do_resample", False),
                 max_input_len=max_input_len,
                 min_input_len=min_input_len,
                 split_long_segments_to_chunks=split_long_segments_to_chunks,
@@ -615,6 +623,7 @@ def get_dataset(
                 writer_batch_size=data_args.writer_batch_size,
                 train_split=data_args.train_split,
                 sampling_rate=data_args.sampling_rate,
+                do_resample=data_args.do_resample,
                 max_input_len=data_args.max_duration_in_seconds,
                 min_input_len=data_args.min_duration_in_seconds,
                 text_transformations=data_args.text_transformations,

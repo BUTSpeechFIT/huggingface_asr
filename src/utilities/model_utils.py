@@ -51,7 +51,6 @@ from utilities.training_arguments import ModelArguments
 logger = logging.get_logger("transformers")
 
 
-
 def average_checkpoints(experiment_dir: str) -> str:
     checkpoints = glob.glob(f"{experiment_dir}/checkpoint*/pytorch_model.bin")
     state_dicts = [torch.load(checkpoint) for checkpoint in checkpoints]
@@ -156,9 +155,7 @@ def instantiate_ctc_model(
     return model
 
 
-def instantiate_aed_model(
-    model_args: ModelArguments, tokenizer: PreTrainedTokenizer, feature_extractor: SequenceFeatureExtractor
-) -> SpeechEncoderDecoderModel:
+def instantiate_aed_model(model_args: ModelArguments, tokenizer: PreTrainedTokenizer) -> SpeechEncoderDecoderModel:
     base_model_config = {
         "encoder_layerdrop": 0.0,
         "ctc_weight": model_args.ctc_weight,
@@ -167,17 +164,14 @@ def instantiate_aed_model(
         "encoder_pad_token_id": tokenizer.pad_token_id,
         "encoder_vocab_size": len(tokenizer),
         "decoder_vocab_size": len(tokenizer),
-        "lsm_factor": model_args.lsm_factor,
+        "decoder_lsm_factor": model_args.lsm_factor,
         "shared_lm_head": model_args.shared_lm_head,
-        # "encoder_expect_2d_input": model_args.expect_2d_input,
         "decoder_start_token_id": tokenizer.bos_token_id,
         "decoder_pos_emb_fixed": model_args.decoder_pos_emb_fixed,
         "eos_token_id": tokenizer.eos_token_id,
         "bos_token_id": tokenizer.bos_token_id,
         "mask_token_id": tokenizer.mask_token_id,
     }
-    # if base_model_config["encoder_expect_2d_input"] and isinstance(feature_extractor, Speech2TextFeatureExtractor):
-    #     base_model_config["encoder_second_dim_input_size"] = feature_extractor.num_mel_bins
 
     # 4. Initialize seq2seq model
     if model_args.from_pretrained:
