@@ -50,7 +50,15 @@ class CausalConv2d(nn.Conv2d):
         )
 
     def forward(self, inputs):
-        inputs = F.pad(inputs, (self.left_padding[1], 0, self.left_padding[0], 0))
+        # Original:
+        # inputs = F.pad(inputs, (self.left_padding[1], 0, self.left_padding[0], 0))
+
+        # This is to allow setting both 'conv_padding = [ 1, 1 ] or [ 0, 0 ]' config.json for an existing model :
+        # (due to this, the input dim. of linear projection after 2DConv stays the same)
+        # (IMO, the zero padding of initial 2 elements for each time-step should not be used,
+        #  but iy stays there for the compatibility with the current model igor240919)
+        inputs = F.pad(inputs, (2, 0, self.left_padding[0], 0))
+
         output = super().forward(inputs)
         return output
 

@@ -786,7 +786,13 @@ class Wav2Vec2EBranchformerModel(CustomFE, Wav2Vec2ConformerModel):
             )
 
         # apply feature_projection
-        hidden_states, extract_features = self.feature_projection(extract_features)
+        hidden_states, extract_features_norm = self.feature_projection(extract_features)
+
+        #torch.save(hidden_states.cpu(), "pre_encoder_output_ch5000.pt")
+        #breakpoint()
+
+        pre_encoder_output = hidden_states.clone()  # DEBUG, to be removed!
+
         # apply Spec-augment
         hidden_states = self._mask_hidden_states(
             hidden_states, mask_time_indices=mask_time_indices, attention_mask=attention_mask
@@ -809,7 +815,7 @@ class Wav2Vec2EBranchformerModel(CustomFE, Wav2Vec2ConformerModel):
         if self.adapter is not None:
             hidden_states = self.adapter(hidden_states)
 
-        return hidden_states, new_streaming_states, attention_out
+        return hidden_states, new_streaming_states, attention_out, pre_encoder_output
 
 
 class Wav2Vec2GumbelVectorQuantizerCustom(Wav2Vec2GumbelVectorQuantizer):
