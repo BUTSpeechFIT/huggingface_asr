@@ -1,8 +1,8 @@
 import torch
 from transformers.utils import logging
 
-logger = logging.get_logger(__name__)
 
+logger = logging.get_logger(__name__)
 
 def calculate_output_size(input_size, kernel_size, stride, left_padding=0, right_padding=0, dilation=1):
     """

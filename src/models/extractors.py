@@ -15,6 +15,8 @@ from models.utils import calculate_output_size_multilayer
 logger = logging.get_logger(__name__)
 
 
+logger = logging.get_logger(__name__)
+
 class CustomFEConfig(PretrainedConfig):
     """
     This class contains the configuration for the feature extractor.
@@ -90,7 +92,6 @@ class Conv2dFeatureExtractor(nn.Module):
         same amount of padding from all 4 sides (top, down, left, right).
         `pad1` for 1st module, `pad2` for 2nd module.
     """
-
     def __init__(self, config):
         super().__init__()
 
@@ -140,19 +141,7 @@ class Conv2dFeatureExtractor(nn.Module):
                     )
                 ],
             )
-        else:
-            linear_in_dim = config.conv_dim[-1] * int(
-                calculate_output_size_multilayer(
-                    config.num_fbanks,
-                    [
-                        (conv_kernel, conv_stride, conv_padding, conv_padding)
-                        for conv_kernel, conv_stride, conv_padding in zip(
-                            config.conv_kernel, config.conv_stride, config.conv_padding
-                        )
-                    ],
-                )
-            )
-
+        )
         self.out = torch.nn.Linear(linear_in_dim, config.hidden_size, bias=True)
 
     def forward(self, input_values: torch.Tensor) -> torch.Tensor:
