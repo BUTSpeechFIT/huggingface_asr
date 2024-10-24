@@ -153,18 +153,19 @@ class ConvolutionalSpatialGatingUnit(torch.nn.Module):
             CausalConv1d(
                 n_channels,
                 n_channels,
-                config.csgu_kernel_size,
-                1,
-                (config.csgu_kernel_size - 1) // 2,
+                kernel_size=config.csgu_kernel_size,
+                stride=1,
+                dilation=1,
                 groups=n_channels,
             )
             if config.is_causal
             else torch.nn.Conv1d(
                 n_channels,
                 n_channels,
-                config.csgu_kernel_size,
-                1,
-                (config.csgu_kernel_size - 1) // 2,
+                kernel_size=config.csgu_kernel_size,
+                stride=1,
+                padding=(config.csgu_kernel_size - 1) // 2,
+                dilation=1,
                 groups=n_channels,
             )
         )

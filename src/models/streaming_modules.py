@@ -5,9 +5,12 @@ import torch.nn.functional as F
 from torch import nn
 from torch.nn.modules.utils import _pair
 from transformers import PreTrainedModel
+from transformers.utils import logging
 
 from models.utils import calculate_output_size
 
+
+logger = logging.get_logger(__name__)
 
 class CausalConv1d(torch.nn.Conv1d):
     def __init__(self, in_channels, out_channels, kernel_size, stride=1, dilation=1, groups=1, bias=True):
@@ -29,30 +32,28 @@ class CausalConv1d(torch.nn.Conv1d):
 
 
 class CausalConv2d(nn.Conv2d):
-    def __init__(self, in_channels, out_channels, kernel_size, stride=1, padding=None, dilation=1, groups=1, bias=True):
+    """
+    Vanilla Conv2d, subclassed so the name `CausalConv2d` appears in the model.
+    """
+    def __init__(self, in_channels, out_channels, kernel_size, stride=1, padding=0, dilation=1, groups=1, bias=True):
         kernel_size = _pair(kernel_size)
         stride = _pair(stride)
         dilation = _pair(dilation)
-        if padding is None:
-            padding = (int((kernel_size[0] - 1) * dilation[0]), padding)
-        else:
-            padding = padding * 2
-        self.left_padding = _pair(padding)
+        assert len(padding) == 2  # already is _pair()
+
         super().__init__(
             in_channels,
             out_channels,
             kernel_size,
             stride=stride,
-            padding=0,
+            padding=padding,
             dilation=dilation,
             groups=groups,
             bias=bias,
         )
 
     def forward(self, inputs):
-        inputs = F.pad(inputs, (self.left_padding[1], 0, self.left_padding[0], 0))
-        output = super().forward(inputs)
-        return output
+        return super().forward(inputs)
 
 
 class FeatureExtractorForStreaming(PreTrainedModel):
