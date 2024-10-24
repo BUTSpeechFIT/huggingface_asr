@@ -9,8 +9,10 @@ def calculate_output_size(input_size, kernel_size, stride, left_padding=0, right
     - input_size: Input size (width or height)
     - kernel_size: Kernel size
     - stride: Stride
-    - left_padding: Left padding
-    - right_padding: Right padding
+    - left_padding: Left padding, zeros are prepended to each line of the feature matrix.
+                      [[ 0.0, 0.0, x1, x2, ..., xk ], ... ]
+    - right_padding: Right padding, zeros are appended to each line of the feature matrix.
+                      [[ x1, x2, ..., xk, 0.0, 0.0 ], ... ]
 
     Returns:
     - Output size

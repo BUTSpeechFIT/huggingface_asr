@@ -94,13 +94,24 @@ class Conv2dFeatureExtractor(nn.Module):
                 )
             ],
         )
+
+        # these values are backward compatible with `config.conv_padding = [1, 1]`
+        left_conv_padding = 2  # gets prepended to each line of feature matrix
+        right_conv_padding = 0  # gets appended to each line of feature matrix
+        # Note:
+        # padding by 2 ensures that all fbank elements are used:
+        # (80+2) - 6 = 76 / 4 = 19.0
+        # - without `left_conv_padding`, last 2 fbank elements would be unused by the stack of 2 Conv2d
+        # - with this change, the pre-encoder dims stay the same, regardless of the `config.conv_padding` values
+        # - the values in `config.conv_padding` get applied only to the time axis
+        #
         linear_in_dim = config.conv_dim[-1] * int(
             calculate_output_size_multilayer(
                 config.num_fbanks,
                 [
-                    (conv_kernel, conv_stride, conv_padding, conv_padding)
-                    for conv_kernel, conv_stride, conv_padding in zip(
-                        config.conv_kernel, config.conv_stride, config.conv_padding
+                    (conv_kernel, conv_stride, left_conv_padding, right_conv_padding)
+                    for conv_kernel, conv_stride in zip(
+                        config.conv_kernel, config.conv_stride
                     )
                 ],
             )
@@ -139,21 +150,24 @@ class CustomFE:
         # pylint: disable=no-member
         add_adapter = self.config.add_adapter if add_adapter is None else add_adapter
 
-        def _conv_out_length(input_length, kernel_size, stride):
+        def _conv_out_length(input_length, kernel_size, stride, padding):
             # 1D convolutional layer output length formula taken
             # from https://pytorch.org/docs/stable/generated/torch.nn.Conv1d.html
+            #
+            # assumed: dilation=1
 
-            return torch.div(input_length - kernel_size, stride, rounding_mode="floor") + 1
+            return torch.div(input_length + 2*padding - kernel_size, stride, rounding_mode="floor") + 1
 
         # pylint: disable=no-member
-        for kernel_size, stride, conv_padding in zip(
+        for kernel_size, stride, padding in zip(
             self.config.conv_kernel, self.config.conv_stride, self.config.conv_padding
         ):
             input_lengths = _conv_out_length(
                 # pylint: disable=no-member
-                input_lengths + (kernel_size - 1 if self.config.is_causal else 2 * conv_padding),
+                input_lengths,
                 kernel_size,
                 stride,
+                padding,
             )
 
         if add_adapter:

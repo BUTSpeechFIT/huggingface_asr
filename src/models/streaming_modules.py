@@ -50,7 +50,12 @@ class CausalConv2d(nn.Conv2d):
         )
 
     def forward(self, inputs):
-        inputs = F.pad(inputs, (self.left_padding[1], 0, self.left_padding[0], 0))
+        padding_left = 2  # compatible with `conv_padding = [ 1, 1 ]` models,
+        padding_right = 0
+        padding_top = self.left_padding[0]  # 2 * config.conv_padding
+        padding_bottom = 0
+
+        inputs = F.pad(inputs, (padding_left, padding_right, padding_top, padding_bottom0))
         output = super().forward(inputs)
         return output
 
