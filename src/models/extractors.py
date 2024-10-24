@@ -150,21 +150,24 @@ class CustomFE:
         # pylint: disable=no-member
         add_adapter = self.config.add_adapter if add_adapter is None else add_adapter
 
-        def _conv_out_length(input_length, kernel_size, stride):
+        def _conv_out_length(input_length, kernel_size, stride, padding):
             # 1D convolutional layer output length formula taken
             # from https://pytorch.org/docs/stable/generated/torch.nn.Conv1d.html
+            #
+            # assumed: dilation=1
 
-            return torch.div(input_length - kernel_size, stride, rounding_mode="floor") + 1
+            return torch.div(input_length + 2*padding - kernel_size, stride, rounding_mode="floor") + 1
 
         # pylint: disable=no-member
-        for kernel_size, stride, conv_padding in zip(
+        for kernel_size, stride, padding in zip(
             self.config.conv_kernel, self.config.conv_stride, self.config.conv_padding
         ):
             input_lengths = _conv_out_length(
                 # pylint: disable=no-member
-                input_lengths + (kernel_size - 1 if self.config.is_causal else 2 * conv_padding),
+                input_lengths,
                 kernel_size,
                 stride,
+                padding,
             )
 
         if add_adapter:
