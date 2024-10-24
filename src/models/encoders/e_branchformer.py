@@ -179,9 +179,9 @@ class ConvolutionalSpatialGatingUnit(torch.nn.Module):
             CausalConv1d(
                 n_channels,
                 n_channels,
-                config.csgu_kernel_size,
-                1,
-                (config.csgu_kernel_size - 1) // 2,
+                kernel_size=config.csgu_kernel_size,
+                stride=1,
+                # padding=(config.csgu_kernel_size - 1) // 2,
                 groups=n_channels,
             )
             if config.is_causal
@@ -207,7 +207,7 @@ class ConvolutionalSpatialGatingUnit(torch.nn.Module):
 
         self.dropout = torch.nn.Dropout(config.csgu_conv_dropout)
 
-    def forward(self, hidden_states: torch.FloatTensor):
+    def forward(self, hidden_states: torch.FloatTensor, cached_conv: Optional[torch.Tensor] = None):
         """Forward method
 
         Args:
@@ -220,14 +220,15 @@ class ConvolutionalSpatialGatingUnit(torch.nn.Module):
         x_r, x_g = hidden_states.chunk(2, dim=-1)
 
         x_g = self.norm(x_g)  # (N, T, D/2)
-        x_g = self.conv(x_g.transpose(1, 2)).transpose(1, 2)  # (N, T, D/2)
+        x_g, cached_conv = self.conv(x_g.transpose(1, 2), cached_conv)
+        x_g = x_g.transpose(1, 2)  # (N, T, D/2)
         if self.linear is not None:
             x_g = self.linear(x_g)
 
         x_g = self.act(x_g)
         hidden_states = x_r * x_g  # (N, T, D/2)
         hidden_states = self.dropout(hidden_states)
-        return hidden_states
+        return hidden_states, cached_conv
 
 
 class ConvolutionalGatingMLP(torch.nn.Module):
@@ -241,11 +242,11 @@ class ConvolutionalGatingMLP(torch.nn.Module):
         self.csgu = ConvolutionalSpatialGatingUnit(config)
         self.channel_proj2 = torch.nn.Linear(config.intermediate_size // 2, config.hidden_size)
 
-    def forward(self, hidden_states: torch.FloatTensor):
+    def forward(self, hidden_states: torch.FloatTensor, cached_conv: Optional[torch.FloatTensor] = None):
         hidden_states = self.channel_proj1(hidden_states)  # hidden_size -> intermediate_size
-        hidden_states = self.csgu(hidden_states)  # intermediate_size -> intermediate_size/2
+        hidden_states, cached_conv = self.csgu(hidden_states, cached_conv)  # intermediate_size -> intermediate_size/2
         hidden_states = self.channel_proj2(hidden_states)  # intermediate_size/2 -> hidden_size
-        return hidden_states
+        return hidden_states, cached_conv
 
 
 class Wav2Vec2EBranchformerEncoderLayer(nn.Module):
@@ -293,6 +294,7 @@ class Wav2Vec2EBranchformerEncoderLayer(nn.Module):
         relative_position_embeddings: Optional[torch.Tensor] = None,
         cached_key: Optional[torch.Tensor] = None,
         cached_value: Optional[torch.Tensor] = None,
+        cached_conv: Optional[torch.Tensor] = None,
         left_context_len: int = 0,
         output_attentions: bool = False,
     ):
@@ -321,7 +323,7 @@ class Wav2Vec2EBranchformerEncoderLayer(nn.Module):
 
         # 4. cgMLP Branch
         local_branch = self.cgMLP_layer_norm(local_branch)
-        local_branch = self.cgMLP(local_branch)
+        local_branch, cached_conv = self.cgMLP(local_branch, cached_conv)
 
         # 5. Merge operator
         # a, concat
@@ -342,7 +344,7 @@ class Wav2Vec2EBranchformerEncoderLayer(nn.Module):
 
         # 8. Final layer norm
         hidden_states = self.final_layer_norm(hidden_states)
-        return hidden_states, attn_weigts, (cached_key, cached_value)
+        return hidden_states, attn_weigts, (cached_key, cached_value, cached_conv)
 
 
 class Wav2Vec2EBranchformerEncoder(Wav2Vec2ConformerEncoder):
@@ -559,8 +561,11 @@ class Wav2Vec2EBranchformerEncoder(Wav2Vec2ConformerEncoder):
         num_attention_heads = self.config.num_attention_heads
         head_dim = self.config.hidden_size // num_attention_heads
 
+        left_context_conv = self.config.csgu_kernel_size - 1
+        channels_conv = self.config.intermediate_size // 2
+
         for layer in range(num_layers):
-            # layout: (batch, head, time1, d_k)
+            # layout: (batch, head, time1, head_dim)
             cached_key = torch.zeros(
                 (batch_size, num_attention_heads, left_context_frames, head_dim),
                 device=device,
@@ -569,9 +574,15 @@ class Wav2Vec2EBranchformerEncoder(Wav2Vec2ConformerEncoder):
                 (batch_size, num_attention_heads, left_context_frames, head_dim),
                 device=device,
             )
+            # layout: (batch, hid_dim, time2)
+            cached_conv = torch.zeros(
+                (batch_size, channels_conv, left_context_conv),
+                device=device,
+            )
             streaming_states += [
                 cached_key,
                 cached_value,
+                cached_conv,
             ]
 
         return streaming_states
@@ -590,7 +601,8 @@ class Wav2Vec2EBranchformerEncoder(Wav2Vec2ConformerEncoder):
         hidden_states: pre-encoder outputs, layout (batch, time, dim_encoder).
         attention_mask: chunk lengths encoded as binary matrix with shape (batch, time).
                         Related to SelfAttention time masking.
-        streaming_states: vector of stacked states (self-attention keys and values, 1+1 per layer).
+        streaming_states: vector of stacked states (self-attention keys, values,
+                          and convolution left_context, i.e. 3 tensors per layer).
         left_context_len: length of the left_context in the SelfAttention for streaming
                           (unit is encoder timestep 40ms).
         output_attentions: whether to export attention matrices from the SelfAttention modules.
@@ -600,8 +612,8 @@ class Wav2Vec2EBranchformerEncoder(Wav2Vec2ConformerEncoder):
 
         """
 
-        assert len(streaming_states) == 2*len(self.layers), \
-                (len(streaming_states), 2*len(self.layers))
+        assert len(streaming_states) == 3*len(self.layers), \
+                (len(streaming_states), 3*len(self.layers))
         assert attention_lens is not None
 
         new_streaming_states = []
@@ -636,7 +648,7 @@ class Wav2Vec2EBranchformerEncoder(Wav2Vec2ConformerEncoder):
 
         for i, layer in enumerate(self.layers):
             # get streaming state
-            cached_key, cached_value = streaming_states[2*i : 2*(i+1)]
+            cached_key, cached_value, cached_conv = streaming_states[3*i : 3*(i+1)]
 
             # streaming_forward()
             layer_outputs = layer.forward(
@@ -645,13 +657,14 @@ class Wav2Vec2EBranchformerEncoder(Wav2Vec2ConformerEncoder):
                 relative_position_embeddings=relative_position_embeddings,
                 cached_key=cached_key,
                 cached_value=cached_value,
+                cached_conv=cached_conv,
                 left_context_len=left_context_len,
                 output_attentions=output_attentions,
             )
-            hidden_states, attn_weights, (cached_key, cached_value) = layer_outputs
+            hidden_states, attn_weights, (cached_key, cached_value, cached_conv) = layer_outputs
 
             # collect new states
-            new_streaming_states += [ cached_key, cached_value ]
+            new_streaming_states += [ cached_key, cached_value, cached_conv ]
 
             # collect attention matrices
             if output_attentions:
@@ -761,7 +774,8 @@ class Wav2Vec2EBranchformerModel(CustomFE, Wav2Vec2ConformerModel):
         Forward function for streaming ASR.
 
         input_values: fbank features, layout (batch, dim_fea, time).
-        streaming_states: vector of stacked states (self-attention keys and values, 1+1 per layer).
+        streaming_states: vector of stacked states (self-attention keys, values,
+                          and convolution left_context, i.e. 3 tensors per layer).
         left_context_len: length of the left_context in the SelfAttention for streaming (unit is 10ms).
         mask_time_indices: currently unused from outside, related to Spec-augment masking.
         attention_mask: chunk lengths encoded as binary matrix with shape (batch, time).

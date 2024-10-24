@@ -24,8 +24,32 @@ class CausalConv1d(torch.nn.Conv1d):
 
         self.__padding = (kernel_size - 1) * dilation
 
-    def forward(self, input_tensor: torch.Tensor):
-        return super().forward(F.pad(input_tensor, (self.__padding, 0)))
+    def forward(self, input_tensor: torch.Tensor, cached_conv: Optional[torch.Tensor] = None):
+        """
+        args:
+            input_tensor: input signals, layout (batch, hid_dim, time1)
+            cached_conv: left context, it is prepended to input_tensor, layout (batch, hid_dim, time2)
+
+        returns:
+            (tensor, cached_conv)
+        """
+        if cached_conv is None:
+            input_tensor = F.pad(input_tensor, (self.__padding, 0))
+        else:
+            # breakpoint()
+
+            # (batch, n_channels)
+            assert input_tensor.shape[:2] == cached_conv.shape[:2], (input_tensor.shape[:2], cached_conv.shape[:2])
+            # (time)
+            assert self.__padding == cached_conv.shape[-1], (self.__padding, cached_conv.shape[-1])
+
+            # concatenate with cached_conv (left context):
+            input_tensor = torch.cat((cached_conv, input_tensor), dim = -1)
+
+            # update cached_conv:
+            cached_conv = input_tensor[..., -self.__padding:].clone()
+
+        return super().forward(input_tensor), cached_conv
 
 
 class CausalConv2d(nn.Conv2d):
