@@ -246,14 +246,27 @@ class Wav2Vec2EBranchformerEncoderLayer(nn.Module):
         # Merge
         self.final_dropout = torch.nn.Dropout(dropout)
         self.merge_proj = torch.nn.Linear(embed_dim + embed_dim, embed_dim)
-        self.depthwise_conv_fusion = torch.nn.Conv1d(
-            embed_dim + embed_dim,
-            embed_dim + embed_dim,
-            kernel_size=config.merge_conv_kernel,
-            stride=1,
-            padding=(config.merge_conv_kernel - 1) // 2,
-            groups=embed_dim + embed_dim,
-            bias=True,
+        self.depthwise_conv_fusion = (
+            CausalConv1d(
+                embed_dim + embed_dim,
+                embed_dim + embed_dim,
+                kernel_size=config.merge_conv_kernel,
+                stride=1,
+                dilation=1,
+                groups=embed_dim + embed_dim,
+                bias=True,
+            )
+            if config.is_causal
+            else torch.nn.Conv1d(
+                embed_dim + embed_dim,
+                embed_dim + embed_dim,
+                kernel_size=config.merge_conv_kernel,
+                stride=1,
+                padding=(config.merge_conv_kernel - 1) // 2,
+                dilation=1,
+                groups=embed_dim + embed_dim,
+                bias=True,
+            )
         )
         self.final_layer_norm = nn.LayerNorm(embed_dim)
 
