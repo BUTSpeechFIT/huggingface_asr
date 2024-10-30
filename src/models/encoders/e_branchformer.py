@@ -24,11 +24,7 @@ from transformers.models.wav2vec2.modeling_wav2vec2 import (
 from transformers.models.wav2vec2_conformer.modeling_wav2vec2_conformer import (
     Wav2Vec2ConformerConfig,
     Wav2Vec2ConformerEncoder,
-)
-from transformers.models.wav2vec2_conformer.modeling_wav2vec2_conformer import (
     Wav2Vec2ConformerFeedForward as Wav2Vec2EBranchformerFeedForward,
-)
-from transformers.models.wav2vec2_conformer.modeling_wav2vec2_conformer import (
     Wav2Vec2ConformerModel,
     Wav2Vec2ConformerSelfAttention,
 )
@@ -318,6 +314,7 @@ class Wav2Vec2EBranchformerEncoderLayer(nn.Module):
         cached_key: Optional[torch.Tensor] = None,
         cached_value: Optional[torch.Tensor] = None,
         cached_conv: Optional[torch.Tensor] = None,
+        cached_conv_fusion: Optional[torch.Tensor] = None,
         left_context_len: int = 0,
         output_attentions: bool = False,
     ):
@@ -353,7 +350,18 @@ class Wav2Vec2EBranchformerEncoderLayer(nn.Module):
         hidden_states = torch.cat([global_branch, local_branch], dim=-1)
         merge_residual = hidden_states
         # b, depth-wise conv mixing
-        hidden_states = merge_residual + self.depthwise_conv_fusion(hidden_states.transpose(1, 2)).transpose(1, 2)
+        # Original impl:
+        # hidden_states = merge_residual + self.depthwise_conv_fusion(hidden_states.transpose(1, 2)).transpose(1, 2)
+        if isinstance(self.depthwise_conv_fusion, CausalConv1d):
+            hidden_states, cached_conv_fusion = self.depthwise_conv_fusion(
+                hidden_states.transpose(1, 2),
+                cached_conv=cached_conv_fusion,
+            )
+            hidden_states = hidden_states.transpose(1, 2)
+        else:
+            hidden_states = self.depthwise_conv_fusion(hidden_states.transpose(1, 2)).transpose(1, 2)
+        hidden_states = merge_residual + hidden_states
+
         # c, project back to original size and final dropout
         hidden_states = self.final_dropout(self.merge_proj(hidden_states))
 
@@ -367,7 +375,8 @@ class Wav2Vec2EBranchformerEncoderLayer(nn.Module):
 
         # 8. Final layer norm
         hidden_states = self.final_layer_norm(hidden_states)
-        return hidden_states, attn_weigts, (cached_key, cached_value, cached_conv)
+
+        return hidden_states, attn_weigts, (cached_key, cached_value, cached_conv, cached_conv_fusion)
 
 
 class Wav2Vec2EBranchformerEncoder(Wav2Vec2ConformerEncoder):
@@ -588,6 +597,9 @@ class Wav2Vec2EBranchformerEncoder(Wav2Vec2ConformerEncoder):
         left_context_conv = self.config.csgu_kernel_size - 1
         channels_conv = self.config.intermediate_size // 2
 
+        left_context_conv_fusion = self.config.merge_conv_kernel - 1
+        channels_conv_fusion = 2 * self.config.hidden_size
+
         for layer in range(num_layers):
             # layout: (batch, head, time1, head_dim)
             cached_key = torch.zeros(
@@ -603,10 +615,16 @@ class Wav2Vec2EBranchformerEncoder(Wav2Vec2ConformerEncoder):
                 (batch_size, channels_conv, left_context_conv),
                 device=device,
             )
+            # layout: (batch, hid_dim, time2)
+            cached_conv_fusion = torch.zeros(
+                (batch_size, channels_conv_fusion, left_context_conv_fusion),
+                device=device,
+            )
             streaming_states += [
                 cached_key,
                 cached_value,
                 cached_conv,
+                cached_conv_fusion,
             ]
 
         return streaming_states
@@ -636,8 +654,8 @@ class Wav2Vec2EBranchformerEncoder(Wav2Vec2ConformerEncoder):
 
         """
 
-        assert len(streaming_states) == 3*len(self.layers), \
-                (len(streaming_states), 3*len(self.layers))
+        assert len(streaming_states) == 4*len(self.layers), \
+                (len(streaming_states), 4*len(self.layers))
         assert attention_lens is not None
 
         new_streaming_states = []
@@ -658,13 +676,15 @@ class Wav2Vec2EBranchformerEncoder(Wav2Vec2ConformerEncoder):
 
         if self.embed_positions is not None:
             batch_size, num_frames, hid_dim = hidden_states.size()
-            device = hidden_states.device
-            dtype = hidden_states.dtype
-
-            # Create empty Tensor `ext_key_shape`, corrseponds to shape of `torch.cat([cached_key, key])`
-            # in Wav2Vec2EBranchformerSelfAttention, so the dims of `relative_position_embeddings` match...
             left_context_len = streaming_states[0].shape[2]  # length of `cached_key`
-            ext_key_shape = torch.zeros((batch_size, num_frames+left_context_len, hid_dim), dtype=dtype, device=device)
+
+            # Create empty Tensor `ext_key_shape`, corresponds to shape of `torch.cat([cached_key, key])`
+            # in Wav2Vec2EBranchformerSelfAttention, so the dims of `relative_position_embeddings` match...
+            ext_key_shape = torch.zeros(
+                (batch_size, num_frames + left_context_len, hid_dim),
+                dtype=hidden_states.dtype,
+                device=hidden_states.device,
+            )
 
             relative_position_embeddings = self.embed_positions(ext_key_shape)
         else:
@@ -672,7 +692,7 @@ class Wav2Vec2EBranchformerEncoder(Wav2Vec2ConformerEncoder):
 
         for i, layer in enumerate(self.layers):
             # get streaming state
-            cached_key, cached_value, cached_conv = streaming_states[3*i : 3*(i+1)]
+            cached_key, cached_value, cached_conv, cached_conv_fusion = streaming_states[4*i : 4*(i+1)]
 
             # streaming_forward()
             layer_outputs = layer.forward(
@@ -682,13 +702,14 @@ class Wav2Vec2EBranchformerEncoder(Wav2Vec2ConformerEncoder):
                 cached_key=cached_key,
                 cached_value=cached_value,
                 cached_conv=cached_conv,
+                cached_conv_fusion=cached_conv_fusion,
                 left_context_len=left_context_len,
                 output_attentions=output_attentions,
             )
-            hidden_states, attn_weights, (cached_key, cached_value, cached_conv) = layer_outputs
+            hidden_states, attn_weights, (cached_key, cached_value, cached_conv, cached_conv_fusion) = layer_outputs
 
             # collect new states
-            new_streaming_states += [ cached_key, cached_value, cached_conv ]
+            new_streaming_states += [ cached_key, cached_value, cached_conv, cached_conv_fusion ]
 
             # collect attention matrices
             if output_attentions:
