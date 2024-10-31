@@ -15,8 +15,6 @@ from models.utils import calculate_output_size_multilayer
 logger = logging.get_logger(__name__)
 
 
-logger = logging.get_logger(__name__)
-
 class CustomFEConfig(PretrainedConfig):
     """
     This class contains the configuration for the feature extractor.
@@ -92,6 +90,7 @@ class Conv2dFeatureExtractor(nn.Module):
         same amount of padding from all 4 sides (top, down, left, right).
         `pad1` for 1st module, `pad2` for 2nd module.
     """
+
     def __init__(self, config):
         super().__init__()
 
