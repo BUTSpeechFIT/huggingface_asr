@@ -1,26 +1,25 @@
-from typing import Union
-
 import torch
 from transformers.utils import logging
 
-
 logger = logging.get_logger(__name__)
+
 
 def calculate_output_size(input_size, kernel_size, stride, left_padding=0, right_padding=0, dilation=1):
     """
-    Calculate the output size after a convolution operation with separate left and right padding.
+     Calculate the output size after a convolution operation with separate left and right padding.
 
-    Parameters:
-    - input_size: Input size (width or height)
-    - kernel_size: Kernel size
-    - stride: Stride
-   - left_padding: Left padding, not over time axis, zeros are prepended to each line of the feature matrix.
-                      [[ 0.0, 0.0, x1, x2, ..., xk ], ... ]
-    - right_padding: Right padding, not over time axis, zeros are appended to each line of the feature matrix.
-                      [[ x1, x2, ..., xk, 0.0, 0.0 ], ... ]
+     Parameters:
+     - input_size: Input size (width or height)
+     - kernel_size: Kernel size
+     - stride: Stride
+    - left_padding: Left padding, not over time axis, zeros are prepended to each line of the feature matrix.
+                       [[ 0.0, 0.0, x1, x2, ..., xk ], ... ]
+     - right_padding: Right padding, not over time axis, zeros are appended to each line of the feature matrix.
+                       [[ x1, x2, ..., xk, 0.0, 0.0 ], ... ]
 
-    Returns:
-    - Output size
+     Returns:
+     - Output size
+
     """
     if not isinstance(input_size, torch.Tensor):
         input_size = torch.tensor(input_size)
@@ -37,6 +36,7 @@ def calculate_output_size_multilayer(input_size, layers):
 
     Returns:
     - Final output size after all layers
+
     """
     current_size = input_size
     for layer in layers:

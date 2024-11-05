@@ -35,7 +35,9 @@ logger = logging.get_logger(__name__)
 
 
 class Wav2Vec2EBranchformerConfig(Wav2Vec2ConformerConfig, Wav2Vec2Config, CustomFEConfig):
-    """Config for EBranhformer model extending conformer."""
+    """
+    Config for EBranhformer model extending conformer.
+    """
 
     model_type = "wav2vec2-ebranchformer"
 
