@@ -9,8 +9,8 @@ from transformers.utils import logging
 
 from models.utils import calculate_output_size
 
-
 logger = logging.get_logger(__name__)
+
 
 class CausalConv1d(torch.nn.Conv1d):
     def __init__(self, in_channels, out_channels, kernel_size, stride=1, dilation=1, groups=1, bias=True):
@@ -35,6 +35,7 @@ class CausalConv2d(nn.Conv2d):
     """
     Vanilla Conv2d, subclassed so the name `CausalConv2d` appears in the model.
     """
+
     def __init__(self, in_channels, out_channels, kernel_size, stride=1, padding=0, dilation=1, groups=1, bias=True):
         kernel_size = _pair(kernel_size)
         stride = _pair(stride)

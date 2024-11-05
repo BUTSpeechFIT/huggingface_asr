@@ -1,4 +1,5 @@
 """This module contains the feature extractors for the ASR model."""
+
 from typing import Optional, Union
 
 import torch
@@ -11,8 +12,8 @@ from transformers.utils import logging
 from models.streaming_modules import CausalConv2d
 from models.utils import calculate_output_size_multilayer
 
-
 logger = logging.get_logger(__name__)
+
 
 class CustomFEConfig(PretrainedConfig):
     """This class contains the configuration for the feature extractor."""
@@ -85,27 +86,30 @@ class Conv2dFeatureExtractor(nn.Module):
         same amount of padding from all 4 sides (top, down, left, right).
         `pad1` for 1st module, `pad2` for 2nd module.
     """
+
     def __init__(self, config):
         super().__init__()
 
         self.conv = torch.nn.Sequential(
             *[
                 nn.Sequential(
-                    CausalConv2d(
-                        conv_in,
-                        out_channels=conv_out,
-                        kernel_size=(conv_kernel, conv_kernel),
-                        stride=(conv_stride, conv_stride),
-                        padding=_pair(conv_padding),
-                    )
-                    if hasattr(config, "is_causal") and config.is_causal
-                    else ContextAwareConv2d(
-                        conv_in,
-                        out_channels=conv_out,
-                        kernel_size=(conv_kernel, conv_kernel),
-                        stride=(conv_stride, conv_stride),
-                        padding=_pair(conv_padding),
-                        context_awareness_type=config.context_awareness_type,
+                    (
+                        CausalConv2d(
+                            conv_in,
+                            out_channels=conv_out,
+                            kernel_size=(conv_kernel, conv_kernel),
+                            stride=(conv_stride, conv_stride),
+                            padding=_pair(conv_padding),
+                        )
+                        if hasattr(config, "is_causal") and config.is_causal
+                        else ContextAwareConv2d(
+                            conv_in,
+                            out_channels=conv_out,
+                            kernel_size=(conv_kernel, conv_kernel),
+                            stride=(conv_stride, conv_stride),
+                            padding=_pair(conv_padding),
+                            context_awareness_type=config.context_awareness_type,
+                        )
                     ),
                     ACT2FN[config.feat_extract_activation],
                 )
@@ -126,7 +130,9 @@ class Conv2dFeatureExtractor(nn.Module):
                         _pair(conv_padding)[1],  # right_padding (not on time axis)
                     )
                     for conv_kernel, conv_stride, conv_padding in zip(
-                        config.conv_kernel, config.conv_stride, config.conv_padding,
+                        config.conv_kernel,
+                        config.conv_stride,
+                        config.conv_padding,
                     )
                 ],
             )
