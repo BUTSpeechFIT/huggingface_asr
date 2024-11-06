@@ -5,11 +5,19 @@ import torch.nn.functional as F
 from torch import nn
 from torch.nn.modules.utils import _pair
 from transformers import PreTrainedModel
+from transformers.utils import logging
 
 from models.utils import calculate_output_size
 
+logger = logging.get_logger(__name__)
+
 
 class CausalConv1d(torch.nn.Conv1d):
+    """
+    Conv1d, for streaming ASR. Zero padding is applied only from 'left_context' side.
+    The convolution is causal, i.e. it cannot "peek" into future frames.
+    """
+
     def __init__(self, in_channels, out_channels, kernel_size, stride=1, dilation=1, groups=1, bias=True):
         super().__init__(
             in_channels,
@@ -24,35 +32,36 @@ class CausalConv1d(torch.nn.Conv1d):
 
         self.__padding = (kernel_size - 1) * dilation
 
-    def forward(self, input_tensor: torch.Tensor):
-        return super().forward(F.pad(input_tensor, (self.__padding, 0)))
+    def forward(self, input: torch.Tensor):
+        return super().forward(F.pad(input, (self.__padding, 0)))
 
 
 class CausalConv2d(nn.Conv2d):
-    def __init__(self, in_channels, out_channels, kernel_size, stride=1, padding=None, dilation=1, groups=1, bias=True):
+    """
+    Vanilla Conv2d, subclassed so the name `CausalConv2d` appears in the model.
+    """
+
+    def __init__(self, in_channels, out_channels, kernel_size, stride=1, padding=0, dilation=1, groups=1, bias=True):
         kernel_size = _pair(kernel_size)
         stride = _pair(stride)
         dilation = _pair(dilation)
-        if padding is None:
-            padding = (int((kernel_size[0] - 1) * dilation[0]), padding)
-        else:
-            padding = padding * 2
-        self.left_padding = _pair(padding)
+
+        if len(padding) != 2:  # padding already is _pair()
+            raise ValueError(f"len(padding) must be 2, but we have {len(padding)}")
+
         super().__init__(
             in_channels,
             out_channels,
             kernel_size,
             stride=stride,
-            padding=0,
+            padding=padding,
             dilation=dilation,
             groups=groups,
             bias=bias,
         )
 
-    def forward(self, inputs):
-        inputs = F.pad(inputs, (self.left_padding[1], 0, self.left_padding[0], 0))
-        output = super().forward(inputs)
-        return output
+    def forward(self, input):
+        return self.forward(input)
 
 
 class FeatureExtractorForStreaming(PreTrainedModel):
