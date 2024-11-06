@@ -1,3 +1,5 @@
+# pylint: disable=W0246,W0237
+
 from typing import Optional, Union
 
 import torch
@@ -8,6 +10,11 @@ from transformers import PreTrainedModel
 from transformers.utils import logging
 
 from models.utils import calculate_output_size
+
+"""
+Module with streaming ASR components.
+"""
+
 
 logger = logging.get_logger(__name__)
 
@@ -32,8 +39,8 @@ class CausalConv1d(torch.nn.Conv1d):
 
         self.__padding = (kernel_size - 1) * dilation
 
-    def forward(self, input: torch.Tensor):
-        return super().forward(F.pad(input, (self.__padding, 0)))
+    def forward(self, input_tensor: torch.Tensor):
+        return super().forward(F.pad(input_tensor, (self.__padding, 0)))
 
 
 class CausalConv2d(nn.Conv2d):
@@ -60,8 +67,8 @@ class CausalConv2d(nn.Conv2d):
             bias=bias,
         )
 
-    def forward(self, input):
-        return self.forward(input)
+    def forward(self, input_tensor):
+        return super().forward(input_tensor)
 
 
 class FeatureExtractorForStreaming(PreTrainedModel):
