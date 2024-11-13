@@ -51,6 +51,7 @@ class Wav2Vec2EBranchformerConfig(Wav2Vec2ConformerConfig, Wav2Vec2Config, Custo
         merge_conv_kernel=31,
         use_macaron_ff=True,
         is_causal=False,
+        causal_look_ahead=16,  # for chunk_size == 64
         **kwargs,
     ):
         super().__init__(**kwargs)
@@ -62,6 +63,7 @@ class Wav2Vec2EBranchformerConfig(Wav2Vec2ConformerConfig, Wav2Vec2Config, Custo
         self.merge_conv_kernel = merge_conv_kernel
         self.use_macaron_ff = use_macaron_ff
         self.is_causal = is_causal
+        self.causal_look_ahead = causal_look_ahead
 
 
 class Wav2Vec2EBranchformerSelfAttention(Wav2Vec2ConformerSelfAttention):
@@ -394,8 +396,8 @@ class Wav2Vec2EBranchformerEncoder(Wav2Vec2ConformerEncoder):
         self.pos_conv_embed = None
         self.is_causal = config.is_causal
 
-    def get_causal_mask(self, i, j, device):
-        return torch.ones((i, j), device=device, dtype=torch.bool).triu(j - i + 1)
+    def get_causal_mask(self, i, j, causal_look_ahead, device):
+        return torch.ones((i, j), device=device, dtype=torch.bool).triu(j - i + 1 + causal_look_ahead)
 
     def build_attention_mask(
         self,
@@ -405,6 +407,7 @@ class Wav2Vec2EBranchformerEncoder(Wav2Vec2ConformerEncoder):
         left_context_len: int = 0,
         is_streaming_inference: bool = False,
         mask_out_future: bool = True,
+        causal_look_ahead: int = 16,
     ) -> Tensor:
         """
         build attention mask
@@ -413,8 +416,8 @@ class Wav2Vec2EBranchformerEncoder(Wav2Vec2ConformerEncoder):
                         1.0 for segment frames, 0.0 for padding after segment
 
         we use 3 types:
-        - streaming inference: unlimited access of SelfAttention
-        - training without chunks: causal mask
+        - streaming inference: unlimited access of SelfAttention (inside the chunk)
+        - training without chunks: causal mask with causal_look_ahead (intended size of chunk)
         - training with chunks: block-diagonal mask (small look-ahead, left context)
         """
 
@@ -456,10 +459,10 @@ class Wav2Vec2EBranchformerEncoder(Wav2Vec2ConformerEncoder):
             )
 
             if self.is_causal and mask_out_future:  # seems needed for pre-training ???
-                # TODO: allow look-ahead for the length of longest chunk ?
                 causal_mask = self.get_causal_mask(
                     attention_mask.shape[-1],
                     attention_mask.shape[-1],
+                    causal_look_ahead=causal_look_ahead,
                     device=attention_mask.device,
                 )
                 attention_mask = torch.logical_or(attention_mask, causal_mask)
@@ -533,6 +536,7 @@ class Wav2Vec2EBranchformerEncoder(Wav2Vec2ConformerEncoder):
             left_context_len=left_context_len,
             is_streaming_inference=False,
             mask_out_future=mask_out_future,
+            causal_look_ahead=self.config.causal_look_ahead,
         )
 
         hidden_states = self.dropout(hidden_states)
