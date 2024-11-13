@@ -406,7 +406,6 @@ class Wav2Vec2EBranchformerEncoder(Wav2Vec2ConformerEncoder):
         chunk_size: int = -1,
         left_context_len: int = 0,
         is_streaming_inference: bool = False,
-        mask_out_future: bool = True,
         causal_look_ahead: int = 16,
     ) -> Tensor:
         """
@@ -458,7 +457,7 @@ class Wav2Vec2EBranchformerEncoder(Wav2Vec2ConformerEncoder):
                 attention_mask.shape[0], 1, attention_mask.shape[-1], attention_mask.shape[-1]
             )
 
-            if self.is_causal and mask_out_future:  # seems needed for pre-training ???
+            if self.is_causal:
                 causal_mask = self.get_causal_mask(
                     attention_mask.shape[-1],
                     attention_mask.shape[-1],
@@ -509,7 +508,6 @@ class Wav2Vec2EBranchformerEncoder(Wav2Vec2ConformerEncoder):
         attention_lens: Optional[Tensor] = None,
         chunk_size: int = -1,
         left_context_len: int = 0,
-        mask_out_future: bool = True,
         output_attentions: bool = False,
         output_hidden_states: bool = False,
         return_dict: bool = True,
@@ -535,7 +533,6 @@ class Wav2Vec2EBranchformerEncoder(Wav2Vec2ConformerEncoder):
             chunk_size=chunk_size,
             left_context_len=left_context_len,
             is_streaming_inference=False,
-            mask_out_future=mask_out_future,
             causal_look_ahead=self.config.causal_look_ahead,
         )
 
@@ -757,7 +754,6 @@ class Wav2Vec2EBranchformerModel(CustomFE, Wav2Vec2ConformerModel):
         mask_time_indices: Optional[torch.FloatTensor] = None,
         chunk_size: int = -1,
         left_context_len: int = 0,
-        mask_out_future: bool = True,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
@@ -806,7 +802,6 @@ class Wav2Vec2EBranchformerModel(CustomFE, Wav2Vec2ConformerModel):
             attention_lens=attention_mask,
             chunk_size=chunk_size,
             left_context_len=left_context_len,
-            mask_out_future=mask_out_future,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
