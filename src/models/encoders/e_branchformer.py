@@ -8,7 +8,11 @@ import torch.utils.checkpoint
 from torch import Tensor, nn
 from transformers.activations import ACT2FN
 from transformers.integrations.deepspeed import is_deepspeed_zero3_enabled
-from transformers.modeling_outputs import BaseModelOutput, CausalLMOutput, Wav2Vec2BaseModelOutput
+from transformers.modeling_outputs import (
+    BaseModelOutput,
+    CausalLMOutput,
+    Wav2Vec2BaseModelOutput,
+)
 from transformers.models.wav2vec2.modeling_wav2vec2 import (
     _HIDDEN_STATES_START_POSITION,
     Wav2Vec2Config,
@@ -19,11 +23,7 @@ from transformers.models.wav2vec2.modeling_wav2vec2 import (
 from transformers.models.wav2vec2_conformer.modeling_wav2vec2_conformer import (
     Wav2Vec2ConformerConfig,
     Wav2Vec2ConformerEncoder,
-)
-from transformers.models.wav2vec2_conformer.modeling_wav2vec2_conformer import (
     Wav2Vec2ConformerFeedForward as Wav2Vec2EBranchformerFeedForward,
-)
-from transformers.models.wav2vec2_conformer.modeling_wav2vec2_conformer import (
     Wav2Vec2ConformerModel,
     Wav2Vec2ConformerSelfAttention,
 )
@@ -52,6 +52,7 @@ class Wav2Vec2EBranchformerConfig(Wav2Vec2ConformerConfig, Wav2Vec2Config, Custo
         use_macaron_ff=True,
         is_causal=False,
         causal_look_ahead=16,  # for chunk_size == 64
+        additional_encoder_layer=False,
         **kwargs,
     ):
         super().__init__(**kwargs)
@@ -64,6 +65,7 @@ class Wav2Vec2EBranchformerConfig(Wav2Vec2ConformerConfig, Wav2Vec2Config, Custo
         self.use_macaron_ff = use_macaron_ff
         self.is_causal = is_causal
         self.causal_look_ahead = causal_look_ahead
+        self.additional_encoder_layer = additional_encoder_layer
 
 
 class Wav2Vec2EBranchformerSelfAttention(Wav2Vec2ConformerSelfAttention):
@@ -393,8 +395,18 @@ class Wav2Vec2EBranchformerEncoder(Wav2Vec2ConformerEncoder):
         self.layers = nn.ModuleList(
             [Wav2Vec2EBranchformerEncoderLayer(config) for _ in range(config.num_hidden_layers)]
         )
+
+        if config.additional_encoder_layer:
+            logger.info("Creating `additional_layer`")
+            self.additional_layer = Wav2Vec2EBranchformerEncoderLayer(config)
+
         self.pos_conv_embed = None
         self.is_causal = config.is_causal
+
+    def freeze_encoder(self):
+        for param in self.layers.parameters():
+            param.requires_grad = False
+        # note: keep the `additional_layer` non-frozen
 
     def get_causal_mask(self, i, j, causal_look_ahead, device):
         return torch.ones((i, j), device=device, dtype=torch.bool).triu(j - i + 1 + causal_look_ahead)
@@ -578,6 +590,23 @@ class Wav2Vec2EBranchformerEncoder(Wav2Vec2ConformerEncoder):
             if output_attentions:
                 all_self_attentions = all_self_attentions + (layer_outputs[1],)
 
+        # forward of `additional_encoder_layer`
+        if self.config.additional_encoder_layer:
+            logger.info("Forwarding `additional_layer`")
+            if output_hidden_states:
+                all_hidden_states = all_hidden_states + (hidden_states,)
+
+            layer_outputs = self.additional_layer(
+                hidden_states,
+                attention_mask=attention_mask,
+                relative_position_embeddings=relative_position_embeddings,
+                output_attentions=output_attentions,
+            )
+
+            if output_attentions:
+                all_self_attentions = all_self_attentions + (layer_outputs[1],)
+            hidden_states = layer_outputs[0]
+
         hidden_states = self.layer_norm(hidden_states)
         if output_hidden_states:
             all_hidden_states = all_hidden_states + (hidden_states,)
@@ -746,6 +775,13 @@ class Wav2Vec2EBranchformerModel(CustomFE, Wav2Vec2ConformerModel):
 
         # Initialize weights and apply final processing
         self.post_init()
+
+    def freeze_encoder(self):
+        for param in self.feature_extractor.parameters():
+            param.requires_grad = False
+        for param in self.feature_projection.parameters():
+            param.requires_grad = False
+        self.encoder.freeze_encoder()
 
     def forward(
         self,
