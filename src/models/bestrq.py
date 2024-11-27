@@ -132,9 +132,15 @@ class BestRQModel(nn.Module):
         )
 
         last_hidden_states = outputs[0]
-        probs = torch.stack([classifier(last_hidden_states) for classifier in self.classifiers], dim=1)
-        loss = nn.functional.cross_entropy(probs.flatten(0, 1).transpose(1, 2), targets.flatten(0, 1), reduction="sum")
-        loss /= probs.size(1)
+        logits = torch.stack([classifier(last_hidden_states) for classifier in self.classifiers], dim=1)
+
+        # Step 2: Compute entropy
+        probs = F.softmax(logits.permute(1, 0, 2, 3), dim=-1)
+        probs = probs.mean(dim=1).mean(dim=1)
+        entropy = (-torch.sum(probs * torch.log(probs + 1e-10), dim=-1)).mean()
+
+        loss = nn.functional.cross_entropy(logits.flatten(0, 1).transpose(1, 2), targets.flatten(0, 1), reduction="sum")
+        loss /= logits.size(1)
 
         if not return_dict:
             if loss is not None:
@@ -144,7 +150,7 @@ class BestRQModel(nn.Module):
         return Wav2Vec2ForPreTrainingOutput(
             loss=loss,
             projected_states=last_hidden_states,
-            codevector_perplexity=None,
+            codevector_perplexity=entropy,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
             contrastive_loss=None,
