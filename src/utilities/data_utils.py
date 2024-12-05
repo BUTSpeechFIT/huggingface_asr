@@ -365,7 +365,7 @@ def prepare_dataset(
     if length_column_name is not None:
         feature_types[length_column_name] = Value(dtype="float64", id=None)
     for split in dataset:
-        if dataset[split].features[length_column_name].dtype != "float64":
+        if length_column_name is not None and dataset[split].features[length_column_name].dtype != "float64":
             dataset[split] = distributed_process(
                 dataset[split],
                 process_by="cast",
