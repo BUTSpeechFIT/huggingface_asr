@@ -1,11 +1,10 @@
 [
   {
-    "dataset_name": "/gpfs/projects/ehpc62/bolaji/huggingface_cache/datasets/slurp_asr/",
-    "dataset_id": "slurp",
+    "dataset_name": "/gpfs/projects/ehpc62/bolaji/huggingface_cache/datasets/fisher_context_str",
+    "dataset_id": "fisher",
     "load_from_disk": true,
     "train_splits": [
-      "train",
-      "train_synthetic"
+      "train"
     ],
     "validation_splits": [
       "dev"
@@ -13,11 +12,10 @@
     "test_splits": [
       "test"
     ],
-    "text_column_name": "text",
+    "text_column_name": "labels",
     "audio_column_name": "audio",
-    "length_column_name": "input_len",
+    "length_column_name": "total_len",
     "text_transformations": [
-        "do_lower_case"
     ],
     "additional_args": {
     }
