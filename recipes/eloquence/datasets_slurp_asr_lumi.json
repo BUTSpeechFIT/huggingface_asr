@@ -1,0 +1,25 @@
+[
+  {
+    "dataset_name": "/scratch/project_465000970/bolaji/huggingface_cache/datasets/slurp_asr/",
+    "dataset_id": "slurp",
+    "load_from_disk": true,
+    "train_splits": [
+      "train",
+      "train_synthetic"
+    ],
+    "validation_splits": [
+      "dev"
+    ],
+    "test_splits": [
+      "test"
+    ],
+    "text_column_name": "text",
+    "audio_column_name": "audio",
+    "length_column_name": "input_len",
+    "text_transformations": [
+        "do_lower_case"
+    ],
+    "additional_args": {
+    }
+  }
+]
