@@ -1,6 +1,7 @@
 """Main training script for the encoder -> connector -> decoder-only LM architecture """
 import sys
 
+
 from transformers import (
     AutoFeatureExtractor,
     AutoModelForCausalLM,
@@ -92,6 +93,7 @@ if __name__ == "__main__":
             attn_implementation='flash_attention_2',
         )
         d_model = encoder.config.d_model
+        sample_rate = 100
     elif 'wavlm' in model_args.base_encoder_model:
         encoder = WavLMModelWrapper.from_pretrained(
             model_args.base_encoder_model,
@@ -100,12 +102,14 @@ if __name__ == "__main__":
         encoder.config.apply_spec_augment = False
         encoder.config.layer_to_extract = model_args.layer_to_extract
         d_model = encoder.config.hidden_size
+        sample_rate = 16000
     else:
         raise NotImplementedError('only Whisper and WavLm are supported')
 
     decoder = AutoModelForCausalLM.from_pretrained(
         model_args.base_decoder_model,
         torch_dtype=torch.bfloat16,
+        attn_implementation='flash_attention_2',
     )
 
     # set up lora for the decoder
@@ -143,6 +147,7 @@ if __name__ == "__main__":
                 init_prompt_from_embeds=conn_args.init_prompt_from_embeds,
                 prompt_tuning_prefix_init=conn_args.prompt_tuning_prefix_init,
                 prompt_tuning_suffix_init=conn_args.prompt_tuning_suffix_init,
+                freeze_encoder=model_args.freeze_encoder,
             )
 
     # get the initialization point for the soft prompts if specified so
@@ -157,6 +162,11 @@ if __name__ == "__main__":
         logger.info(f"Loading model from pretrained checkpoint...")
         
         model = SpeechEncoderConnectorLMDecoder.from_pretrained(model_path, config, encoder, decoder, tokenizer)
+
+        if model_args.freeze_encoder:
+            model.freeze_encoder()
+        else:
+            model.unfreeze_encoder()
 
     else:
         model = SpeechEncoderConnectorLMDecoder(encoder=encoder, decoder=decoder, config=apmo_config, freeze_decoder= not conn_args.decoder_lora, tokenizer=tokenizer)
@@ -204,6 +214,7 @@ if __name__ == "__main__":
         prompt_suffix=conn_args.prompt_suffix,
         max_context=data_args.fisher_max_context,
         context_trunc_to_shortest=data_args.fisher_context_trunc_to_shortest,
+        pad_to_multiple_of=int(sample_rate/2),
     )
 
     if gen_args.no_metrics:

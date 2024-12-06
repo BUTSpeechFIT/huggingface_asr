@@ -599,7 +599,6 @@ class GeneralContextCollator:
         else:
             labels_words = [ feature[self.text_path] for feature in features ]
 
-        print(labels_words[0])
 
         with nadd_bos(self.tokenizer):
             labels = self.tokenizer.batch_encode_plus(
@@ -613,7 +612,7 @@ class GeneralContextCollator:
         max_context = self.max_context
         context_words = []
         for feature in features:
-            if feature['context']:
+            if max_context > 0 and feature.get('context'):
                 context_words.append(self.context_prefix + ' '.join([ ' '.join(turn['labels']) for turn in feature['context'][-max_context:]]))
             else:
                 context_words.append(self.context_prefix)

@@ -195,6 +195,10 @@ class SpeechEncoderConnectorLMDecoder(PreTrainedModel):
         for _, param in self.encoder.named_parameters():
             param.requires_grad = False
 
+    def unfreeze_encoder(self):
+        for _, param in self.encoder.named_parameters():
+            param.requires_grad = True
+
     def freeze_decoder(self):
         if not self.freeze_decoder: return
 
