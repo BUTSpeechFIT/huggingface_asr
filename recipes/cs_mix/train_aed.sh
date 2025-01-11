@@ -18,14 +18,6 @@ WORK_DIR="/scratch/${EC_PROJECT}/ipoloka/huggingface_asr"
 RECIPE_DIR="${SRC_DIR}/recipes/cs_mix"
 EXPERIMENT_PATH="${WORK_DIR}/experiments/${EXPERIMENT}"
 
-export HF_HOME="/scratch/project/open-28-57/lakoc/huggingface_cache"
-export PYTHONPATH="${PYTHONPATH}:${WORK_DIR}/src"
-export OMP_NUM_THREADS=64
-export WANDB_PROJECT="${PROJECT}"
-export WANDB_RUN_ID="${EXPERIMENT}"
-export WANDB_ENTITY="butspeechfit"
-
-
 module load LUMI PyTorch/2.2.0-rocm-5.6.1-python-3.10-singularity-20240209
 
 export OMP_NUM_THREADS=64
@@ -34,6 +26,7 @@ export HF_HOME="/flash/${EC_PROJECT}/ipoloka/huggingface_cache"
 export PYTHONPATH="${PYTHONPATH}:${SRC_DIR}/src"
 export WANDB_PROJECT=$PROJECT
 export WANDB_RUN_ID="${EXPERIMENT}"
+export WANDB_ENTITY="butspeechfit"
 
 
 cd $SRC_DIR || exit
@@ -49,12 +42,13 @@ args=(
   --group_by_length="True"
   --do_train
   --load_best_model_at_end
+  --bf16
 
   # Optimizer related arguments
   --optim="adamw_torch"
-  --learning_rate="2e-3"
-  --warmup_steps="5000"
-  --early_stopping_patience="20"
+  --learning_rate=3e-4
+  --warmup_steps=2000
+  --early_stopping_patience=5
   --weight_decay="1e-6"
   --max_grad_norm="1.0"
   --gradient_accumulation_steps="1"
@@ -94,6 +88,7 @@ args=(
   --predict_with_generate
   --decoding_ctc_weight="0"
   --eval_delay=5
+  --test_splits voxpopuli_test cv_test
   )
 
 
