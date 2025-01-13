@@ -78,7 +78,7 @@ args=(
   # Model related arguments
   --base_encoder_model="${SRC_DIR}/cs_model"
   --feature_extractor_name="${SRC_DIR}/cs_model"
-  --tokenizer_name="Lakoc/bpe1000_cz"
+  --tokenizer_name="Lakoc/bpe1000_cz_ec"
   --base_decoder_model="BUT-FIT/gpt2_256h_6l"
   --ctc_weight="0.3"
   --decoder_pos_emb_fixed
