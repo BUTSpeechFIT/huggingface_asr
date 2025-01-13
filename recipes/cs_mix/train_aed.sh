@@ -7,10 +7,10 @@
 #SBATCH --error="outputs/cs_mix/output_%x_%j.err"
 #SBATCH --partition=small-g
 #SBATCH --mem=200G
-#SBATCH --time=2-00:00:00
+#SBATCH --time=3-00:00:00
 
 
-EXPERIMENT="90M_ebranchformer"
+EXPERIMENT="90M_ebranchformer_w_LELD_FT_v2"
 PROJECT="cs_finetune"
 
 SRC_DIR="/project/${EC_PROJECT}/ipoloka/huggingface_asr"
@@ -35,14 +35,13 @@ cd $SRC_DIR || exit
 args=(
   # General training arguments
   --output_dir=$EXPERIMENT_PATH
-  --per_device_train_batch_size="64"
-  --per_device_eval_batch_size="64"
+  --per_device_train_batch_size="32"
+  --per_device_eval_batch_size="32"
   --dataloader_num_workers="4"
   --num_train_epochs="500"
   --group_by_length="True"
   --do_train
   --load_best_model_at_end
-  --bf16
 
   # Optimizer related arguments
   --optim="adamw_torch"
@@ -71,6 +70,7 @@ args=(
   --pad_to_multiples_of="100"
   --datasets_creation_config="${RECIPE_DIR}/data.json"
   --writer_batch_size="50"
+  --mask_unks
 
   # Preprocessing related arguments
   --data_preprocessing_config="${RECIPE_DIR}/data_processing.json"
@@ -78,7 +78,7 @@ args=(
   # Model related arguments
   --base_encoder_model="${SRC_DIR}/cs_model"
   --feature_extractor_name="${SRC_DIR}/cs_model"
-  --tokenizer_name="Lakoc/libri_1000"
+  --tokenizer_name="Lakoc/bpe1000_cz"
   --base_decoder_model="BUT-FIT/gpt2_256h_6l"
   --ctc_weight="0.3"
   --decoder_pos_emb_fixed
@@ -88,7 +88,8 @@ args=(
   --predict_with_generate
   --decoding_ctc_weight="0"
   --eval_delay=5
-  --test_splits voxpopuli_test cv_test
+  --test_splits voxpopuli_test cv_test LELD-CZ_test
+  --do_evaluate
   )
 
 

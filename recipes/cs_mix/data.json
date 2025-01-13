@@ -7,7 +7,6 @@
       "train"
     ],
     "validation_splits": [
-      "validation"
     ],
     "test_splits": [
       "test"
@@ -19,13 +18,14 @@
     "length_column_name": "input_len",
     "text_transformations": [
       "remove_punctuation",
-      "do_lower_case"
+      "do_lower_case",
+      "remove_multiple_whitespaces_and_strip"
     ],
     "additional_args": {
       "name": "cs"
     }
   },
-    {
+  {
     "dataset_name": "mozilla-foundation/common_voice_16_1",
     "dataset_id": "cv",
     "load_from_disk": false,
@@ -34,7 +34,6 @@
       "other"
     ],
     "validation_splits": [
-      "validation"
     ],
     "test_splits": [
       "test"
@@ -46,10 +45,56 @@
     "length_column_name": "input_len",
     "text_transformations": [
       "remove_punctuation",
-      "do_lower_case"
+      "do_lower_case",
+      "remove_multiple_whitespaces_and_strip"
     ],
     "additional_args": {
       "name": "cs"
     }
+  },
+  {
+    "dataset_name": "/scratch/project_465000836/data/LELD-CZ_v02_nounk/",
+    "dataset_id": "LELD-CZ",
+    "load_from_disk": true,
+    "train_splits": [
+      "train"
+    ],
+    "validation_splits": [
+      "dev"
+    ],
+    "test_splits": [
+      "test"
+    ],
+    "additional_args": {},
+    "text_column_name": "labels",
+    "audio_column_name": "audio",
+    "length_column_name": "input_len",
+    "text_transformations": [
+      "transforms_unfinished_words_to_unks_train",
+      "remove_punctuation",
+      "do_lower_case",
+      "remove_multiple_whitespaces_and_strip"
+    ]
+  },
+  {
+    "dataset_name": "/scratch/project_465000836/data/LELD-CZ_v02_nounk_02/",
+    "dataset_id": "LELD-CZ-02",
+    "load_from_disk": true,
+    "train_splits": [
+      "train"
+    ],
+    "validation_splits": [
+    ],
+    "test_splits": [
+    ],
+    "additional_args": {},
+    "text_column_name": "labels",
+    "audio_column_name": "audio",
+    "length_column_name": "input_len",
+    "text_transformations": [
+      "remove_punctuation",
+      "do_lower_case",
+      "remove_multiple_whitespaces_and_strip"
+    ]
   }
 ]
