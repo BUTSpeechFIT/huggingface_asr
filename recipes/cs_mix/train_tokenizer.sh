@@ -39,7 +39,7 @@ args=(
   --remove_unused_columns="False"
   --preprocessing_num_workers="16"
   --pad_to_multiples_of="100"
-  --datasets_creation_config="${RECIPE_DIR}/data.json"
+  --datasets_creation_config="${RECIPE_DIR}/data_tokenizer.json"
   --writer_batch_size="50"
 
   # Tokenizer related arguments
