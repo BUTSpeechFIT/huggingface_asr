@@ -645,6 +645,24 @@ def get_dataset(
             max_shard_size=data_args.dataset_shard_size,
         )
 
+    if data_args.limit_training_dataset_time is not None:
+        dataset_train_shuffled = dataset["train"].shuffle(seed=data_args.limit_training_dataset_rndseed)
+
+        selected_samples = []
+        total_duration = 0
+
+        for i, sample in enumerate(dataset_train_shuffled):
+            if total_duration + sample[len_column] <= data_args.limit_training_dataset_time :
+                selected_samples.append(i)
+                total_duration += sample[len_column]
+            else:
+                break
+
+        dataset["train"] = dataset_train_shuffled.select(selected_samples)
+
+        logger.info("Training dataset size limited to {total_duration} seconds -> {total_duration/3600} hours.")
+
+
     train_eval_dataset = get_eval_dataset(
         dataset,
         data_args.train_split,

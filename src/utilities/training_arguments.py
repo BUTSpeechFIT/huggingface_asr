@@ -237,6 +237,16 @@ class DataTrainingArguments:
         default=True, metadata={"help": "Whether to merge validation splits."}
     )
     do_resample: Optional[bool] = field(default=False, metadata={"help": "Whether to resample audio files."})
+    data_mvn_samples_size: Optional[int] = field(
+        default=-1, metadata={"help": "Amount of data samples used for mean and variance normalization statistices. -1 means all. Other value means random sampling."}
+    )
+    limit_training_dataset_time: Optional[int] = field(
+        default=None, metadata={"help": "Set number of seconds to which limit the training dataset (random selection of samples)."}
+    )
+    limit_training_dataset_rndseed: Optional[int] = field(
+        default=42, metadata={"help": "Random seed for the selection of samples."}
+    )
+
 
 
 @dataclass
