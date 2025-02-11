@@ -22,29 +22,12 @@ from transformers.utils import logging
 
 from decoding.config import GenerationConfigCustom
 from models.auto_wrappers import CustomModelForCausalLM
-from models.bestrq import (
-    BestRQEBranchformerForCTC,
-    BestRQEBranchformerForPreTraining,
-    BestRQEBranchformerForPreTrainingConfig,
-)
 from models.ctc_encoder_plus_autoregressive_decoder import (
     JointCTCAttentionEncoderDecoder,
     JointCTCAttentionEncoderDecoderConfig,
 )
-from models.decoders.multi_head_gpt2 import GPT2LMMultiHeadModel, GPT2MultiHeadConfig
-from models.decoders.multi_head_gpt2_mixing import (
-    GPT2LMMultiHeadModelMixing,
-    GPT2MultiHeadMixingConfig,
-)
-from models.decoders.residual_clasiffier_gpt2 import (
-    GPT2ResidualsLMHeadConfig,
-    GPT2ResidualsLMHeadModel,
-)
-from models.encoders.e_branchformer import (
-    Wav2Vec2EBranchformerConfig,
-    Wav2Vec2EBranchformerForCTC,
-    Wav2Vec2EBranchformerForPreTraining,
-)
+from models.decoders.multi_head_gpt2 import GPT2LMMultiHeadModel
+from models.decoders.multi_head_gpt2_mixing import GPT2MultiHeadMixingConfig
 from utilities.general_utils import average_dicts
 from utilities.training_arguments import ModelArguments
 
@@ -231,6 +214,10 @@ def instantiate_speech_encoder_model(
     if model_args.from_pretrained:
         config = AutoConfig.from_pretrained(model_args.from_pretrained)
         config.update(base_model_config)
+        if model_args.config_overrides is not None:
+            logger.info(f"Overriding config: {model_args.config_overrides}")
+            parsed_dict = dict(x.split("=") for x in model_args.config_overrides.split(","))
+            config.update(parsed_dict)
         model_path = model_args.from_pretrained
         if model_args.average_checkpoints:
             model_path = average_checkpoints(model_path)
