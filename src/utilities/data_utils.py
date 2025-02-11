@@ -146,6 +146,20 @@ def filter_empty_transcriptions(example: str) -> bool:
     return example != ""
 
 
+def filter_non_czech_sentences(example: str) -> bool:
+    """
+    Checks if the input string contains only Czech characters, numbers, spaces,
+    or basic Latin letters. Returns True if valid, False otherwise.
+
+    :param example: The input string to check.
+    :return: True if the string contains only valid characters, False otherwise.
+    """
+    # Define the regex pattern for valid Czech characters, numbers, and spaces
+    czech_pattern = r"^[áčďéěíňóřšťúůýžÁČĎÉĚÍŇÓŘŠŤÚŮÝŽa-zA-Z0-9\s]*$"
+
+    # Match the entire string against the pattern
+    return bool(re.fullmatch(czech_pattern, example))
+
 def filter_tedlium_empty_labels(example: str) -> bool:
     """Filters out empty transcriptions."""
     return example != "ignore_time_segment_in_scoring"

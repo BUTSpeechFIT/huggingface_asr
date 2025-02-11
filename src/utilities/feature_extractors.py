@@ -58,4 +58,35 @@ class CustomFeatureExtractor(Speech2TextFeatureExtractor):
 
         if self.norm_type == "global":
             batch["input_features"] = self.global_normalize(batch.get("input_features"))
+
         return batch
+
+
+
+class CustomFeatureExtractorForPipeline(CustomFeatureExtractor):
+    """Custom Feature Extractor for Speech2Text model for transformers pipeline"""
+
+    def __init__(
+        self,
+        *args,
+        **kwargs,
+    ):
+        super().__init__(
+            *args,
+            **kwargs,
+        )
+
+
+    def __call__(
+        self,
+        *args,
+        **kwargs,
+    ) -> BatchFeature:
+        # Extract features from the example
+        batch = super().__call__(*args, **kwargs)
+        batch["input_values"] = batch.get("input_features").float()
+        batch.pop("input_features")
+        return batch
+
+
+

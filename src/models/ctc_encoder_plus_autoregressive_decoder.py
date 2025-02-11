@@ -222,8 +222,12 @@ class JointCTCAttentionEncoderDecoder(SpeechEncoderDecoderModel):
                     "passed to `.from_encoder_decoder_pretrained(...)` are set to `True` or do not pass a "
                     "`decoder_config` to `.from_encoder_decoder_pretrained(...)`"
                 )
-
-            decoder = CustomModelForCausalLM.from_pretrained(decoder_pretrained_model_name_or_path, **kwargs_decoder)
+            try:
+                decoder = CustomModelForCausalLM.from_pretrained(decoder_pretrained_model_name_or_path, **kwargs_decoder)
+            except Exception as e:
+                logger.warning(f"Could not load decoder from {decoder_pretrained_model_name_or_path}. {e}")
+                logger.warning("Initializing a new decoder model.")
+                decoder = CustomModelForCausalLM.from_config(decoder_config)
 
         # instantiate config with corresponding kwargs
         config = JointCTCAttentionEncoderDecoderConfig.from_encoder_decoder_configs(
@@ -319,7 +323,7 @@ class JointCTCAttentionEncoderDecoder(SpeechEncoderDecoderModel):
             use_cache=use_cache,
             past_key_values=past_key_values,
             return_dict=return_dict,
-            labels=labels if is_custom_decoder else None,
+            labels=decoder_input_ids if is_custom_decoder else None,
             **kwargs_decoder,
         )
 
