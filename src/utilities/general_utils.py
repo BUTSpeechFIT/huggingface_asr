@@ -554,3 +554,11 @@ def do_generate_woz_batched(
             # save the file
             with open(f"{training_args.output_dir}/" f'predictions_{json_errors}err_{split}_states.json', 'w') as f:
                 json.dump(jga_json, f, indent=4)
+
+        # delete the objects to avoid memory errors
+        accelerator.wait_for_everyone()
+        del predictions
+        if accelerator.is_main_process:
+            del predictions_all
+        del test_split
+        del data_loader

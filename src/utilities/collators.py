@@ -1138,6 +1138,7 @@ class WOZCollator:
     model_input_name: Optional[str] = None
     prompt_prefix: Optional[str] = 'Given the following user input speech utterance and the user input history, transcribe the utterance and infer the dialogue state domains and slots in JSON format: '
     prompt_suffix: Optional[str] = None
+    use_agent_history: Optional[bool] = False
 
     def __call__(
         self, features: List[Dict[str, Union[List[int], torch.Tensor, Dict[str, BatchFeature]]]]
@@ -1151,8 +1152,16 @@ class WOZCollator:
 
         labels_text = [ feature[self.text_path] for feature in features ]
         histories = []
-        for feature in features:
-            histories.append(' '.join(feature['context']['text'])) # TODO is this correct?
+        if self.use_agent_history:
+            for feature in features:
+                h = []
+                for u, a in zip(feature['context']['text'], feature['context']['agent_text']):
+                    h.append("USER: " + u + " AGENT:" + a)
+                histories.append(' '.join(h))
+
+        else:
+            for feature in features:
+                histories.append(' '.join(feature['context']['text']))
 
         slots = [ ast.literal_eval(feature['slots']) for feature in features ]
         domains = [ ast.literal_eval(feature['domains']) for feature in features ]

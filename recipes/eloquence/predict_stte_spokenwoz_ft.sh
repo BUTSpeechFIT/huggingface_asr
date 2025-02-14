@@ -79,7 +79,8 @@ args=(
   --validation_split dev
   #--test_splits sa_multiwoz_test #dev spokenwoz_test sa_multiwoz_test
   #--test_splits spokenwoz_test dev
-  --test_splits spokenwoz_test spokenwoz_dev sa_multiwoz_test
+  #--test_splits spokenwoz_test spokenwoz_dev sa_multiwoz_test
+  --test_splits sa_multiwoz_test
   --do_not_remove_columns audio wav_id turn_index text agent_text domains slots context 
 
   --slurp_dump_pred
@@ -122,7 +123,7 @@ args=(
 
   # Generation related arguments
   --num_beams="2"
-  --max_new_tokens=300
+  --max_new_tokens=400
   --predict_with_generate
   #--no_metrics
 )

@@ -20,7 +20,7 @@ class SpeechAwareMultiWOZ(datasets.GeneratorBasedBuilder):
                  splits: Optional[List[str]] = [],
                  title_case_slots: Optional[bool] = True,
                  **kwargs):
-        self.splits = splits if splits else ['dev', 'train']
+        self.splits = splits if splits else ['test_verbatim', 'test_paraphrased', 'dev', 'train' ]
         self.data_dir = data_dir
         self.title_case_slots = title_case_slots
         super().__init__(data_dir=data_dir, **kwargs)
@@ -61,8 +61,14 @@ class SpeechAwareMultiWOZ(datasets.GeneratorBasedBuilder):
         return splits
 
     def _fetch_split_meta(self, split: str):
+        if split == 'test_verbatim':
+            file_path = str(self.data_dir) + f'/test_verbatim_v2.json'
+        elif split == 'test_paraphrased':
+            file_path = str(self.data_dir) + f'/test_paraphrase_v2.json'
+        else:
+            file_path = str(self.data_dir) + f'/{split}_punct_v2.json'
 
-        with open(str(self.data_dir) + f'/{split}_punct_v2.json') as json_file:
+        with open(file_path) as json_file:
             conversations = [ json.loads(line) for line in json_file ]
 
         return {
@@ -87,7 +93,10 @@ class SpeechAwareMultiWOZ(datasets.GeneratorBasedBuilder):
                 if i % 2 == 1: continue
 
                 # make radom choice between the audio files
-                audio_file = random.choice(turn['audio'][0])
+                if type(turn['audio'][0]) is str:
+                    audio_file = turn['audio'][0]
+                else:
+                    audio_file = random.choice(turn['audio'][0])
                 audio, sr = torchaudio.load(audio_file)
                 audio = torchaudio.functional.resample(audio, orig_freq=sr, new_freq=16000)[0]
 

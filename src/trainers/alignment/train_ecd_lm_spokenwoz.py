@@ -284,6 +284,7 @@ if __name__ == "__main__":
         )
     # 10. N-best generation
     if training_args.do_generate:
+        dataset = dataset.pop('train')
         do_generate_woz_batched(
             trainer=trainer,
             dataset=dataset,

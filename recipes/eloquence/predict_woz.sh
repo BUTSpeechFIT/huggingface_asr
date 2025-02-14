@@ -1,13 +1,13 @@
 #!/bin/bash
-#$ -N predict_spokenwoz_multiwoz_nolora
-#$ -q long.q@supergpu*
+#$ -N predict_spokenwoz_multiwoz_nolora_400
+#$ -q all.q@supergpu*
 #$ -l ram_free=40G,mem_free=40G
 #$ -l matylda6=0.5,scratch=0.5
 #$ -l gpu=4,gpu_ram=16G
-#$ -o /mnt/matylda6/isedlacek/projects/job_logs/eloquence/dst/predict_spokenwoz_multiwoz_nolora.o
-#$ -e /mnt/matylda6/isedlacek/projects/job_logs/eloquence/dst/predict_spokenwoz_multiwoz_nolora.e
+#$ -o /mnt/matylda6/isedlacek/projects/job_logs/eloquence/dst/predict_spokenwoz_multiwoz_nolora_400.o
+#$ -e /mnt/matylda6/isedlacek/projects/job_logs/eloquence/dst/predict_spokenwoz_multiwoz_nolora_400.e
 N_GPUS=4
-EXPERIMENT="predict_spokenwoz_multiwoz_nolora"
+EXPERIMENT="predict_spokenwoz_multiwoz_nolora_400"
 
 # Job should finish in about 2 days
 ulimit -t 200000
@@ -77,6 +77,7 @@ args=(
   --collator_rename_features="False"
   --validation_split dev
   --test_splits spokenwoz_test spokenwoz_dev sa_multiwoz_test
+  #--test_splits spokenwoz_dev sa_multiwoz_test
   --do_not_remove_columns audio wav_id turn_index text agent_text domains slots context 
 
   --slurp_dump_pred
@@ -120,7 +121,7 @@ args=(
 
   # Generation related arguments
   --num_beams="2"
-  --max_new_tokens=200
+  --max_new_tokens=400
   --predict_with_generate
   #--no_metrics
 )

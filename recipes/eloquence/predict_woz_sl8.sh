@@ -1,13 +1,13 @@
 #!/bin/bash
-#$ -N spokenwoz_lora_8
-#$ -q long.q@supergpu*
+#$ -N predict_spokenwoz_lora_8
+#$ -q all.q@supergpu*
 #$ -l ram_free=40G,mem_free=40G
 #$ -l matylda6=0.5,scratch=0.5
-#$ -l gpu=2,gpu_ram=20G
-#$ -o /mnt/matylda6/isedlacek/projects/job_logs/eloquence/dst/spokenwoz_lora_8.o
-#$ -e /mnt/matylda6/isedlacek/projects/job_logs/eloquence/dst/spokenwoz_lora_8.e
-N_GPUS=2
-EXPERIMENT="spokenwoz_lora_8"
+#$ -l gpu=4,gpu_ram=16G
+#$ -o /mnt/matylda6/isedlacek/projects/job_logs/eloquence/dst/predict_spokenwoz_lora_8.o
+#$ -e /mnt/matylda6/isedlacek/projects/job_logs/eloquence/dst/predict_spokenwoz_lora_8.e
+N_GPUS=4
+EXPERIMENT="predict_spokenwoz_lora_8"
 
 # Job should finish in about 2 days
 ulimit -t 200000
@@ -33,8 +33,9 @@ RECIPE_DIR="${WORK_DIR}/recipes/eloquence"
 #DATASETS="${RECIPE_DIR}/datasets_fisher_ctx.json"
 #DATASETS="${RECIPE_DIR}/datasets_slurp.json"
 #DATASETS="${RECIPE_DIR}/datasets_spokenwoz_whisper.json"
+DATASETS="${RECIPE_DIR}/datasets_woz_eval.json"
 #DATASETS="${RECIPE_DIR}/datasets_woz.json"
-DATASETS="${RECIPE_DIR}/datasets_spokenwoz.json"
+#DATASETS="${RECIPE_DIR}/datasets_spokenwoz.json"
 #DATASETS="${RECIPE_DIR}/datasets_multiwoz.json"
 
 cd $WORK_DIR || {
@@ -62,7 +63,7 @@ args=(
   # General training arguments
   --output_dir=$EXPERIMENT_PATH
   --per_device_train_batch_size="6" # 20
-  --per_device_eval_batch_size="6" # 24
+  --per_device_eval_batch_size="4" # 24
   --dataloader_num_workers="4"
   #--num_train_epochs="14"
   --max_steps="50000"
@@ -70,7 +71,6 @@ args=(
   --length_column_name="turn_index"
   --bf16
   --bf16_full_eval
-  --do_train
   --do_generate
   --load_best_model_at_end
   --qformer_eval_callback
@@ -108,7 +108,7 @@ args=(
   --writer_batch_size="200" # 1000
   --collator_rename_features="False"
   --validation_split dev
-  --test_splits dev spokenwoz_test
+  --test_splits spokenwoz_test spokenwoz_dev sa_multiwoz_test
   --do_not_remove_columns audio wav_id turn_index text agent_text domains slots context 
 
   --slurp_dump_pred
@@ -121,11 +121,13 @@ args=(
   #--from_pretrained=""
   #--restart_from="/mnt/matylda6/isedlacek/projects/huggingface_asr/exp/wsm_olmo1b_stte_w2000_libri_how2/checkpoint-16000/"
   #--from_pretrained="/mnt/matylda5/iyusuf/exps/eloquence/ehpc_62_dump/bolaji/exp/wll_olmo1b_general_context_asr_fisher_libri_how2_train_enc_context0_labels_nostr/checkpoint-38000"
-  --from_pretrained="/mnt/scratch/tmp/isedlacek/models/phase1_ft_nc" # base connector
+  #--from_pretrained="/mnt/scratch/tmp/isedlacek/models/phase1_ft_nc" # base connector
   #--from_pretrained="/mnt/matylda6/isedlacek/projects/huggingface_asr/exp/spokenwoz_ft_single/checkpoint-12000"
   #--restart_from="/mnt/matylda6/isedlacek/projects/huggingface_asr/exp/spokenwoz_ft_original_tr/checkpoint-6000"
   # latest qlogin /mnt/matylda6/isedlacek/projects/huggingface_asr/exp/test/checkpoint-8000
   #--restart_from="/mnt/matylda6/isedlacek/projects/huggingface_asr/exp/multiwoz_only/checkpoint-4000"
+  --from_pretrained="/mnt/matylda6/isedlacek/projects/huggingface_asr/exp/spokenwoz_lora_8/checkpoint-12000"
+  --decoder_lora
 
   #--feature_extractor_name="pirxus/features_fbank_80"
   #--base_encoder_model="BUT-FIT/EBranchRegulaFormer-medium"
@@ -155,9 +157,8 @@ args=(
 
   # Generation related arguments
   --num_beams="2"
-  --max_new_tokens=200
+  --max_new_tokens=400
   --predict_with_generate
-  --no_metrics
 )
 
 echo "Running training.."
