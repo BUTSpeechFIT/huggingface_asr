@@ -279,6 +279,9 @@ class DataTrainingArguments:
     do_not_remove_columns: Optional[List[str]] = field(
         default=None, metadata={"help": "List of column names to keep in the merged dataset."}
     )
+    woz_use_agent_history: Optional[bool] = field(
+        default=False, metadata={"help": "Whether to use agent history in dialogue datasets."}
+    )
 
 
 

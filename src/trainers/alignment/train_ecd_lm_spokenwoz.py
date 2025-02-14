@@ -201,7 +201,7 @@ if __name__ == "__main__":
         config = AlignmentConfig.from_pretrained(model_path)
         logger.info(f"Loading model from pretrained checkpoint...")
         
-        model = TMPSpeechEncoderConnectorLMDecoder.from_pretrained(model_path, config, encoder, decoder, tokenizer)
+        model = TMPSpeechEncoderConnectorLMDecoder.from_pretrained(model_path, config, encoder, decoder, not conn_args.decoder_lora, tokenizer)
 
         if model_args.freeze_encoder:
             model.freeze_encoder()
@@ -247,6 +247,7 @@ if __name__ == "__main__":
         text_path=data_args.text_column_name,
         model_input_name=model.main_input_name,
         prompt_prefix=conn_args.prompt_prefix,
+        use_agent_history=data_args.woz_use_agent_history,
     )
 
     if gen_args.no_metrics:
@@ -284,7 +285,6 @@ if __name__ == "__main__":
         )
     # 10. N-best generation
     if training_args.do_generate:
-        dataset = dataset.pop('train')
         do_generate_woz_batched(
             trainer=trainer,
             dataset=dataset,
@@ -295,6 +295,7 @@ if __name__ == "__main__":
             training_args=training_args,
             gen_config=gen_config,
             collator=data_collator,
+            woz_use_agent_history=data_args.woz_use_agent_history,
         )
     if training_args.do_generate_sequential:
         do_generate_woz(

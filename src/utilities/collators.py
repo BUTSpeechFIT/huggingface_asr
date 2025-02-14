@@ -1156,9 +1156,8 @@ class WOZCollator:
             for feature in features:
                 h = []
                 for u, a in zip(feature['context']['text'], feature['context']['agent_text']):
-                    h.append("USER: " + u + " AGENT:" + a)
+                    h.append("USER: " + u + " AGENT: " + a)
                 histories.append(' '.join(h))
-
         else:
             for feature in features:
                 histories.append(' '.join(feature['context']['text']))

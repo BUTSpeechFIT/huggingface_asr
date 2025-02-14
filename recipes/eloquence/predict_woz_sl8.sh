@@ -108,7 +108,8 @@ args=(
   --writer_batch_size="200" # 1000
   --collator_rename_features="False"
   --validation_split dev
-  --test_splits spokenwoz_test spokenwoz_dev sa_multiwoz_test
+  #--test_splits spokenwoz_test spokenwoz_dev sa_multiwoz_test
+  --test_splits sa_multiwoz_test spokenwoz_dev 
   --do_not_remove_columns audio wav_id turn_index text agent_text domains slots context 
 
   --slurp_dump_pred

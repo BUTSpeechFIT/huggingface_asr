@@ -388,6 +388,7 @@ def do_generate_woz_batched(
     training_args: GeneralTrainingArguments,
     gen_config: GenerationConfig,
     collator: WOZCollator,
+    woz_use_agent_history: bool = False,
 ):
     if data_args.test_splits is None:
         return

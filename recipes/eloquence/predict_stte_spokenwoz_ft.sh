@@ -1,13 +1,13 @@
 #!/bin/bash
-#$ -N predict_spokenwoz_multiwoz_lora
-#$ -q all.q@supergpu*
+#$ -N predict_spokenwoz_multiwoz_lora_b10
+#$ -q long.q@supergpu*
 #$ -l ram_free=40G,mem_free=40G
 #$ -l matylda6=0.5,scratch=0.5
 #$ -l gpu=4,gpu_ram=16G
-#$ -o /mnt/matylda6/isedlacek/projects/job_logs/eloquence/dst/predict_spokenwoz_multiwoz_lora.o
-#$ -e /mnt/matylda6/isedlacek/projects/job_logs/eloquence/dst/predict_spokenwoz_multiwoz_lora.e
+#$ -o /mnt/matylda6/isedlacek/projects/job_logs/eloquence/dst/predict_spokenwoz_multiwoz_lora_b10.o
+#$ -e /mnt/matylda6/isedlacek/projects/job_logs/eloquence/dst/predict_spokenwoz_multiwoz_lora_b10.e
 N_GPUS=4
-EXPERIMENT="predict_spokenwoz_multiwoz_lora"
+EXPERIMENT="predict_spokenwoz_multiwoz_lora_b10"
 
 # Job should finish in about 2 days
 ulimit -t 200000
@@ -57,7 +57,7 @@ args=(
   # General training arguments
   --output_dir=$EXPERIMENT_PATH
   --per_device_train_batch_size="12" # 20
-  --per_device_eval_batch_size="4" # 24
+  --per_device_eval_batch_size="2" # 24
   --dataloader_num_workers="4"
   --group_by_length="True"
   --length_column_name="turn_index"
@@ -80,7 +80,7 @@ args=(
   #--test_splits sa_multiwoz_test #dev spokenwoz_test sa_multiwoz_test
   #--test_splits spokenwoz_test dev
   #--test_splits spokenwoz_test spokenwoz_dev sa_multiwoz_test
-  --test_splits sa_multiwoz_test
+  --test_splits spokenwoz_test
   --do_not_remove_columns audio wav_id turn_index text agent_text domains slots context 
 
   --slurp_dump_pred
@@ -122,7 +122,7 @@ args=(
   --qf_intermediate_size=4096
 
   # Generation related arguments
-  --num_beams="2"
+  --num_beams="10"
   --max_new_tokens=400
   --predict_with_generate
   #--no_metrics
