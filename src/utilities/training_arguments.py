@@ -74,6 +74,7 @@ class GeneralTrainingArguments(Seq2SeqTrainingArguments):
     do_train: Optional[bool] = field(default=False, metadata={"help": "Whether to run training."})
     do_evaluate: Optional[bool] = field(default=False, metadata={"help": "Whether to run evaluation."})
     do_generate: Optional[bool] = field(default=False, metadata={"help": "Whether to run generation."})
+    do_generate_sequential: Optional[bool] = field(default=False, metadata={"help": "Whether to run generation for DST in sequential fashion."})
     restart_from: Optional[str] = field(
         default="", metadata={"help": "Path to checkpoint used to restart the training."}
     )
@@ -220,6 +221,10 @@ class DataTrainingArguments:
         default="text",
         metadata={"help": "The name of the dataset column containing the text data. Defaults to 'text'"},
     )
+    context_text_column_name: Optional[str] = field(
+        default="text",
+        metadata={"help": "The name of the dataset column containing the text data for datasets utilizing context. Defaults to 'text'. Currently only works when using a single dataset."},
+    )
     train_split: Optional[str] = field(default="train", metadata={"help": "Training split to be used."})
     validation_split: Optional[str] = field(default="validation", metadata={"help": "Validation split to be used."})
     test_splits: Optional[List[str]] = field(default=None, metadata={"help": "Splits to use for evaluation."})
@@ -270,6 +275,9 @@ class DataTrainingArguments:
     )
     slurp_dump_pred: Optional[bool] = field(
         default=False, metadata={"help": "Whether to dump all predictions into the wandb file.."}
+    )
+    do_not_remove_columns: Optional[List[str]] = field(
+        default=None, metadata={"help": "List of column names to keep in the merged dataset."}
     )
 
 

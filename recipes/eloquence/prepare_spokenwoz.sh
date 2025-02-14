@@ -1,11 +1,11 @@
 #!/bin/bash
-#$ -N spokenwoz_prep
-#$ -q all.q@supergpu*
+#$ -N spokenwoz_prep_collated_whisper2
+#$ -q all.q@supergpu17
 #$ -l ram_free=40G,mem_free=40G
 #$ -l matylda4=0.5,scratch=1,matylda6=0.5
-#$ -o /mnt/matylda6/isedlacek/projects/job_logs/spokenwoz_prep.o
-#$ -e /mnt/matylda6/isedlacek/projects/job_logs/spokenwoz_prep.e
-EXPERIMENT="spokenwoz_prep"
+#$ -o /mnt/matylda6/isedlacek/projects/job_logs/spokenwoz_prep_collated_whisper2.o
+#$ -e /mnt/matylda6/isedlacek/projects/job_logs/spokenwoz_prep_collated_whisper2.e
+EXPERIMENT="spokenwoz_prep_collated_whisper2"
 
 # Job should finish in about 1 days
 ulimit -t 100000
@@ -24,9 +24,7 @@ unset PYTHONHOME
 source /mnt/matylda6/isedlacek/miniconda3/bin/activate /mnt/matylda6/isedlacek/envs/huggingface_asr
 
 WORK_DIR="/mnt/matylda6/isedlacek/projects/huggingface_asr"
-EXPERIMENT_PATH="${WORK_DIR}/exp/${EXPERIMENT}"
 RECIPE_DIR="${WORK_DIR}/recipes/eloquence"
-DATASETS="${RECIPE_DIR}/datasets_fisher.json"
 
 cd $WORK_DIR || {
   echo "No such directory $WORK_DIR"

@@ -1,0 +1,44 @@
+[
+  {
+    "dataset_name": "/mnt/scratch/tmp/isedlacek/data/spokenwoz",
+    "dataset_id": "spokenwoz",
+    "load_from_disk": true,
+    "train_splits": [
+      "train"
+    ],
+    "validation_splits": [
+    ],
+    "test_splits": [
+      "dev",
+      "test"
+    ],
+    "text_column_name": "text",
+    "audio_column_name": "audio",
+    "length_column_name": "turn_index",
+    "text_transformations": [
+    ],
+    "additional_args": {
+    }
+  },
+  {
+    "dataset_name": "/mnt/scratch/tmp/isedlacek/data/sa_multiwoz_dev_copy",
+    "dataset_id": "sa_multiwoz",
+    "load_from_disk": true,
+    "train_splits": [
+      "train"
+    ],
+    "validation_splits": [
+      "dev"
+    ],
+    "test_splits": [
+      "test"
+    ],
+    "text_column_name": "text",
+    "audio_column_name": "audio",
+    "length_column_name": "turn_index",
+    "text_transformations": [
+    ],
+    "additional_args": {
+    }
+  }
+]

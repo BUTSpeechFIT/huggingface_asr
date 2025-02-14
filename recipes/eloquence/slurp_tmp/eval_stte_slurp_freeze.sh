@@ -1,13 +1,13 @@
 #!/bin/bash
-#$ -N wlml_stte_olmo1b_slurp_asr_slots
-#$ -q long.q@supergpu*
+#$ -N eval_bolaji_slurp_freeze_10
+#$ -q all.q@supergpu*
 #$ -l ram_free=40G,mem_free=40G
-#$ -l matylda6=0.5,scratch=0.2
+#$ -l matylda6=0.5,matylda5=0.1,scratch=0.2
 #$ -l gpu=1,gpu_ram=20G
-#$ -o /mnt/matylda6/isedlacek/projects/job_logs/eloquence/wlml_stte_olmo1b_slurp_asr_slots.o
-#$ -e /mnt/matylda6/isedlacek/projects/job_logs/eloquence/wlml_stte_olmo1b_slurp_asr_slots.e
+#$ -o /mnt/matylda6/isedlacek/projects/job_logs/eloquence/eval_bolaji_slurp_freeze_10.o
+#$ -e /mnt/matylda6/isedlacek/projects/job_logs/eloquence/eval_bolaji_slurp_freeze_10.e
 N_GPUS=1
-EXPERIMENT="wlml_stte_olmo1b_slurp_asr_slots"
+EXPERIMENT="eval_bolaji_slurp_freeze_10"
 
 # Job should finish in about 2 days
 ulimit -t 200000
@@ -32,7 +32,6 @@ RECIPE_DIR="${WORK_DIR}/recipes/eloquence"
 #DATASETS="${RECIPE_DIR}/datasets_how2.json"
 #DATASETS="${RECIPE_DIR}/datasets_fisher_ctx.json"
 DATASETS="${RECIPE_DIR}/datasets_slurp.json"
-
 
 cd $WORK_DIR || {
   echo "No such directory $WORK_DIR"
@@ -66,7 +65,7 @@ args=(
   --group_by_length="True"
   --bf16
   --bf16_full_eval
-  --do_train
+  #--do_train
   --do_evaluate
   --load_best_model_at_end
   --qformer_eval_callback
@@ -103,7 +102,7 @@ args=(
   --writer_batch_size="200" # 1000
   --collator_rename_features="False"
   --validation_split dev
-  --test_splits dev slurp_test
+  --test_splits slurp_test
 
   --slurp_use_slots
   --slurp_dump_pred
@@ -115,8 +114,9 @@ args=(
   # Model related arguments
   #--from_pretrained=""
   #--restart_from="/mnt/matylda6/isedlacek/projects/huggingface_asr/exp/wsm_olmo1b_stte_w2000_libri_how2/checkpoint-16000/"
-  #--from_pretrained="/mnt/matylda6/isedlacek/projects/huggingface_asr/exp/wlml_stte_olmo1b_context_turns_fixed/checkpoint-40000"
-  --from_pretrained=""
+  #--from_pretrained="/mnt/matylda5/iyusuf/exps/eloquence/ehpc_62_dump/bolaji/exp/wll_olmo1b_general_context_asr_fisher_libri_how2_train_enc_context0_labels_nostr/checkpoint-38000"
+  #--from_pretrained="/mnt/matylda6/isedlacek/projects/huggingface_asr/exp/bolaji_slurp_ft/checkpoint-7000"
+  --from_pretrained="/mnt/matylda6/isedlacek/projects/huggingface_asr/exp/bolaji_slurp_freeze/checkpoint-4000"
 
   #--feature_extractor_name="openai/whisper-small.en"
   #--base_encoder_model="openai/whisper-small.en"
@@ -140,10 +140,9 @@ args=(
   #--qf_intermediate_size=4096
 
   # Generation related arguments
-  --num_beams="2"
-  --max_new_tokens=170
+  --num_beams="10"
+  --max_new_tokens=200
   --predict_with_generate
-  #--no_metrics
 )
 
 echo "Running training.."

@@ -205,7 +205,7 @@ def split_long_segments_to_chunks_fun(
 def filter_sequences_in_range_batched(batch: List[float], max_input_len: float, min_input_len: float) -> List[bool]:
     """Filters out sequences form dataset which are in bounds."""
     arr = np.array(batch)
-    return (arr <= max_input_len) & (arr >= min_input_len)
+    return (arr <= max_input_len) & (arr >= min_input_len + 0.0001)
 
 
 def filter_zero_length_audio_batched(lens: List[List[float]]) -> List[bool]:
@@ -315,7 +315,7 @@ def prepare_dataset(
     # Filter samples shorter than 0.1s - {MIN_INPUT_LEN},
     # due to the conv subsampling and mel fbank extraction in model encoder
     for split in list(dataset.keys()):
-        if split != train_split:
+        if split != train_split and length_column_name != 'turn_index':
             dataset[split] = distributed_process(
                 dataset[split],
                 process_by="filter",
@@ -437,7 +437,9 @@ def load_multiple_datasets(
     load_pure_dataset_only: bool = False,
     add_context_column: bool = True,
     flatten_fisher: bool = False,
+    do_not_remove_columns: Optional[List[str]] = None,
 ) -> DatasetDict:
+
     """Loads multiple datasets, preprocess them and join to single dataset instance."""
     with open(config_path) as config_handle:
         config_dict = json.load(config_handle)
@@ -523,7 +525,7 @@ def load_multiple_datasets(
                     list(
                         set()
                         .union(*dataset_processed.column_names.values())
-                        .difference([global_len_column, global_text_column, global_audio_column, 'context'])
+                        .difference({global_len_column, global_text_column, global_audio_column, 'context'}.union(do_not_remove_columns or []))
                     )
                 )
 
@@ -537,7 +539,7 @@ def load_multiple_datasets(
                     list(
                         set()
                         .union(*dataset_processed.column_names.values())
-                        .difference([global_len_column, global_text_column, global_audio_column])
+                        .difference({global_len_column, global_text_column, global_audio_column}.union(do_not_remove_columns or []))
                     )
                 )
         else:
@@ -615,6 +617,7 @@ def get_dataset(
     dataset_shard_size: Optional[str] = None,
     load_pure_dataset_only: bool = False,
     flatten_fisher: bool = False,
+    do_not_remove_columns: Optional[List[str]] = None,
 ) -> Tuple[DatasetDict, Dataset]:
     """Loads single or multiple datasets, preprocess, and merge them."""
     if datasets_creation_config_path is not None:
@@ -633,6 +636,7 @@ def get_dataset(
             split_long_segments_to_chunks=split_long_segments_to_chunks,
             load_pure_dataset_only=load_pure_dataset_only,
             flatten_fisher=flatten_fisher,
+            do_not_remove_columns=do_not_remove_columns,
         )
     else:
         with DistributedContext() as context:

@@ -1,13 +1,13 @@
 #!/bin/bash
-#$ -N eval_wlml_stte_olmo1b_slurp_asr_slots_beam_10_2_fixed_wer
+#$ -N eval_slurp_base_10
 #$ -q all.q@supergpu*
 #$ -l ram_free=40G,mem_free=40G
 #$ -l matylda6=0.5,scratch=0.2
 #$ -l gpu=1,gpu_ram=20G
-#$ -o /mnt/matylda6/isedlacek/projects/job_logs/eloquence/eval_wlml_stte_olmo1b_slurp_asr_slots_beam_10_2_fixed_wer.o
-#$ -e /mnt/matylda6/isedlacek/projects/job_logs/eloquence/eval_wlml_stte_olmo1b_slurp_asr_slots_beam_10_2_fixed_wer.e
+#$ -o /mnt/matylda6/isedlacek/projects/job_logs/eloquence/eval_slurp_base_10.o
+#$ -e /mnt/matylda6/isedlacek/projects/job_logs/eloquence/eval_slurp_base_10.e
 N_GPUS=1
-EXPERIMENT="eval_wlml_stte_olmo1b_slurp_asr_slots_beam_10_2_fixed_wer"
+EXPERIMENT="eval_slurp_base_10"
 
 # Job should finish in about 2 days
 ulimit -t 200000

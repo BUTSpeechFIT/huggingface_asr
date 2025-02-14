@@ -20,11 +20,11 @@ from transformers.utils import logging
 import torch
 
 from utilities.callbacks import init_callbacks
-from utilities.collators import SlurpCollator
+from utilities.collators import WOZCollator
 from utilities.data_utils import get_dataset
-from utilities.eval_utils import compute_metrics_slurp
+from utilities.eval_utils import compute_metrics_spokenwoz
 from utilities.model_utils import average_checkpoints as average_checkpoints
-from utilities.general_utils import do_evaluate, do_generate
+from utilities.general_utils import do_evaluate, do_generate_woz_batched, do_generate_woz
 from utilities.training_arguments import (
     DataTrainingArguments,
     GeneralTrainingArguments,
@@ -33,13 +33,12 @@ from utilities.training_arguments import (
     ConnectorArguments
 )
 
-set_seed(42)
-
 from models.old_alignment import AlignmentConfig
-from models.aligned_decoder_lm import SpeechEncoderConnectorLMDecoder
-from utilities.training_utils import AdditionalLossTrackerTrainer
+from models.aligned_decoder_lm import TMPSpeechEncoderConnectorLMDecoder
 
 from peft import LoraConfig, get_peft_model, replace_lora_weights_loftq
+
+set_seed(3407)
 
 
 class WavLMWrapperConfig(WavLMConfig):
@@ -108,6 +107,7 @@ if __name__ == "__main__":
         cut_validation_from_train=data_args.cut_validation_from_train,
         seed=data_args.validation_slice_seed,
         reshuffle_at_start=data_args.reshuffle_at_start,
+        do_not_remove_columns=data_args.do_not_remove_columns,
     )
 
     logger.info(f"Dataset processed successfully.{dataset}")
@@ -156,7 +156,7 @@ if __name__ == "__main__":
     if conn_args.decoder_lora:
         lora_config = LoraConfig(task_type='CAUSAL_LM', target_modules='all-linear')
         decoder = get_peft_model(decoder, lora_config)
-        replace_lora_weights_loftq(decoder)
+        #replace_lora_weights_loftq(decoder)
 
     # -- prepare the connector
     if model_args.from_config:
@@ -201,13 +201,13 @@ if __name__ == "__main__":
         config = AlignmentConfig.from_pretrained(model_path)
         logger.info(f"Loading model from pretrained checkpoint...")
         
-        model = SpeechEncoderConnectorLMDecoder.from_pretrained(model_path, config, encoder, decoder, tokenizer)
+        model = TMPSpeechEncoderConnectorLMDecoder.from_pretrained(model_path, config, encoder, decoder, tokenizer)
 
         if model_args.freeze_encoder:
             model.freeze_encoder()
 
     else:
-        model = SpeechEncoderConnectorLMDecoder(encoder=encoder, decoder=decoder, config=apmo_config, freeze_decoder= not conn_args.decoder_lora, tokenizer=tokenizer)
+        model = TMPSpeechEncoderConnectorLMDecoder(encoder=encoder, decoder=decoder, config=apmo_config, freeze_decoder= not conn_args.decoder_lora, tokenizer=tokenizer)
 
     logger.info(f"Finished loading model {model}")
 
@@ -239,16 +239,14 @@ if __name__ == "__main__":
     callbacks = init_callbacks(data_args, training_args, dataset, feature_extractor)
 
     # 6. Initialize data collator
-    data_collator = SlurpCollator(
+    data_collator = WOZCollator(
         feature_extractor=feature_extractor,
         tokenizer=tokenizer,
-        padding=True,
         sampling_rate=data_args.sampling_rate,
         audio_path=data_args.audio_column_name,
         text_path=data_args.text_column_name,
         model_input_name=model.main_input_name,
         prompt_prefix=conn_args.prompt_prefix,
-        use_slots=data_args.slurp_use_slots,
     )
 
     if gen_args.no_metrics:
@@ -256,7 +254,7 @@ if __name__ == "__main__":
         # get the eval loss this way as a metric
         c_metrics = None
     else:
-        c_metrics = lambda pred: compute_metrics_slurp(tokenizer, pred, gen_args.wandb_predictions_to_save, data_args.slurp_use_slots, data_args.slurp_dump_pred) 
+        c_metrics = lambda pred: compute_metrics_spokenwoz(tokenizer, pred, gen_args.wandb_predictions_to_save, data_args.slurp_dump_pred) 
 
     # 7. Initialize trainer
     trainer = Seq2SeqTrainer(
@@ -286,7 +284,19 @@ if __name__ == "__main__":
         )
     # 10. N-best generation
     if training_args.do_generate:
-        do_generate(
+        do_generate_woz_batched(
+            trainer=trainer,
+            dataset=dataset,
+            model=model,
+            tokenizer=tokenizer,
+            gen_args=gen_args,
+            data_args=data_args,
+            training_args=training_args,
+            gen_config=gen_config,
+            collator=data_collator,
+        )
+    if training_args.do_generate_sequential:
+        do_generate_woz(
             trainer=trainer,
             dataset=dataset,
             model=model,
@@ -294,4 +304,5 @@ if __name__ == "__main__":
             gen_args=gen_args,
             data_args=data_args,
             gen_config=gen_config,
+            collator=data_collator,
         )

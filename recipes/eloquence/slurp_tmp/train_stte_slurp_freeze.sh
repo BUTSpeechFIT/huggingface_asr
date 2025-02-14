@@ -1,13 +1,13 @@
 #!/bin/bash
-#$ -N wlml_stte_olmo1b_slurp_asr_slots
-#$ -q long.q@supergpu*
+#$ -N bolaji_slurp_freeze
+#$ -q long.q@supergpu18
 #$ -l ram_free=40G,mem_free=40G
-#$ -l matylda6=0.5,scratch=0.2
+#$ -l matylda6=0.5,matylda5=0.1,scratch=0.2
 #$ -l gpu=1,gpu_ram=20G
-#$ -o /mnt/matylda6/isedlacek/projects/job_logs/eloquence/wlml_stte_olmo1b_slurp_asr_slots.o
-#$ -e /mnt/matylda6/isedlacek/projects/job_logs/eloquence/wlml_stte_olmo1b_slurp_asr_slots.e
+#$ -o /mnt/matylda6/isedlacek/projects/job_logs/eloquence/bolaji_slurp_freeze.o
+#$ -e /mnt/matylda6/isedlacek/projects/job_logs/eloquence/bolaji_slurp_freeze.e
 N_GPUS=1
-EXPERIMENT="wlml_stte_olmo1b_slurp_asr_slots"
+EXPERIMENT="bolaji_slurp_freeze"
 
 # Job should finish in about 2 days
 ulimit -t 200000
@@ -32,7 +32,6 @@ RECIPE_DIR="${WORK_DIR}/recipes/eloquence"
 #DATASETS="${RECIPE_DIR}/datasets_how2.json"
 #DATASETS="${RECIPE_DIR}/datasets_fisher_ctx.json"
 DATASETS="${RECIPE_DIR}/datasets_slurp.json"
-
 
 cd $WORK_DIR || {
   echo "No such directory $WORK_DIR"
@@ -115,8 +114,7 @@ args=(
   # Model related arguments
   #--from_pretrained=""
   #--restart_from="/mnt/matylda6/isedlacek/projects/huggingface_asr/exp/wsm_olmo1b_stte_w2000_libri_how2/checkpoint-16000/"
-  #--from_pretrained="/mnt/matylda6/isedlacek/projects/huggingface_asr/exp/wlml_stte_olmo1b_context_turns_fixed/checkpoint-40000"
-  --from_pretrained=""
+  --from_pretrained="/mnt/matylda5/iyusuf/exps/eloquence/ehpc_62_dump/bolaji/exp/wll_olmo1b_general_context_asr_fisher_libri_how2_freeze_enc_context0_labels_nostr/checkpoint-28000"
 
   #--feature_extractor_name="openai/whisper-small.en"
   #--base_encoder_model="openai/whisper-small.en"
@@ -141,9 +139,8 @@ args=(
 
   # Generation related arguments
   --num_beams="2"
-  --max_new_tokens=170
+  --max_new_tokens=200
   --predict_with_generate
-  #--no_metrics
 )
 
 echo "Running training.."

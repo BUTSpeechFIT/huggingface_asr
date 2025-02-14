@@ -231,6 +231,176 @@ def compute_metrics_slurp(
 
     return metrics
 
+def compute_metrics_spokenwoz(
+    tokenizer: PreTrainedTokenizer, pred: PredictionOutput, wandb_pred_to_save: int = 10, dump_pred=False
+    ) -> Dict[str, float]:
+    label_ids = pred.label_ids
+    pred_ids = pred.predictions
+
+    label_ids[label_ids == -100] = tokenizer.pad_token_id
+    pred_ids[pred_ids == -100] = tokenizer.pad_token_id
+
+    pred_str = tokenizer.batch_decode(pred_ids, skip_special_tokens=True)
+    label_str = [label if label else "-" for label in tokenizer.batch_decode(label_ids, skip_special_tokens=True)]
+
+    if wandb.run is not None:
+        if dump_pred:
+            write_wandb_pred(pred_str, label_str, rows_to_log=len(label_str))
+        else:
+            write_wandb_pred(pred_str, label_str, rows_to_log=wandb_pred_to_save)
+
+    # first, parse out the transcript, the scenario and action from the labels
+    label_dicts = []
+    popped = 0
+    for i, label in enumerate(label_str):
+        try:
+            label_dicts.append(json.loads('{"current_turn": ' + label))
+        except:
+            print("Label JSON error: ", '{"current_turn": ' + label)
+            pred_str.pop(i - popped)
+            popped += 1
+        
+    domain_tp = 0
+    domain_fp = 0
+    domain_fn = 0
+
+    json_errors = 0
+    domain_errors = 0
+    slot_errors = 0
+
+    slot_tp = 0
+    slot_fp = 0
+    slot_fn = 0
+
+    transcript_preds = []
+    transcript_labels = []
+
+    for i in range(len(label_dicts)):
+
+        label_dict = label_dicts[i]
+        domain_ok = False
+        slots_ok = False
+        json_error = False
+
+        try:
+            pred_dict = json.loads('{"current_turn": ' + pred_str[i])
+        except:
+            json_errors += 1
+            print("Error parsing prediction")
+            print(pred_str[i])
+            continue
+
+        try:
+            pred_domains = pred_dict['domains']
+            label_domains = label_dict['domains']
+
+            for l in label_domains:
+                if l in pred_domains:
+                    domain_tp += 1
+                else:
+                    domain_fn += 1
+
+            for p in pred_domains:
+                if p not in label_domains:
+                    domain_fp += 1
+
+            domain_ok = True
+
+        except:
+            json_error = True
+            print("Error: 'domains' key error")
+            print("Label: ", label_dict)
+            print("Prediction: ", pred_dict)
+
+        # slots
+        label_slots = label_dict['slots']
+
+        if 'slots' not in pred_dict.keys():
+            json_error = True
+            print("Error: slots missing")
+            print("Label: ", label_dict)
+            print("Prediction: ", pred_dict)
+
+        else:
+            try:
+                pred_slots = pred_dict['slots']
+
+                # determine the correctness of each slot
+                for domain, slots in label_slots.items():
+                    if domain in pred_slots.keys():
+                        for slot_key, slot_val in slots.items():
+                            if slot_key in pred_slots[domain]:
+                                if slot_val == pred_slots[domain][slot_key]:
+                                    slot_tp += 1
+                                else:
+                                    slot_fp += 1
+                            else:
+                                slot_fn += 1
+
+                        for pred_slot_key, _ in pred_slots[domain].items():
+                            if pred_slot_key not in slots.keys():
+                                slot_fp += 1
+
+                    else:
+                        slot_fn += len(slots)
+
+                # accumulate the false postives for all slots not present in the labels
+                for domain_p, slots_p in pred_slots.items():
+                    if domain_p not in label_slots:
+                        slot_fp += len(slots_p)
+
+                slots_ok = True
+
+            except:
+                json_error = True
+                print("Error: slots parsing error")
+                print("Label: ", label_dict)
+                print("Prediction: ", pred_dict)
+
+        try:
+            transcript_pred = pred_dict['current_turn']
+            if type(transcript_pred) != str:
+                raise ValueError
+            transcript_preds.append(transcript_pred)
+            transcript_labels.append(label_dict['current_turn'])
+        except:
+            json_error = True
+            print("Error: transcription error")
+            print("Label: ", label_dict)
+            print("Prediction: ", pred_dict)
+
+        if json_error:
+            json_errors += 1
+
+        if not domain_ok:
+            domain_errors += 1
+            
+        if not slots_ok:
+            slot_errors += 1
+
+
+    # normalize the transcripts and compute wer
+    normalizer = EnglishNormalizer()
+    transcript_preds = [ normalizer(s).strip() for s in transcript_preds ]
+    transcript_labels = [ normalizer(s).strip() for s in transcript_labels ]
+
+    metrics = get_metrics(transcript_labels, transcript_preds)
+
+    # compute the precision, recall and f1 for the domains and slots
+    metrics['domain_precision'] = domain_tp / (domain_tp + domain_fp)
+    metrics['domain_recall'] = domain_tp / (domain_tp + domain_fn)
+    metrics['domain_f1'] = (2 * domain_tp) / (2 * domain_tp + domain_fp + domain_fn)
+
+    metrics['slot_precision'] = slot_tp / (slot_tp + slot_fp)
+    metrics['slot_recall'] = slot_tp / (slot_tp + slot_fn)
+    metrics['slot_f1'] = (2 * slot_tp) / (2 * slot_tp + slot_fp + slot_fn)
+
+    metrics['json_errors'] = json_errors
+    metrics['domain_errors'] = domain_errors
+    metrics['slot_errors'] = slot_errors
+
+    return metrics
+
 def compute_metrics_fisher_turns(
     tokenizer: PreTrainedTokenizer, pred: PredictionOutput, wandb_pred_to_save: int = 10, remove_spk_tags: bool = True) -> Dict[str, float]:
     label_ids = pred.label_ids
