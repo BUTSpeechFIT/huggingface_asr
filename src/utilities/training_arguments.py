@@ -341,6 +341,8 @@ class ConnectorArguments:
     prompt_prefix: Optional[str] = field(default=None, metadata={"help": "Text prompt prefix to the connector output soft prompt."})
     prompt_suffix: Optional[str] = field(default=None, metadata={"help": "Text prompt suffix to the connector output soft prompt."})
     decoder_lora: Optional[bool] = field(default=False, metadata={"help": "Whether to use LoRA for the decoder LM."})
+    decoder_lora_rank: Optional[int] = field(default=8, metadata={"help": "Rank of the LoRA for the decoder LM."})
+    decoder_lora_alpha: Optional[int] = field(default=8, metadata={"help": "Alpha of the LoRA for the decoder LM."})
     quantize_decoder: Optional[int] = field(default=None, metadata={"help": "Which BnB decoder quantization config to use (8bit, 4bit). FIXME: quant. order not working yet"})
     n_queries: Optional[int] = field(default=80, metadata={"help": "Number of qformer queries."})
     downsampling_factor: Optional[int] = field(default=4, metadata={"help": "When using the stacking downsampling method, concatenate 'N' consecutive embeddings."})

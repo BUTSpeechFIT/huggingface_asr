@@ -154,9 +154,14 @@ if __name__ == "__main__":
 
     # set up lora for the decoder
     if conn_args.decoder_lora:
-        lora_config = LoraConfig(task_type='CAUSAL_LM', target_modules='all-linear')
+        lora_config = LoraConfig(
+            task_type='CAUSAL_LM',
+            target_modules='all-linear',
+            r=conn_args.decoder_lora_rank,
+            lora_alpha=conn_args.decoder_lora_alpha,
+        )
+
         decoder = get_peft_model(decoder, lora_config)
-        #replace_lora_weights_loftq(decoder)
 
     # -- prepare the connector
     if model_args.from_config:

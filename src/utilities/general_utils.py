@@ -419,7 +419,7 @@ def do_generate_woz_batched(
                 test_split,
                 batch_size=trainer.args.per_device_eval_batch_size,
                 collate_fn=lambda x: x,
-                num_workers=4,
+                num_workers=0,
                 drop_last=False,
         )
 
