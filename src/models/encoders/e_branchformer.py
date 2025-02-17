@@ -414,7 +414,7 @@ class Wav2Vec2EBranchformerEncoder(Wav2Vec2ConformerEncoder):
     def build_attention_mask(
         self,
         hidden_states: Tensor,
-        attention_lens: Optional[Tensor] = None,
+        attention_lens: Tensor = None,
         chunk_size: int = -1,
         left_context_len: int = 0,
         is_streaming_inference: bool = False,
@@ -431,10 +431,6 @@ class Wav2Vec2EBranchformerEncoder(Wav2Vec2ConformerEncoder):
         - training without chunks: causal mask with causal_look_ahead (intended size of chunk)
         - training with chunks: block-diagonal mask (small look-ahead, left context)
         """
-
-        if attention_lens is None:
-            logger.error("Missing `attention_lens`, cannot create `attention_mask` for SelfAttention module.")
-            return None
 
         assert chunk_size == -1 or chunk_size > 0, chunk_size
         assert left_context_len >= 0, left_context_len
@@ -517,7 +513,7 @@ class Wav2Vec2EBranchformerEncoder(Wav2Vec2ConformerEncoder):
     def forward(
         self,
         hidden_states: Tensor,
-        attention_lens: Optional[Tensor] = None,
+        attention_lens: Tensor = None,
         chunk_size: int = -1,
         left_context_len: int = 0,
         output_attentions: bool = False,
@@ -537,7 +533,8 @@ class Wav2Vec2EBranchformerEncoder(Wav2Vec2ConformerEncoder):
         assert left_context_len >= 0, left_context_len
 
         # make sure padded tokens output 0
-        hidden_states[~attention_lens] = 0.0
+        expand_attention_mask = attention_lens.unsqueeze(-1).repeat(1, 1, hidden_states.shape[2])
+        hidden_states[~expand_attention_mask] = 0.0
 
         attention_mask = self.build_attention_mask(
             hidden_states=hidden_states,
@@ -678,7 +675,7 @@ class Wav2Vec2EBranchformerEncoder(Wav2Vec2ConformerEncoder):
     def streaming_forward(
         self,
         hidden_states: Tensor,
-        attention_lens: Optional[Tensor],
+        attention_lens: Tensor,
         streaming_states: list[Tensor],
         left_context_len: int = 64,
         output_attentions: bool = False,
@@ -701,14 +698,13 @@ class Wav2Vec2EBranchformerEncoder(Wav2Vec2ConformerEncoder):
         """
 
         assert len(streaming_states) == 4 * len(self.layers), (len(streaming_states), 4 * len(self.layers))
-        assert attention_lens is not None
 
         new_streaming_states = []
         attention_out = []
 
         # make sure padded tokens output 0
-        if attention_lens is not None:
-            hidden_states[~attention_lens] = 0.0
+        expand_attention_mask = attention_lens.unsqueeze(-1).repeat(1, 1, hidden_states.shape[2])
+        hidden_states[~expand_attention_mask] = 0.0
 
         attention_mask = self.build_attention_mask(
             hidden_states=hidden_states,
