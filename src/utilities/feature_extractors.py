@@ -25,8 +25,8 @@ class CustomFeatureExtractor(Speech2TextFeatureExtractor):
         *args,
         **kwargs,
     ):
-        if norm_type not in ["utterance", "global"]:
-            raise ValueError(f"norm_type should be either 'utterance' or 'global'. Got {norm_type}")
+        if norm_type not in ["utterance", "global", "none"]:
+            raise ValueError(f"norm_type should be either 'utterance', 'global' or 'none'. Got {norm_type}")
         super().__init__(
             feature_size=feature_size,
             do_ceptral_normalize=do_ceptral_normalize and norm_type == "utterance",
