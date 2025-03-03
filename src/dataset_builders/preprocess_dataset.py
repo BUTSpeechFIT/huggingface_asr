@@ -33,5 +33,6 @@ if __name__ == "__main__":
         if args.regenerate
         else datasets.DownloadMode.REUSE_DATASET_IF_EXISTS,
     )
+    print(dataset)
     if args.output_dir is not None:
         dataset.save_to_disk(args.output_dir, num_proc=args.num_proc)
