@@ -3,9 +3,10 @@ import os
 import sys
 from dataclasses import dataclass, field
 from functools import partial
-
+from datasets import load_from_disk
 import multiprocess as mp
 import torch
+import re
 from espnet2.bin.s2t_inference import Speech2Text
 from tqdm import tqdm
 from transformers import HfArgumentParser
@@ -21,14 +22,23 @@ from utilities.training_arguments import (
     ModelArguments,
 )
 
+def truncate_long_words(text, max_length=30):
+    def shorten(match):
+        word = match.group()
+        return word[:max_length] if len(word) > max_length else word
+
+    return re.sub(r'\S{31,}', shorten, text)
 
 # Function to process samples and save predictions with corresponding labels
 def process_sample(sample, pipeline, callable_transform, text_column):
     hypothesis = pipeline(sample["audio"]["array"])
     prediction = hypothesis[0][0]
+    prediction = truncate_long_words(prediction.replace("<eng><asr><notimestamps> ", ""))
+    label = sample[text_column]
     if callable_transform:
         prediction = callable_transform(prediction)
-    return prediction, sample[text_column]
+        label =  callable_transform(label)
+    return prediction, label
 
 
 @dataclass
@@ -68,7 +78,7 @@ if __name__ == "__main__":
     pipeline = Speech2Text.from_pretrained(model_args.from_pretrained, lang_sym="<eng>", beam_size=1, device=device)
 
     # 3. Init callable transformation
-    if gen_args.post_process_predicitons and data_args.text_transformations is not None:
+    if gen_args.post_process_predictions and data_args.text_transformations is not None:
         callable_transform = function_aggregator(
             [
                 text_transform_partial(getattr(data_utils, transform_name, lambda x, label_column: {label_column: x}))
@@ -91,7 +101,8 @@ if __name__ == "__main__":
             )
             pred_str.append(hyp)
             label_str.append(ref)
-
+        # Create output dir if not exists
+        os.makedirs(training_args.output_dir, exist_ok=True)
         out_path = (
             f"{training_args.output_dir}/"
             f"predictions_{split_name}_{model_args.from_pretrained.replace('/', '_')}.csv"

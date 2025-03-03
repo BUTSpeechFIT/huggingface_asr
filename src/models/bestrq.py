@@ -2,15 +2,16 @@
 This module implements the BestRQ model https://arxiv.org/abs/2202.01855.
 """
 import math
-from typing import Optional, Tuple, Union
+from typing import Optional, Tuple, Union, List
 
 import torch
 import torch.nn.functional as F
 import torch.utils.checkpoint
 from torch import Tensor, nn
 from torch.linalg import vector_norm
+from torch.nn.utils.rnn import pad_sequence
 from transformers.configuration_utils import PretrainedConfig
-from transformers.modeling_outputs import CausalLMOutput
+from transformers.modeling_outputs import CausalLMOutput, Wav2Vec2BaseModelOutput
 from transformers.models.wav2vec2.modeling_wav2vec2 import (
     _HIDDEN_STATES_START_POSITION,
     Wav2Vec2ForPreTrainingOutput,
@@ -25,6 +26,15 @@ from models.encoders.e_branchformer import (
     Wav2Vec2EBranchformerModel,
 )
 
+from torchaudio.models.rnnt import _Joiner, _Predictor, RNNT, _Transcriber
+from torchaudio.models.rnnt_decoder import RNNTBeamSearch
+from torchaudio.transforms import RNNTLoss
+
+import torch
+from torch import nn
+from typing import Optional, Tuple, Union
+from transformers.modeling_outputs import CausalLMOutput
+
 logger = logging.get_logger(__name__)
 
 
@@ -32,7 +42,7 @@ class BestRQConfig(PretrainedConfig):
     # model_type = "bestrq-ebranchformer"
 
     def __init__(
-        self, best_rq_codebook_size=8192, best_rq_codebook_dim=16, best_rq_num_books=1, best_rq_in_dim=320, **kwargs
+            self, best_rq_codebook_size=8192, best_rq_codebook_dim=16, best_rq_num_books=1, best_rq_in_dim=320, **kwargs
     ):
         super().__init__(**kwargs)
         self.best_rq_codebook_size = best_rq_codebook_size
@@ -82,11 +92,11 @@ class RandomProjectionQuantizer(nn.Module):
 
 class BestRQMask:
     def _mask_hidden_states(
-        self,
-        hidden_states: torch.FloatTensor,
-        mask_time_indices: Optional[torch.FloatTensor] = None,
-        attention_mask: Optional[torch.FloatTensor] = None,
-        std: float = 0.1,
+            self,
+            hidden_states: torch.FloatTensor,
+            mask_time_indices: Optional[torch.FloatTensor] = None,
+            attention_mask: Optional[torch.FloatTensor] = None,
+            std: float = 0.1,
     ):
         """
         Masks extracted features along time axis and/or along feature axis according to
@@ -106,13 +116,13 @@ class BestRQModel(nn.Module):
         )
 
     def forward(
-        self,
-        input_values: Optional[torch.Tensor],
-        attention_mask: Optional[torch.Tensor] = None,
-        mask_time_indices: Optional[torch.BoolTensor] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
+            self,
+            input_values: Optional[torch.Tensor],
+            attention_mask: Optional[torch.Tensor] = None,
+            mask_time_indices: Optional[torch.BoolTensor] = None,
+            output_attentions: Optional[bool] = None,
+            output_hidden_states: Optional[bool] = None,
+            return_dict: Optional[bool] = None,
     ) -> Union[Tuple, Wav2Vec2ForPreTrainingOutput]:
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
@@ -162,11 +172,11 @@ class BestRQEBranchformerForPreTrainingConfig(Wav2Vec2EBranchformerConfig, BestR
     model_type = "bestrq-ebranchformer"
 
     def __init__(
-        self,
-        finetune_with_additional_layer=False,
-        finetune_with_layer_mixing=False,
-        freeze_norm_for_finetunning=False,
-        **kwargs,
+            self,
+            finetune_with_additional_layer=False,
+            finetune_with_layer_mixing=False,
+            freeze_norm_for_finetunning=False,
+            **kwargs,
     ):
         super().__init__(**kwargs)
         self.finetune_with_additional_layer = finetune_with_additional_layer
@@ -216,13 +226,13 @@ class BestRQEBranchformerForCTC(Wav2Vec2EBranchformerForCTC):
             param.requires_grad = False
 
     def forward(
-        self,
-        input_values: Optional[torch.Tensor],
-        attention_mask: Optional[torch.Tensor] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
-        labels: Optional[torch.Tensor] = None,
+            self,
+            input_values: Optional[torch.Tensor],
+            attention_mask: Optional[torch.Tensor] = None,
+            output_attentions: Optional[bool] = None,
+            output_hidden_states: Optional[bool] = None,
+            return_dict: Optional[bool] = None,
+            labels: Optional[torch.Tensor] = None,
     ) -> Union[Tuple, CausalLMOutput]:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size, target_length)`, *optional*):
@@ -244,8 +254,8 @@ class BestRQEBranchformerForCTC(Wav2Vec2EBranchformerForCTC):
 
         if self.config.finetune_with_layer_mixing:
             hidden_states = (
-                torch.stack(outputs.hidden_states)
-                * nn.functional.softmax(self.per_layer_weights, dim=-1)[:, None, None, None]
+                    torch.stack(outputs.hidden_states)
+                    * nn.functional.softmax(self.per_layer_weights, dim=-1)[:, None, None, None]
             ).sum(dim=0)
         else:
             hidden_states = outputs.last_hidden_state
@@ -290,20 +300,22 @@ class BestRQEBranchformerForCTC(Wav2Vec2EBranchformerForCTC):
 
         loss = None
         if labels is not None:
-            if labels.max() >= self.config.vocab_size:
-                raise ValueError(f"Label values must be <= vocab_size: {self.config.vocab_size}")
-
+            # if labels.max() >= self.config.vocab_size:
+            labels_i = labels.clip(-100, self.config.vocab_size)
+            # raise ValueError(f"Label values must be <= vocab_size: {self.config.vocab_size}")
+            # remove eos
+            labels[labels == self.config.eos_token_id] = -100
             # retrieve loss input_lengths from attention_mask
             attention_mask = (
                 attention_mask if attention_mask is not None else torch.ones_like(input_values, dtype=torch.long)
             )
-            input_lengths = self._get_feat_extract_output_lengths(attention_mask.sum(-1)).to(torch.long)
+            input_lengths = self.wav2vec2._get_feat_extract_output_lengths(attention_mask.sum(-1)).to(torch.long)
 
             # assuming that padded tokens are filled with -100
             # when not being attended to
-            labels_mask = labels >= 0
+            labels_mask = labels_i >= 0
             target_lengths = labels_mask.sum(-1)
-            flattened_targets = labels.masked_select(labels_mask)
+            flattened_targets = labels_i.masked_select(labels_mask)
 
             # ctc_loss doesn't support fp16
             log_probs = nn.functional.log_softmax(logits, dim=-1, dtype=torch.float32).transpose(0, 1)
@@ -318,6 +330,16 @@ class BestRQEBranchformerForCTC(Wav2Vec2EBranchformerForCTC):
                     reduction=self.config.ctc_loss_reduction,
                     zero_infinity=self.config.ctc_zero_infinity,
                 )
+            # Regularize the loss, so that it also punish model
+            # count frames where blank is top 1 and is in range of input lengths
+            blank_frames = logits.argmax(dim=-1) == (logits.shape[-1] - 1)
+            valid_mask = torch.arange(blank_frames.shape[1], device=logits.device).unsqueeze(
+                0) < input_lengths.unsqueeze(1)
+            # Mask out frames that are beyond valid input lengths
+            blank_frames &= valid_mask
+
+            if (blank_frames.sum(dim=-1) / input_lengths).mean() > 0.95:
+                loss += 10 * (blank_frames.sum(dim=-1) / input_lengths).mean()
 
         if not return_dict:
             output = (logits,) + outputs[_HIDDEN_STATES_START_POSITION:]
@@ -326,3 +348,135 @@ class BestRQEBranchformerForCTC(Wav2Vec2EBranchformerForCTC):
         return CausalLMOutput(
             loss=loss, logits=logits, hidden_states=outputs.hidden_states, attentions=outputs.attentions
         )
+
+
+class CustomTranscriber(Wav2Vec2EBranchformerModel, _Transcriber):
+    def forward(self, input: torch.Tensor, lengths: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
+        range_tensor = torch.arange(input.shape[1], device=input.device)
+
+        # Compare each length with the range to create the mask
+        attention_mask = range_tensor.unsqueeze(0) < lengths.unsqueeze(1)  # Shape (B, T)
+
+        output = super().forward(
+            input,
+            attention_mask=attention_mask,
+            mask_time_indices=None,
+            output_attentions=False,
+            output_hidden_states=False,
+            return_dict=True,
+        )
+        enc_output_len = self._get_feat_extract_output_lengths(lengths).to(torch.long)
+        return output.last_hidden_state, enc_output_len
+
+    def infer(
+            self,
+            input: torch.Tensor,
+            lengths: torch.Tensor,
+            states: Optional[List[List[torch.Tensor]]],
+    ) -> Tuple[torch.Tensor, torch.Tensor, List[List[torch.Tensor]]]:
+        out = self.forward(input, lengths)
+        return out[0], out[1], states
+
+
+class BestRQEBranchformerForRNNT(BestRQEBranchformerForCTC):
+    config_class = BestRQEBranchformerForPreTrainingConfig
+
+    def __init__(self, config: Wav2Vec2EBranchformerConfig):
+        super().__init__(config)
+        self.wav2vec2 = CustomTranscriber(config)
+        self.blank_id = config.vocab_size
+
+        # Predictor and Joiner configuration
+        NUM_LSTM_LAYERS = 2
+        LSTM_LAYER_NORM = True
+        LSTM_LAYER_NORM_EPSILON = 1e-5
+        LSTM_DROPOUT = 0.1
+
+        self._predictor = _Predictor(
+            num_symbols=config.vocab_size + 1,
+            output_dim=config.hidden_size,
+            symbol_embedding_dim=config.hidden_size,
+            num_lstm_layers=NUM_LSTM_LAYERS,
+            lstm_hidden_dim=config.hidden_size,
+            lstm_layer_norm=LSTM_LAYER_NORM,
+            lstm_layer_norm_epsilon=LSTM_LAYER_NORM_EPSILON,
+            lstm_dropout=LSTM_DROPOUT,
+        )
+        self._joiner = _Joiner(config.hidden_size, config.vocab_size + 1)
+        self.rnnt = RNNT(self.wav2vec2, self._predictor, self._joiner)
+        self.loss_fn = RNNTLoss(blank=self.blank_id)
+
+        self.post_init()
+
+    def forward(
+            self,
+            input_values: Optional[torch.Tensor],
+            attention_mask: Optional[torch.Tensor] = None,
+            output_attentions: Optional[bool] = None,
+            output_hidden_states: Optional[bool] = None,
+            return_dict: Optional[bool] = None,
+            labels: Optional[torch.Tensor] = None,
+    ) -> Union[Tuple, CausalLMOutput]:
+        """
+        Perform forward pass for RNN-T.
+
+        Args:
+            input_values (`torch.Tensor`): The input audio features of shape `(batch_size, sequence_length)`.
+            attention_mask (`torch.Tensor`, optional): Attention mask for the input.
+            output_attentions (`bool`, optional): Whether to output attention scores.
+            output_hidden_states (`bool`, optional): Whether to output hidden states.
+            return_dict (`bool`, optional): Whether to return a dictionary or a tuple.
+            labels (`torch.Tensor`, optional): Ground truth labels of shape `(batch_size, target_length)`.
+
+        Returns:
+            Union[Tuple, CausalLMOutput]: Model outputs.
+        """
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+
+        predictor_state = None
+        attention_mask = (
+            attention_mask if attention_mask is not None else torch.ones_like(input_values, dtype=torch.long)
+        )
+        input_lengths = attention_mask.sum(-1).to(torch.long)
+        if labels is not None:
+            targets = labels.clone()
+            targets[targets == -100] = self.config.pad_token_id
+            target_lengths = (targets != self.config.pad_token_id).sum(dim=1)
+            prepended_targets = targets.new_empty([targets.size(0), targets.size(1) + 1]).clone()
+            prepended_targets[:, 1:] = targets
+            prepended_targets[:, 0] = self.blank_id
+            prepended_target_lengths = target_lengths + 1
+
+            outputs, source_lengths, _, predictor_state = self.rnnt(
+                sources=input_values,
+                source_lengths=input_lengths,
+                targets=prepended_targets,
+                target_lengths=prepended_target_lengths,
+                predictor_state=predictor_state,
+            )
+
+            # Compute RNNT loss
+            loss = self.loss_fn(
+                logits=outputs.to(torch.float32),
+                targets=targets.to(torch.int32),
+                logit_lengths=source_lengths.to(torch.int32),
+                target_lengths=target_lengths.to(torch.int32),
+            )
+
+            return CausalLMOutput(
+                loss=loss,
+                logits=None,
+                hidden_states=outputs,
+                attentions=None,
+            )
+        else:
+            decoder = RNNTBeamSearch(self.rnnt, self.blank_id)
+            enc_out, _ = decoder.model.transcribe(input_values, input_lengths)
+            outputs = []
+            for sample_len, sample in zip(input_lengths,enc_out):
+                outputs.append(torch.tensor(decoder._search(sample[:sample_len].unsqueeze(0), None, 20)[0][0], device=self.device, dtype=torch.int))
+            # pad outputs to same length with pad token
+            return pad_sequence(outputs, batch_first=True, padding_value=self.config.pad_token_id)
+
+            # hypotheses = decoder(input_values, input_lengths, 20)
+            # return torch.tensor(hypotheses[0][0], device=input_values.device)[None,None, :]

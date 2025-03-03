@@ -85,6 +85,7 @@ class SpeechCollatorWithPadding:
             max_length=self.max_length,
             pad_to_multiple_of=self.pad_to_multiple_of,
             return_tensors="pt",
+            return_attention_mask=True
         )
 
         if isinstance(self.feature_extractor, WhisperFeatureExtractor):

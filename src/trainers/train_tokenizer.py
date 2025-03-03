@@ -13,19 +13,34 @@ from utilities.training_arguments import (
     GeneralTrainingArguments,
     TokenizerTrainingArguments,
 )
+import random
+
+
+def take_10_random_elements(lst):
+    """
+    Takes 10 random elements from the given list.
+    If the list has fewer than 10 elements, it returns all elements shuffled.
+
+    :param lst: The input list.
+    :return: A list of 10 random elements, or fewer if the input list has less than 10 elements.
+    """
+    if len(lst) <= 10:
+        return random.sample(lst, len(lst))  # Shuffle and return all elements if less than 10
+    return random.sample(lst, 10)  # Randomly select 10 elements
 
 
 def train_tokenizer(
-    tokenizer_type,
-    tokenizer_name,
-    text_iterator,
-    bos_token,
-    eos_token,
-    unk_token,
-    pad_token,
-    mask_token,
-    vocab_size=5000,
-    apply_regularization=False,
+        tokenizer_type,
+        tokenizer_name,
+        text_iterator,
+        bos_token,
+        eos_token,
+        unk_token,
+        pad_token,
+        mask_token,
+        vocab_size=5000,
+        tokens_to_add=None,
+        apply_regularization=False,
 ):
     if apply_regularization:
         raise NotImplementedError
@@ -78,6 +93,8 @@ def train_tokenizer(
         mask_token=mask_token,
         # sep_token="▁" if tokenizer_type == "unigram" else " ",
     )
+    if tokens_to_add is not None:
+        wrapped_tokenizer.add_tokens(tokens_to_add)
 
     wrapped_tokenizer.push_to_hub(tokenizer_name)  # pylint: disable=not-callable
 
@@ -117,6 +134,9 @@ if __name__ == "__main__":
             "text"
         ]
 
+    # Print samples of text that tokenizer will be trained on
+    logger.info(f"Samples of text that tokenizer will be trained on:{take_10_random_elements(text)}")
+
     # 4. Train tokenizer
     train_tokenizer(
         tokenizer_args.tokenizer_type,
@@ -128,4 +148,5 @@ if __name__ == "__main__":
         tokenizer_args.pad_token,
         tokenizer_args.mask_token,
         tokenizer_args.vocab_size,
+        tokenizer_args.tokens_to_add
     )

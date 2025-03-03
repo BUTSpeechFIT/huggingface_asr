@@ -1,23 +1,34 @@
 """Main training script for training of CTC ASR models."""
 import sys
-import os
-from transformers import AutoFeatureExtractor, AutoTokenizer, HfArgumentParser, Trainer
+
+from transformers import AutoFeatureExtractor, AutoTokenizer, HfArgumentParser, Seq2SeqTrainer
 from transformers.utils import logging
+import torch
 
 from utilities.callbacks import init_callbacks
 from utilities.collators import SpeechCollatorWithPadding
 from utilities.data_utils import get_dataset
-from utilities.eval_utils import compute_metrics_ctc, ctc_beam_decode, ctc_greedy_decode
+from utilities.eval_utils import compute_metrics, ctc_beam_decode, ctc_greedy_decode
 from utilities.general_utils import do_evaluate
-from utilities.model_utils import instantiate_ctc_model
+from utilities.model_utils import instantiate_rnnt_model
 from utilities.training_arguments import (
     DataTrainingArguments,
     GeneralTrainingArguments,
     GenerationArguments,
     ModelArguments,
 )
+from utilities.training_utils import RNNTTrainer
 
 from utilities.bind import bind_all
+
+
+def remove_blanks(logits, blank_id, pad_token_id):
+    for i, prediction in enumerate(logits):
+        wo_blank = prediction[prediction != blank_id]
+        logits[i, : len(wo_blank)] = wo_blank
+        logits[i, len(wo_blank):] = pad_token_id
+    return logits
+
 
 if __name__ == "__main__":
     logging.set_verbosity_debug()
@@ -46,7 +57,7 @@ if __name__ == "__main__":
     tokenizer = AutoTokenizer.from_pretrained(training_args.tokenizer_name)
 
     # 3. Instantiate model
-    model = instantiate_ctc_model(model_args, tokenizer, feature_extractor)
+    model = instantiate_rnnt_model(model_args, tokenizer)
 
     if training_args.freeze_encoder:
         model.freeze_encoder()
@@ -67,37 +78,20 @@ if __name__ == "__main__":
         pad_to_multiple_of=data_args.pad_to_multiples_of,
     )
 
-    trainer = Trainer(
+    trainer = RNNTTrainer(
         args=training_args,
         model=model,
         callbacks=callbacks,
         train_dataset=dataset[data_args.train_split],
         eval_dataset=training_eval_dataset,
         data_collator=data_collator,
-        preprocess_logits_for_metrics=(
-            lambda predictions, labels: ctc_beam_decode(
-                predictions, labels, tokenizer, training_args.generation_num_beams
-            )
-        )
-        if training_args.generation_num_beams is not None and training_args.generation_num_beams > 1
-        else lambda predictions, labels: ctc_greedy_decode(
-            predictions, len(tokenizer.get_vocab()), model.config.pad_token_id
-        ),
-        # compute_metrics=lambda pred: compute_metrics_ctc(tokenizer, pred, gen_args.wandb_predictions_to_save),
+        preprocess_logits_for_metrics=lambda x, y: remove_blanks(x, len(tokenizer), tokenizer.pad_token_id),
+        compute_metrics=lambda pred: compute_metrics(tokenizer, pred, gen_args.wandb_predictions_to_save),
     )
-
-
-    def _compute_metrics(pred, split='dev'):
-        step = trainer.state.global_step
-        os.makedirs(trainer.args.output_dir, exist_ok=True)
-        return compute_metrics_ctc(tokenizer, pred, gen_args.wandb_predictions_to_save, os.path.join(trainer.args.output_dir, f'{split}-{step}.json'))
 
     # 6. Train
     if training_args.do_train:
-        trainer.compute_metrics = (lambda x: _compute_metrics(x, "dev"))
         trainer.train(resume_from_checkpoint=training_args.restart_from or None)
-
-    trainer.compute_metrics = (lambda x: _compute_metrics(x, "test"))
 
     # 7. Evaluation
     if training_args.do_evaluate:

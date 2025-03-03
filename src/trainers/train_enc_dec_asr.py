@@ -26,7 +26,7 @@ from utilities.training_arguments import (
     GenerationArguments,
     ModelArguments,
 )
-from utilities.training_utils import CustomSeq2SeqTrainer
+from utilities.training_utils import CustomSeq2SeqTrainer, WhisperLongFormTrainer
 
 if __name__ == "__main__":
     logging.set_verbosity_debug()
@@ -79,8 +79,15 @@ if __name__ == "__main__":
     training_args.generation_max_length = gen_args.max_length
     training_args.generation_num_beams = gen_args.num_beams
 
+    trainer_class = CustomSeq2SeqTrainer
+
     if isinstance(model, WhisperForConditionalGeneration):
         model.generation_config.num_beams = gen_args.num_beams
+        tokenizer.set_prefix_tokens(language=model_args.whisper_language, task=model_args.whisper_task)
+        model.generation_config.language = model_args.whisper_language
+        model.generation_config.task = model_args.whisper_task
+        model.generation_config.condition_on_prev_tokens = False
+        trainer_class = WhisperLongFormTrainer
     else:
         model.generation_config = gen_config
 
@@ -101,7 +108,7 @@ if __name__ == "__main__":
     )
 
     # 7. Initialize trainer
-    trainer = CustomSeq2SeqTrainer(
+    trainer = trainer_class(
         args=training_args,
         model=model,
         callbacks=callbacks,

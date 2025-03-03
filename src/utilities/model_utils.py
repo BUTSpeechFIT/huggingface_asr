@@ -26,6 +26,7 @@ from models.bestrq import (
     BestRQEBranchformerForCTC,
     BestRQEBranchformerForPreTraining,
     BestRQEBranchformerForPreTrainingConfig,
+    BestRQEBranchformerForRNNT
 )
 from models.ctc_encoder_plus_autoregressive_decoder import (
     JointCTCAttentionEncoderDecoder,
@@ -72,12 +73,12 @@ def fetch_config(config: PretrainedConfig, base_config: Dict, config_overrides: 
     else:
         parsed_dict = base_config
     for k_orig, v in parsed_dict.items():
-        if k_orig.startswith("encoder_"):
+        if k_orig.startswith("encoder_") and hasattr(config, "encoder") :
             config_local = config.encoder
-            k = k_orig[len("encoder_") :]
-        elif k_orig.startswith("decoder_") and k_orig != "decoder_start_token_id":
+            k = k_orig[len("encoder_"):]
+        elif k_orig.startswith("decoder_") and hasattr(config, "decoder") and k_orig != "decoder_start_token_id":
             config_local = config.decoder
-            k = k_orig[len("decoder_") :]
+            k = k_orig[len("decoder_"):]
         else:
             config_local = config
             k = k_orig
@@ -115,7 +116,7 @@ def fetch_config(config: PretrainedConfig, base_config: Dict, config_overrides: 
 
 
 def instantiate_ctc_model(
-    model_args: ModelArguments, tokenizer: PreTrainedTokenizer, feature_extractor: SequenceFeatureExtractor
+        model_args: ModelArguments, tokenizer: PreTrainedTokenizer, feature_extractor: SequenceFeatureExtractor
 ) -> PreTrainedModel:
     base_model_config = {
         "pad_token_id": tokenizer.pad_token_id,
@@ -155,6 +156,52 @@ def instantiate_ctc_model(
     return model
 
 
+def instantiate_rnnt_model(
+        model_args: ModelArguments, tokenizer: PreTrainedTokenizer
+) -> PreTrainedModel:
+    base_model_config = {
+        "pad_token_id": tokenizer.pad_token_id,
+        "eos_token_id": tokenizer.eos_token_id,
+        "bos_token_id": tokenizer.bos_token_id,
+        "mask_token_id": tokenizer.mask_token_id,
+        "layerdrop": 0.0,
+        "ctc_loss_reduction": "mean",
+        "vocab_size": len(tokenizer),
+    }
+
+    if model_args.from_pretrained:
+        config = AutoConfig.from_pretrained(model_args.from_pretrained)
+        config.update(base_model_config)
+        if model_args.config_overrides is not None:
+            logger.info(f"Overriding config: {model_args.config_overrides}")
+            parsed_dict = dict(x.split("=") for x in model_args.config_overrides.split(","))
+            config.update(parsed_dict)
+        model_path = model_args.from_pretrained
+        if model_args.average_checkpoints:
+            model_path = average_checkpoints(model_path)
+        model = BestRQEBranchformerForRNNT.from_pretrained(model_path, config=config)
+    else:
+        config = AutoConfig.from_pretrained(model_args.base_encoder_model)
+        config.update(base_model_config)
+
+        if model_args.config_overrides is not None:
+            logger.info(f"Overriding config: {model_args.config_overrides}")
+            parsed_dict = dict(x.split("=") for x in model_args.config_overrides.split(","))
+            config.update(parsed_dict)
+
+        model = BestRQEBranchformerForRNNT.from_config(config)
+
+    # Reset joiner and predictor weights
+    def weight_reset(m):
+        reset_parameters = getattr(m, "reset_parameters", None)
+        if callable(reset_parameters):
+            m.reset_parameters()
+
+    model._joiner.apply(weight_reset)
+    model._predictor.apply(weight_reset)
+    return model
+
+
 def instantiate_aed_model(model_args: ModelArguments, tokenizer: PreTrainedTokenizer) -> SpeechEncoderDecoderModel:
     base_model_config = {
         "encoder_layerdrop": 0.0,
@@ -170,7 +217,7 @@ def instantiate_aed_model(model_args: ModelArguments, tokenizer: PreTrainedToken
         "decoder_pos_emb_fixed": model_args.decoder_pos_emb_fixed,
         "eos_token_id": tokenizer.eos_token_id,
         "bos_token_id": tokenizer.bos_token_id,
-        "mask_token_id": tokenizer.mask_token_id,
+        "mask_token_id": tokenizer.mask_token_id or -1,
     }
 
     # 4. Initialize seq2seq model
@@ -216,11 +263,13 @@ def instantiate_aed_model(model_args: ModelArguments, tokenizer: PreTrainedToken
             if "lm_mixing" not in name:
                 param.requires_grad = False
         logger.info("Reinstantiating the model decoder with the model with the model supporting mixing mechanism.")
+    if hasattr(model, "set_tokenizer"):
+        model.set_tokenizer(tokenizer)
     return model
 
 
 def instantiate_speech_encoder_model(
-    model_args: ModelArguments, feature_extractor: SequenceFeatureExtractor
+        model_args: ModelArguments, feature_extractor: SequenceFeatureExtractor
 ) -> PreTrainedModel:
     base_model_config = {
         "layerdrop": 0.0,
@@ -231,6 +280,10 @@ def instantiate_speech_encoder_model(
     if model_args.from_pretrained:
         config = AutoConfig.from_pretrained(model_args.from_pretrained)
         config.update(base_model_config)
+        if model_args.config_overrides is not None:
+            logger.info(f"Overriding config: {model_args.config_overrides}")
+            parsed_dict = dict(x.split("=") for x in model_args.config_overrides.split(","))
+            config.update(parsed_dict)
         model_path = model_args.from_pretrained
         if model_args.average_checkpoints:
             model_path = average_checkpoints(model_path)
@@ -246,10 +299,10 @@ def instantiate_speech_encoder_model(
 
 
 def handle_whisper_generation_config(
-    model_args: ModelArguments,
-    model: WhisperForConditionalGeneration,
-    tokenizer: WhisperTokenizer,
-    gen_config: GenerationConfigCustom,
+        model_args: ModelArguments,
+        model: WhisperForConditionalGeneration,
+        tokenizer: WhisperTokenizer,
+        gen_config: GenerationConfigCustom,
 ):
     if model_args.whisper_task and model_args.whisper_language:
         gen_config.suppress_tokens = []

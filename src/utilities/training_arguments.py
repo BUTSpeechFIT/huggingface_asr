@@ -108,6 +108,11 @@ class GeneralTrainingArguments(Seq2SeqTrainingArguments):
             self.dataloader_persistent_workers = True
             super().__post_init__()
 
+        # If local rank is set and GPU are accessible, lock them by allocating small tensor
+        if self.n_gpu > 0:
+            torch.tensor([0], device=self.device)
+
+
 
 @dataclass
 class PretrainingArguments(GeneralTrainingArguments):
@@ -279,3 +284,6 @@ class TokenizerTrainingArguments:
     bos_token: Optional[str] = field(default="<s>", metadata={"help": "BOS token"})
     eos_token: Optional[str] = field(default="</s>", metadata={"help": "EOS token"})
     unk_token: Optional[str] = field(default="<unk>", metadata={"help": "UNK token"})
+    tokens_to_add: Optional[List[str]] = field(
+        default=None, metadata={"help": "List of tokens to ensure are present in the vocab."}
+    )

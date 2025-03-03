@@ -112,10 +112,13 @@ def do_lower_case(example: str, label_column: str) -> Dict[str, str]:
     return {label_column: example.lower()}
 
 
-def remove_punctuation(example: str, label_column: str) -> Dict[str, str]:
-    """Removes punctuation."""
+def remove_nonalphanumeric_symbols(example: str, label_column: str) -> Dict[str, str]:
+    """Removes all non alphanum characters."""
     return {label_column: re.sub(r"[!\"#$%&\'()*+,./\\:;<=>?@^_`{|}~]", "", example)}
 
+def remove_punctuation(example: str, label_column: str) -> Dict[str, str]:
+    """Removes punctuation."""
+    return {label_column: re.sub(r"[!,.:;?]", "", example)}
 
 def remove_multiple_whitespaces_and_strip(example: str, label_column: str) -> Dict[str, str]:
     """Removes multiple whitespaces from batch."""
@@ -130,6 +133,14 @@ def clean_special_tokens_english(example: str, label_column: str) -> Dict[str, s
 def transforms_unfinished_words_to_unks(example: str, label_column: str) -> Dict[str, str]:
     """Transforms unfinished words to UNKs."""
     return {label_column: re.sub(r"\(?\w+-\)?", "([unk])", example)}
+
+def transform_special_tokens_to_unks(example: str, label_column: str) -> Dict[str, str]:
+    """Transforms unfinished words to UNKs."""
+    return {label_column: re.sub(r"\<\w+\>?", "([unk])", example)}
+
+def remove_spacing_around_unks(example: str, label_column: str) -> Dict[str, str]:
+    """Removes spacing around UNKs."""
+    return {label_column: re.sub(r"\s+<unk>\s+", "([unk])", example)}
 
 
 tedlium_contractions = [" 's", " 't", " 're", " 've", " 'm", " 'll", " 'd", " 'clock", " 'all"]

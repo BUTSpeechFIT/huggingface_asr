@@ -1,4 +1,5 @@
 """Main training script for training of attention based encoder decoder ASR models."""
+import os
 import sys
 
 import torch
@@ -66,6 +67,11 @@ if __name__ == "__main__":
     global_means = torch.tensor(train_set["means"]).mean(dim=0)
     global_stds = torch.tensor(train_set["stds"]).mean(dim=0)
 
+    os.makedirs(training_args.output_dir, exist_ok=True)
     # Save global means and stds
     torch.save(global_means, f"{training_args.output_dir}/global_means.pt")
     torch.save(global_stds, f"{training_args.output_dir}/global_stds.pt")
+
+    feature_extractor.global_means = global_means.tolist()
+    feature_extractor.global_stds = global_stds.tolist()
+    feature_extractor.save_pretrained("/mnt/matylda5/ipoloka/projects/huggingface_asr/ec_cz_fe")
