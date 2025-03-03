@@ -1,0 +1,149 @@
+[
+   {
+    "dataset_name": "mozilla-foundation/common_voice_17_0",
+    "dataset_id": "cv",
+    "load_from_disk": false,
+    "train_splits": [
+      "train"
+    ],
+    "validation_splits": [
+      "validation"
+    ],
+    "test_splits": [
+      "test"
+    ],
+    "sampling_rate": 16000,
+    "do_resample": true,
+    "text_column_name": "sentence",
+    "audio_column_name": "audio",
+    "length_column_name": "input_len",
+    "text_transformations": [
+      "whisper_normalize_english",
+      "clean_special_tokens_english_train",
+      "transforms_unfinished_words_to_unks_train"
+    ],
+    "additional_args": {
+      "name": "en"
+    }
+  },
+  {
+    "dataset_name": "/mnt/matylda5/ipoloka/papers/DeCRED/DeCRED_v1/huggingface_asr/src/dataset_builders/kaldi_dataset",
+    "dataset_id": "wsj",
+    "load_from_disk": false,
+    "train_splits": [
+    ],
+    "validation_splits": [
+    ],
+    "test_splits": [
+      "test"
+    ],
+    "text_column_name": "labels",
+    "audio_column_name": "audio",
+    "length_column_name": "input_len",
+    "text_transformations": [
+      "whisper_normalize_english",
+      "clean_special_tokens_english_train",
+      "transforms_unfinished_words_to_unks_train"
+    ],
+    "additional_args": {
+      "data_dir": "/mnt/matylda5/ipoloka/projects/huggingface_asr/metadata_dirs/wsj",
+      "splits": ["train", "dev_dt_20", "dev_dt_05", "test"]
+    }
+  },
+  {
+    "dataset_name": "/mnt/scratch/tmp/ipoloka/cache/fisher",
+    "dataset_id": "fisher_swbd",
+    "load_from_disk": true,
+    "train_splits": [
+    ],
+    "validation_splits": [
+    ],
+    "test_splits": [
+      "test"
+    ],
+    "text_column_name": "labels",
+    "audio_column_name": "audio",
+    "length_column_name": "input_len",
+    "text_transformations": [
+      "whisper_normalize_english",
+      "clean_special_tokens_english_train",
+      "transforms_unfinished_words_to_unks_train"
+    ],
+    "additional_args": {
+    }
+  },
+  {
+    "dataset_name": "facebook/voxpopuli",
+    "dataset_id": "voxpopuli",
+    "load_from_disk": false,
+    "train_splits": [
+      "train"
+    ],
+    "validation_splits": [
+      "validation"
+    ],
+    "test_splits": [
+      "test"
+    ],
+    "text_column_name": "normalized_text",
+    "audio_column_name": "audio",
+    "length_column_name": "input_len",
+    "text_transformations": [
+      "whisper_normalize_english",
+      "clean_special_tokens_english_train",
+      "transforms_unfinished_words_to_unks_train"
+    ],
+    "additional_args": {
+      "name": "en"
+    }
+  },
+  {
+    "dataset_name": "LIUM/tedlium",
+    "dataset_id": "tedlium3",
+    "load_from_disk": false,
+    "train_splits": [
+    ],
+    "validation_splits": [
+    ],
+    "test_splits": [
+      "test"
+    ],
+    "text_column_name": "text",
+    "audio_column_name": "audio",
+    "length_column_name": "input_len",
+    "text_transformations": [
+      "filter_tedlium_empty_labels",
+      "fix_tedlium_apostrophes",
+      "whisper_normalize_english",
+      "clean_special_tokens_english_train",
+      "transforms_unfinished_words_to_unks_train"
+    ],
+    "additional_args": {
+      "name": "release3"
+    }
+  },
+  {
+    "dataset_name": "librispeech_asr",
+    "dataset_id": "librispeech",
+    "load_from_disk": false,
+    "train_splits": [
+    ],
+    "validation_splits": [
+    ],
+    "test_splits": [
+      "test.clean",
+      "test.other"
+    ],
+    "text_column_name": "text",
+    "audio_column_name": "audio",
+    "length_column_name": "input_len",
+    "text_transformations": [
+      "whisper_normalize_english",
+      "clean_special_tokens_english_train",
+      "transforms_unfinished_words_to_unks_train"
+    ],
+    "additional_args": {
+      "name": "all"
+    }
+  }
+]

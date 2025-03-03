@@ -1,0 +1,211 @@
+[
+  {
+    "dataset_name": "/mnt/matylda5/ipoloka/projects/huggingface_asr/src/dataset_builders/kaldi_dataset",
+    "dataset_id": "euasr_cs",
+    "load_from_disk": false,
+    "train_splits": [
+      "train1",
+      "train2"
+    ],
+    "validation_splits": [
+      "dev"
+    ],
+    "test_splits": [
+      "test"
+    ],
+    "sampling_rate": 16000,
+    "text_column_name": "labels",
+    "audio_column_name": "audio",
+    "length_column_name": "input_len",
+    "text_transformations": [
+    ],
+    "additional_args": {
+      "data_dir":"/mnt/matylda5/ipoloka/projects/huggingface_asr/metadata_dirs/eu_asr/",
+      "splits": ["train1", "train2", "dev", "test"]
+    }
+  },
+    {
+    "dataset_name": "/mnt/matylda5/ipoloka/projects/huggingface_asr/src/dataset_builders/kaldi_dataset",
+    "dataset_id": "cv_punct_cs",
+    "load_from_disk": false,
+    "train_splits": [
+      "train"
+    ],
+    "validation_splits": [
+    ],
+    "test_splits": [
+      "test"
+    ],
+    "sampling_rate": 16000,
+    "text_column_name": "labels",
+    "audio_column_name": "audio",
+    "length_column_name": "input_len",
+    "text_transformations": [
+    ],
+    "additional_args": {
+      "data_dir":"/mnt/matylda5/ipoloka/projects/huggingface_asr/metadata_dirs/cv_punct_cs/",
+      "splits": ["train", "dev", "test"]
+    }
+  },
+  {
+    "dataset_name": "/mnt/matylda5/ipoloka/projects/huggingface_asr/src/dataset_builders/kaldi_dataset",
+    "dataset_id": "vox_punct_cs",
+    "load_from_disk": false,
+    "train_splits": [
+      "train"
+    ],
+    "validation_splits": [
+    ],
+    "test_splits": [
+      "test"
+    ],
+    "sampling_rate": 16000,
+    "text_column_name": "labels",
+    "audio_column_name": "audio",
+    "length_column_name": "input_len",
+    "text_transformations": [
+    ],
+    "additional_args": {
+      "data_dir":"/mnt/matylda5/ipoloka/projects/huggingface_asr/metadata_dirs/vox_punct_cs/",
+      "splits": ["train", "dev", "test"]
+    }
+  },
+  {
+    "dataset_name": "/mnt/matylda5/ipoloka/projects/huggingface_asr/src/dataset_builders/kaldi_dataset",
+    "dataset_id": "ldc_cs",
+    "load_from_disk": false,
+    "train_splits": [
+      "train"
+    ],
+    "validation_splits": [
+    ],
+    "test_splits": [
+      "test"
+    ],
+    "sampling_rate": 16000,
+    "text_column_name": "labels",
+    "audio_column_name": "audio",
+    "length_column_name": "input_len",
+    "text_transformations": [
+    ],
+    "additional_args": {
+      "data_dir":"/mnt/matylda5/ipoloka/projects/huggingface_asr/metadata_dirs/ldc_cz",
+      "splits": ["train", "dev", "test"]
+    }
+  },
+  {
+    "dataset_name": "/mnt/matylda5/ipoloka/projects/huggingface_asr/src/dataset_builders/kaldi_dataset",
+    "dataset_id": "ldc_cs",
+    "load_from_disk": false,
+    "train_splits": [
+      "train"
+    ],
+    "validation_splits": [
+    ],
+    "test_splits": [
+      "test"
+    ],
+    "sampling_rate": 16000,
+    "text_column_name": "labels",
+    "audio_column_name": "audio",
+    "length_column_name": "input_len",
+    "text_transformations": [
+    ],
+    "additional_args": {
+      "data_dir":"/mnt/matylda5/ipoloka/projects/huggingface_asr/metadata_dirs/ldc_cz",
+      "splits": ["train", "dev", "test"]
+    }
+  },
+  {
+    "dataset_name": "/mnt/matylda5/ipoloka/projects/huggingface_asr/src/dataset_builders/kaldi_dataset",
+    "dataset_id": "parczech",
+    "load_from_disk": false,
+    "train_splits": [
+      "train"
+    ],
+    "validation_splits": [
+    ],
+    "test_splits": [
+      "test"
+    ],
+    "sampling_rate": 16000,
+    "text_column_name": "labels",
+    "audio_column_name": "audio",
+    "length_column_name": "input_len",
+    "text_transformations": [
+    ],
+    "additional_args": {
+      "data_dir":"/mnt/matylda5/ipoloka/projects/huggingface_asr/metadata_dirs/parczech_cz",
+      "splits": ["train", "dev", "test"]
+    }
+  },
+  {
+    "dataset_name": "/mnt/matylda5/ipoloka/projects/huggingface_asr/src/dataset_builders/kaldi_dataset",
+    "dataset_id": "pdstc",
+    "load_from_disk": false,
+    "train_splits": [
+      "train"
+    ],
+    "validation_splits": [
+    ],
+    "test_splits": [
+      "test"
+    ],
+    "sampling_rate": 16000,
+    "text_column_name": "labels",
+    "audio_column_name": "audio",
+    "length_column_name": "input_len",
+    "text_transformations": [
+    ],
+    "additional_args": {
+      "data_dir":"/mnt/matylda5/ipoloka/projects/huggingface_asr/metadata_dirs/pdstc_cz/",
+      "splits": ["train", "dev", "test"]
+    }
+  },
+  {
+    "dataset_name": "/mnt/matylda5/ipoloka/projects/huggingface_asr/src/dataset_builders/kaldi_dataset",
+    "dataset_id": "bison",
+    "load_from_disk": false,
+    "train_splits": [
+      "train"
+    ],
+    "validation_splits": [
+    ],
+    "test_splits": [
+      "test"
+    ],
+    "sampling_rate": 16000,
+    "text_column_name": "labels",
+    "audio_column_name": "audio",
+    "length_column_name": "input_len",
+    "text_transformations": [
+    ],
+    "additional_args": {
+      "data_dir":"/mnt/matylda5/ipoloka/projects/huggingface_asr/metadata_dirs/bison/",
+      "splits": ["train", "test"]
+    }
+  },
+  {
+    "dataset_name": "/mnt/matylda5/ipoloka/projects/huggingface_asr/src/dataset_builders/kaldi_dataset",
+    "dataset_id": "project112",
+    "load_from_disk": false,
+    "train_splits": [
+      "train"
+    ],
+    "validation_splits": [
+    ],
+    "test_splits": [
+      "test"
+    ],
+    "sampling_rate": 16000,
+    "text_column_name": "labels",
+    "audio_column_name": "audio",
+    "length_column_name": "input_len",
+    "text_transformations": [
+    ],
+    "additional_args": {
+      "data_dir":"/mnt/matylda5/ipoloka/projects/huggingface_asr/metadata_dirs/project112/",
+      "splits": ["train", "dev", "test"]
+    }
+  }
+]

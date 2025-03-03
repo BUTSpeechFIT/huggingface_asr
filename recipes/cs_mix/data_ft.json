@@ -1,0 +1,28 @@
+[
+  {
+    "dataset_name": "/mnt/scratch/tmp/ipoloka/hf_ds_dump/LELD-CZ_01_v03",
+    "dataset_id": "LELD-CZ",
+    "load_from_disk": true,
+    "train_splits": [
+      "train"
+    ],
+    "validation_splits": [
+      "dev"
+    ],
+    "test_splits": [
+      "test"
+    ],
+    "additional_args": {},
+    "text_column_name": "labels",
+    "audio_column_name": "audio",
+    "length_column_name": "input_len",
+    "text_transformations": [
+      "transforms_unfinished_words_to_unks_train",
+      "do_lower_case",
+      "remove_punctuation",
+      "remove_multiple_whitespaces_and_strip",
+      "transform_special_tokens_to_unks_train",
+      "remove_spacing_around_unks_train"
+    ]
+  }
+]
