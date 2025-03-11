@@ -388,10 +388,14 @@ def do_generate_woz_batched(
     training_args: GeneralTrainingArguments,
     gen_config: GenerationConfig,
     collator: WOZCollator,
-    woz_use_agent_history: bool = False,
+    woz_use_gt_context: bool = False,
+    constrained_beam_search: Optional[List[str]] = None,
 ):
     if data_args.test_splits is None:
         return
+
+    if constrained_beam_search:
+        force_words_ids = [ tokenizer([word], add_special_tokens=False).input_ids for word in constrained_beam_search ]
 
     gen_config.return_dict_in_generate = True
     gen_config.num_beams = model.generation_config.num_beams * gen_args.eval_beam_factor
@@ -450,7 +454,8 @@ def do_generate_woz_batched(
                 for sample, wav_id in zip(batch, current_wav_ids):
                     context_original[wav_id]['user'] = sample['context']['text'] # TODO FIX handle agent turns as well
                     context_original[wav_id]['agent'] = sample['context']['agent_text']
-                    sample['context']['text'] = context_generated[wav_id]
+                    if not woz_use_gt_context:
+                        sample['context']['text'] = context_generated[wav_id]
 
                 model_inputs = collator(batch).to(model.device)
 
@@ -460,8 +465,10 @@ def do_generate_woz_batched(
                 labels = tokenizer.batch_decode(labels, skip_special_tokens=True)
 
                 with torch.no_grad():
-                    outputs = accelerator.unwrap_model(model).generate(**model_inputs, generation_config=gen_config)['sequences'].cpu()
-
+                    if constrained_beam_search:
+                        outputs = accelerator.unwrap_model(model).generate(**model_inputs, force_words_ids=force_words_ids, generation_config=gen_config)['sequences'].cpu()
+                    else:
+                        outputs = accelerator.unwrap_model(model).generate(**model_inputs, generation_config=gen_config)['sequences'].cpu()
                 generated_batch = tokenizer.batch_decode(outputs, skip_special_tokens=True)
 
                 # now parse out the generated text 
@@ -481,7 +488,10 @@ def do_generate_woz_batched(
                         'text_hyp': generated_text,
                     })
 
-                    context_generated[wav_id].append(pred_dict['transcript'])
+                    new_contex = pred_dict['transcript']
+                    if type(new_contex) != str:
+                        new_contex = ""
+                    context_generated[wav_id].append(new_contex)
 
         predictions_all = accelerator.gather_for_metrics([predictions])
         if accelerator.is_main_process:

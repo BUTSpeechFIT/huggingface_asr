@@ -20,7 +20,7 @@ class SpeechAwareMultiWOZ(datasets.GeneratorBasedBuilder):
                  splits: Optional[List[str]] = [],
                  title_case_slots: Optional[bool] = True,
                  **kwargs):
-        self.splits = splits if splits else ['test_verbatim', 'test_paraphrased', 'dev', 'train' ]
+        self.splits = splits if splits else ['test_verbatim', 'test_paraphrased', 'test_tts', 'dev', 'train' ]
         self.data_dir = data_dir
         self.title_case_slots = title_case_slots
         super().__init__(data_dir=data_dir, **kwargs)
@@ -63,8 +63,12 @@ class SpeechAwareMultiWOZ(datasets.GeneratorBasedBuilder):
     def _fetch_split_meta(self, split: str):
         if split == 'test_verbatim':
             file_path = str(self.data_dir) + f'/test_verbatim_v2.json'
+        if split == 'test_verbatim_gt':
+            file_path = str(self.data_dir) + f'/test_verbatim_gt_v2.json'
         elif split == 'test_paraphrased':
             file_path = str(self.data_dir) + f'/test_paraphrase_v2.json'
+        elif split == 'test_tts':
+            file_path = str(self.data_dir) + f'/test_tts_v2.json'
         else:
             file_path = str(self.data_dir) + f'/{split}_punct_v2.json'
 

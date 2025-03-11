@@ -13,8 +13,10 @@ from transformers import (
     BitsAndBytesConfig,
     WavLMModel,
     WavLMConfig,
-    set_seed
+    set_seed,
 )
+
+from copy import deepcopy
 from transformers.modeling_outputs import Wav2Vec2BaseModelOutput
 from transformers.utils import logging
 import torch
@@ -159,9 +161,15 @@ if __name__ == "__main__":
             target_modules='all-linear',
             r=conn_args.decoder_lora_rank,
             lora_alpha=conn_args.decoder_lora_alpha,
+            lora_dropout=conn_args.decoder_lora_dropout,
         )
 
         decoder = get_peft_model(decoder, lora_config)
+
+    # this is a workaround...
+    if conn_args.decoder_copy:
+        logger.info("Backing up the decoder model...")
+        decoder_copy = deepcopy(decoder)
 
     # -- prepare the connector
     if model_args.from_config:
@@ -213,6 +221,12 @@ if __name__ == "__main__":
 
     else:
         model = TMPSpeechEncoderConnectorLMDecoder(encoder=encoder, decoder=decoder, config=apmo_config, freeze_decoder= not conn_args.decoder_lora, tokenizer=tokenizer)
+
+    if conn_args.decoder_copy:
+        logger.info("Restoring the decoder model...")
+        model.decoder = decoder_copy
+        del decoder
+        decoder = decoder_copy
 
     logger.info(f"Finished loading model {model}")
 
@@ -300,16 +314,6 @@ if __name__ == "__main__":
             training_args=training_args,
             gen_config=gen_config,
             collator=data_collator,
-            woz_use_agent_history=data_args.woz_use_agent_history,
-        )
-    if training_args.do_generate_sequential:
-        do_generate_woz(
-            trainer=trainer,
-            dataset=dataset,
-            model=model,
-            tokenizer=tokenizer,
-            gen_args=gen_args,
-            data_args=data_args,
-            gen_config=gen_config,
-            collator=data_collator,
+            woz_use_gt_context=data_args.woz_use_gt_context,
+            constrained_beam_search=data_args.constrained_beam_search,
         )

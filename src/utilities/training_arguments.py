@@ -282,6 +282,12 @@ class DataTrainingArguments:
     woz_use_agent_history: Optional[bool] = field(
         default=False, metadata={"help": "Whether to use agent history in dialogue datasets."}
     )
+    woz_use_gt_context: Optional[bool] = field(
+        default=False, metadata={"help": "Whether to use the ground truth context when running inference on woz data."}
+    )
+    constrained_beam_search: Optional[List[str]] = field(
+        default=None, metadata={"help": "List of keywords for the constrained_beam_search. "}
+    )
 
 
 
@@ -343,6 +349,8 @@ class ConnectorArguments:
     decoder_lora: Optional[bool] = field(default=False, metadata={"help": "Whether to use LoRA for the decoder LM."})
     decoder_lora_rank: Optional[int] = field(default=8, metadata={"help": "Rank of the LoRA for the decoder LM."})
     decoder_lora_alpha: Optional[int] = field(default=8, metadata={"help": "Alpha of the LoRA for the decoder LM."})
+    decoder_lora_dropout: Optional[float] = field(default=0.0, metadata={"help": "LoRA dropout for the decoder LM."})
+    decoder_copy: Optional[bool] = field(default=False, metadata={"help": "Whether copy the decoder LM after initiaization from checkpoint."})
     quantize_decoder: Optional[int] = field(default=None, metadata={"help": "Which BnB decoder quantization config to use (8bit, 4bit). FIXME: quant. order not working yet"})
     n_queries: Optional[int] = field(default=80, metadata={"help": "Number of qformer queries."})
     downsampling_factor: Optional[int] = field(default=4, metadata={"help": "When using the stacking downsampling method, concatenate 'N' consecutive embeddings."})
