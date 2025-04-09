@@ -58,8 +58,10 @@ example = dataset['test'][10]
 model_inputs = data_collator([example]).to(model.device)
 outputs = model.generate(**model_inputs, generation_config=model.generation_config).cpu()
 generated_batch = tokenizer.batch_decode(outputs, skip_special_tokens=True)
-print(generated_batch)
-"""['"No, I don\'t think I need email. Thank you.", "domains": ["profile", "restaurant"], "slots": {"profile": {"name": "Kathleen Romaine"}, "restaurant": {"day": "Saturday", "people": "3", "time": "13:10", "area": "West", "food": "Indian"}}}']"""
+print('{"transcript": ' + generated_batch[0])
+"""
+'{"transcript": "No, I don\'t think I need email. Thank you.", "domains": ["profile", "restaurant"], "slots": {"profile": {"name": "Kathleen Romaine"}, "restaurant": {"day": "Saturday", "people": "3", "time": "13:10", "area": "West", "food": "Indian"}}}'
+"""
 ```
 
 
