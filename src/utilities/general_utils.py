@@ -491,6 +491,8 @@ def do_generate_woz_batched(
                     new_contex = pred_dict['transcript']
                     if type(new_contex) != str:
                         new_contex = ""
+                    
+                    # add the generated text to the context
                     context_generated[wav_id].append(new_contex)
 
         predictions_all = accelerator.gather_for_metrics([predictions])

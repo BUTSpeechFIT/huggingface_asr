@@ -65,16 +65,18 @@ class  AlignmentConfig(PretrainedConfig):
             self,
             encoder_config=None,
             qformer_config=None,
-            connector_type='qformer',
+            connector_type='encoder_stacked',
             lm_config=None,
+            lora_config=None,
+            prompt=None,
             num_query_tokens=80,
-            modality_matching=True,
+            modality_matching=False,
             mm_pooling='avg',
             mm_micro_loss='dot',
             mm_loss_weight=1.0,
             ce_loss_weight=1.0,
             num_pretrain_epochs=0,
-            downsampling_factor=4,
+            downsampling_factor=6,
             prompt_tuning_prefix_len=0,
             prompt_tuning_suffix_len=0,
             init_prompt_from_embeds=False,
@@ -91,6 +93,10 @@ class  AlignmentConfig(PretrainedConfig):
             self.qformer_config = qformer_config
 
         self.lm_config = lm_config
+        self.lora_config = lora_config
+        # used to store the instruction prompt for the model (empty for most models, but used by some)
+        self.prompt=None
+
         self.modality_matching = modality_matching
         self.mm_pooling=mm_pooling
         self.num_query_tokens = num_query_tokens

@@ -1,6 +1,5 @@
 """Main training script for the encoder -> connector -> decoder-only LM architecture """
 import sys
-from typing import Optional, Union, Tuple
 from transformers import (
     AutoFeatureExtractor,
     AutoModelForCausalLM,
@@ -10,21 +9,18 @@ from transformers import (
     Seq2SeqTrainer,
     Blip2QFormerConfig,
     WhisperForConditionalGeneration,
-    BitsAndBytesConfig,
-    WavLMModel,
-    WavLMConfig,
-    set_seed
+    set_seed,
 )
-from transformers.modeling_outputs import Wav2Vec2BaseModelOutput
+
 from transformers.utils import logging
 import torch
 
 from utilities.callbacks import init_callbacks
-from utilities.collators import SlurpCollator
+from utilities.collators import WOZCollator
 from utilities.data_utils import get_dataset
-from utilities.eval_utils import compute_metrics_slurp
+from utilities.eval_utils import compute_metrics_spokenwoz
 from utilities.model_utils import average_checkpoints as average_checkpoints
-from utilities.general_utils import do_evaluate, do_generate
+from utilities.general_utils import do_evaluate, do_generate_woz_batched
 from utilities.training_arguments import (
     DataTrainingArguments,
     GeneralTrainingArguments,
@@ -33,49 +29,13 @@ from utilities.training_arguments import (
     ConnectorArguments
 )
 
-set_seed(42)
-
 from models.old_alignment import AlignmentConfig
-from models.aligned_decoder_lm import SpeechEncoderConnectorLMDecoder
-from utilities.training_utils import AdditionalLossTrackerTrainer
+from models.aligned_decoder_lm import SpeechEncoderConnectorLLM
+from models.model_wrappers import WavLMModelWrapper
 
-from peft import LoraConfig, get_peft_model, replace_lora_weights_loftq
+from peft import LoraConfig, get_peft_model
 
-
-class WavLMWrapperConfig(WavLMConfig):
-    layer_to_extract = None
-
-class WavLMModelWrapper(WavLMModel):
-    def __init__(self, config: WavLMWrapperConfig):
-        #config.update({ 'attn_implementation': 'flash_attention_2' })
-        super().__init__(config)
-
-    def get_encoder(self):
-        return self
-
-    def forward(
-        self,
-        input_values: Optional[torch.Tensor],
-        attention_mask: Optional[torch.Tensor] = None,
-        mask_time_indices: Optional[torch.FloatTensor] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
-    ) -> Union[Tuple, Wav2Vec2BaseModelOutput]:
-        wav_lm_output = super().forward(
-            input_values=input_values,
-            attention_mask=attention_mask,
-            mask_time_indices=mask_time_indices,
-            output_attentions=output_attentions,
-            output_hidden_states=True,
-            return_dict=return_dict,
-        )
-        if self.config.layer_to_extract is None:
-            return wav_lm_output
-        else:
-            _hidden_state = wav_lm_output.hidden_states[self.config.layer_to_extract]
-            wav_lm_output.last_hidden_state = _hidden_state
-            return wav_lm_output
+set_seed(3407)
 
 
 if __name__ == "__main__":
@@ -108,6 +68,7 @@ if __name__ == "__main__":
         cut_validation_from_train=data_args.cut_validation_from_train,
         seed=data_args.validation_slice_seed,
         reshuffle_at_start=data_args.reshuffle_at_start,
+        do_not_remove_columns=data_args.do_not_remove_columns,
     )
 
     logger.info(f"Dataset processed successfully.{dataset}")
@@ -127,40 +88,67 @@ if __name__ == "__main__":
         tokenizer.pad_token_id = tokenizer(tokenizer.pad_token)['input_ids'][0]
 
     # 3. Instantiate model
-    # -- load the asr encoder
-    if 'whisper' in model_args.base_encoder_model:
-        encoder = WhisperForConditionalGeneration.from_pretrained(
-            model_args.base_encoder_model,
-            torch_dtype=torch.bfloat16,
-            attn_implementation='flash_attention_2',
-        )
-        d_model = encoder.config.d_model
-    elif 'wavlm' in model_args.base_encoder_model:
-        encoder = WavLMModelWrapper.from_pretrained(
-            model_args.base_encoder_model,
-            torch_dtype=torch.bfloat16,
-        )
-        encoder.config.apply_spec_augment = False
-        encoder.config.layer_to_extract = model_args.layer_to_extract
-        d_model = encoder.config.hidden_size
+
+    # loading the model from a pretrained checkpoint is very simple
+    if model_args.from_pretrained:
+        model = SpeechEncoderConnectorLLM.from_pretrained(model_args.from_pretrained)
+
+        # if initializing from an asr checkpoint, it might be desirable to insert lora adapters
+        if conn_args.decoder_lora:
+            model.insert_decoder_lora(conn_args.decoder_lora_rank, conn_args.decoder_lora_alpha)
+
+        if model_args.freeze_encoder:
+            model.freeze_encoder()
+
+        # make sure the lora adapters are not frozen
+        model.unfreeze_decoder_lora()
+
+    # initialize the model from scratch
+        # - load the encoder,
+        # - load the decoder,
+        # - construct the alignment config and model
     else:
-        raise NotImplementedError('only Whisper and WavLm are supported')
+        # -- load the asr encoder
+        if 'whisper' in model_args.base_encoder_model:
+            encoder = WhisperForConditionalGeneration.from_pretrained(
+                model_args.base_encoder_model,
+                torch_dtype=torch.bfloat16,
+                attn_implementation='flash_attention_2',
+            )
+            d_model = encoder.config.d_model
 
-    decoder = AutoModelForCausalLM.from_pretrained(
-        model_args.base_decoder_model,
-        torch_dtype=torch.bfloat16,
-        #attn_implementation="flash_attention_2",
-    )
+        elif 'wavlm' in model_args.base_encoder_model:
+            encoder = WavLMModelWrapper.from_pretrained(
+                model_args.base_encoder_model,
+                torch_dtype=torch.bfloat16,
+            )
+            encoder.config.apply_spec_augment = False
+            encoder.config.layer_to_extract = model_args.layer_to_extract
+            d_model = encoder.config.hidden_size
+        else:
+            raise NotImplementedError('only Whisper and WavLm are supported')
 
-    # set up lora for the decoder
-    if conn_args.decoder_lora:
-        lora_config = LoraConfig(task_type='CAUSAL_LM', target_modules='all-linear')
-        decoder = get_peft_model(decoder, lora_config)
+        # set up the decocer
+        decoder = AutoModelForCausalLM.from_pretrained(
+            model_args.base_decoder_model,
+            torch_dtype=torch.bfloat16,
+            #attn_implementation="flash_attention_2",
+        )
 
-    # -- prepare the connector
-    if model_args.from_config:
-        apmo_config = AlignmentConfig.from_pretrained(model_args.from_config)
-    else:
+        # set up lora for the decoder
+        lora_config = None
+        if conn_args.decoder_lora:
+            lora_config = LoraConfig(
+                task_type='CAUSAL_LM',
+                target_modules='all-linear',
+                r=conn_args.decoder_lora_rank,
+                lora_alpha=conn_args.decoder_lora_alpha,
+                lora_dropout=conn_args.decoder_lora_dropout,
+            )
+
+            decoder = get_peft_model(decoder, lora_config)
+
+        # -- prepare the alignment config
 
         qformer_config = Blip2QFormerConfig(
                 hidden_size=conn_args.conn_hidden_size,
@@ -169,12 +157,13 @@ if __name__ == "__main__":
                 intermediate_size=conn_args.qf_intermediate_size,
                 hidden_act='gelu_new',
                 cross_attention_frequency=1,
-                encoder_hidden_size=d_model
+                encoder_hidden_size=d_model,
             )
 
         apmo_config = AlignmentConfig(
                 encoder_config=encoder.config,
                 qformer_config=qformer_config,
+                lora_config=lora_config,
                 lm_config=decoder.config,
                 num_query_tokens=conn_args.n_queries,
                 mm_pooling=conn_args.qf_mm_pooling,
@@ -189,29 +178,16 @@ if __name__ == "__main__":
                 freeze_encoder=model_args.freeze_encoder,
             )
 
-    # get the initialization point for the soft prompts if specified so
-    # TODO: check the soft prompt implementation
+        # get the initialization point for the soft prompts if specified so
+        # TODO: check the soft prompt implementation
 
-    if model_args.from_pretrained:
-        model_path = model_args.from_pretrained
-        if model_args.average_checkpoints:
-            model_path = average_checkpoints(model_path)
-
-        config = AlignmentConfig.from_pretrained(model_path)
-        logger.info(f"Loading model from pretrained checkpoint...")
-        
-        model = SpeechEncoderConnectorLMDecoder.from_pretrained(model_path, config, encoder, decoder, tokenizer)
-
-        if model_args.freeze_encoder:
-            model.freeze_encoder()
-
-    else:
-        model = SpeechEncoderConnectorLMDecoder(encoder=encoder, decoder=decoder, config=apmo_config, freeze_decoder= not conn_args.decoder_lora, tokenizer=tokenizer)
+        # construct the model
+        model = SpeechEncoderConnectorLLM(config=apmo_config, encoder=encoder, decoder=decoder, freeze_decoder= not conn_args.decoder_lora, tokenizer=tokenizer)
 
     logger.info(f"Finished loading model {model}")
 
     # 4. Update generation config
-    bos = decoder.config.decoder_start_token_id if tokenizer.bos_token_id is None else tokenizer.bos_token_id
+    bos = model.decoder.config.decoder_start_token_id if tokenizer.bos_token_id is None else tokenizer.bos_token_id
     gen_config = GenerationConfig(
         bos_token_id=bos,
         pad_token_id=tokenizer.pad_token_id,
@@ -238,16 +214,15 @@ if __name__ == "__main__":
     callbacks = init_callbacks(data_args, training_args, dataset, feature_extractor)
 
     # 6. Initialize data collator
-    data_collator = SlurpCollator(
+    data_collator = WOZCollator(
         feature_extractor=feature_extractor,
         tokenizer=tokenizer,
-        padding=True,
         sampling_rate=data_args.sampling_rate,
         audio_path=data_args.audio_column_name,
         text_path=data_args.text_column_name,
         model_input_name=model.main_input_name,
         prompt_prefix=conn_args.prompt_prefix,
-        use_slots=data_args.slurp_use_slots,
+        use_agent_history=data_args.woz_use_agent_history,
     )
 
     if gen_args.no_metrics:
@@ -255,7 +230,7 @@ if __name__ == "__main__":
         # get the eval loss this way as a metric
         c_metrics = None
     else:
-        c_metrics = lambda pred: compute_metrics_slurp(tokenizer, pred, gen_args.wandb_predictions_to_save, data_args.slurp_use_slots, data_args.slurp_dump_pred) 
+        c_metrics = lambda pred: compute_metrics_spokenwoz(tokenizer, pred, gen_args.wandb_predictions_to_save, data_args.slurp_dump_pred) 
 
     # 7. Initialize trainer
     trainer = Seq2SeqTrainer(
@@ -285,12 +260,16 @@ if __name__ == "__main__":
         )
     # 10. N-best generation
     if training_args.do_generate:
-        do_generate(
+        do_generate_woz_batched(
             trainer=trainer,
             dataset=dataset,
             model=model,
             tokenizer=tokenizer,
             gen_args=gen_args,
             data_args=data_args,
+            training_args=training_args,
             gen_config=gen_config,
+            collator=data_collator,
+            woz_use_gt_context=data_args.woz_use_gt_context,
+            constrained_beam_search=data_args.constrained_beam_search,
         )

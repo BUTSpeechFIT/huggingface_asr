@@ -1,6 +1,6 @@
 [
   {
-    "dataset_name": "/mnt/scratch/tmp/isedlacek/data/sa_multiwoz_dev_copy",
+    "dataset_name": "/mnt/scratch/tmp/isedlacek/data/sa_multiwoz",
     "dataset_id": "sa_multiwoz",
     "load_from_disk": true,
     "train_splits": [
@@ -10,7 +10,10 @@
       "dev"
     ],
     "test_splits": [
-      "test"
+      "test_verbatim",
+      "test_paraphrased",
+      "test_verbatim_gt",
+      "test_tts"
     ],
     "text_column_name": "text",
     "audio_column_name": "audio",

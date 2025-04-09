@@ -1138,17 +1138,25 @@ class WOZCollator:
     model_input_name: Optional[str] = None
     prompt_prefix: Optional[str] = 'Given the following user input speech utterance and the user input history, transcribe the utterance and infer the dialogue state domains and slots in JSON format: '
     prompt_suffix: Optional[str] = None
-    use_agent_history: Optional[bool] = False
+    use_agent_history: Optional[bool] = True
 
     def __call__(
         self, features: List[Dict[str, Union[List[int], torch.Tensor, Dict[str, BatchFeature]]]]
     ) -> BatchFeature:
         # split inputs and labels since they have to be of different lengths and need
         # different padding methods
-        input_features = [
-            BatchFeature({self.feature_extractor.model_input_names[0]: feature[self.audio_path].squeeze(dim=0)})
-            for feature in features
-        ]
+        if isinstance(features[0][self.audio_path], dict):
+            input_features = [
+                BatchFeature({self.feature_extractor.model_input_names[0]: feature[self.audio_path]['array'].squeeze()})
+                for feature in features
+            ]
+
+        else:
+
+            input_features = [
+                BatchFeature({self.feature_extractor.model_input_names[0]: feature[self.audio_path].squeeze()})
+                for feature in features
+            ]
 
         labels_text = [ feature[self.text_path] for feature in features ]
         histories = []

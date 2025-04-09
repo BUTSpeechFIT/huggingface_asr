@@ -1,13 +1,13 @@
 #!/bin/bash
-#$ -N spokenwoz_multiwoz_lora_r16a16_ua
+#$ -N predict_spokenwoz_multiwoz_lora_8_ua
 #$ -q long.q@supergpu*
 #$ -l ram_free=40G,mem_free=40G
 #$ -l matylda6=0.5,scratch=0.5
 #$ -l gpu=4,gpu_ram=20G
-#$ -o /mnt/matylda6/isedlacek/projects/job_logs/eloquence/dst/spokenwoz_multiwoz_lora_r16a16_ua.o
-#$ -e /mnt/matylda6/isedlacek/projects/job_logs/eloquence/dst/spokenwoz_multiwoz_lora_r16a16_ua.e
+#$ -o /mnt/matylda6/isedlacek/projects/job_logs/eloquence/dst/predict_spokenwoz_multiwoz_lora_8_ua.o
+#$ -e /mnt/matylda6/isedlacek/projects/job_logs/eloquence/dst/predict_spokenwoz_multiwoz_lora_8_ua.e
 N_GPUS=4
-EXPERIMENT="spokenwoz_multiwoz_lora_r16a16_ua"
+EXPERIMENT="predict_spokenwoz_multiwoz_lora_8_ua"
 
 # Job should finish in about 2 days
 ulimit -t 200000
@@ -33,7 +33,8 @@ RECIPE_DIR="${WORK_DIR}/recipes/eloquence"
 #DATASETS="${RECIPE_DIR}/datasets_fisher_ctx.json"
 #DATASETS="${RECIPE_DIR}/datasets_slurp.json"
 #DATASETS="${RECIPE_DIR}/datasets_spokenwoz_whisper.json"
-DATASETS="${RECIPE_DIR}/datasets_woz.json"
+#DATASETS="${RECIPE_DIR}/datasets_woz.json"
+DATASETS="${RECIPE_DIR}/datasets_woz_eval.json"
 #DATASETS="${RECIPE_DIR}/datasets_spokenwoz.json"
 #DATASETS="${RECIPE_DIR}/datasets_multiwoz.json"
 
@@ -61,8 +62,8 @@ echo "CUDA_VISIBLE_DEVICES=$CUDA_VISIBLE_DEVICES"
 args=(
   # General training arguments
   --output_dir=$EXPERIMENT_PATH
-  --per_device_train_batch_size="3" # 20
-  --per_device_eval_batch_size="3" # 24
+  --per_device_train_batch_size="4" # 20
+  --per_device_eval_batch_size="4" # 24
   --dataloader_num_workers="4"
   #--num_train_epochs="14"
   --max_steps="30000"
@@ -70,20 +71,17 @@ args=(
   --length_column_name="turn_index"
   --bf16
   --bf16_full_eval
-  --do_train
   --do_generate
   --load_best_model_at_end
   --qformer_eval_callback
   --ddp_find_unused_parameters="False"
   --decoder_lora
-  --decoder_lora_rank 16
-  --decoder_lora_alpha 16
   --woz_use_agent_history
 
   # Optimizer related arguments
   --optim="adamw_torch"
   --learning_rate="5e-5"
-  --warmup_steps="1000"
+  --warmup_steps="2000"
   --early_stopping_patience="3"
   --weight_decay="1e-6"
   --max_grad_norm="5.0"
@@ -110,8 +108,8 @@ args=(
   --preprocessing_num_workers="16"
   --writer_batch_size="200" # 1000
   --collator_rename_features="False"
-  --validation_split dev
-  --test_splits spokenwoz_test
+  --validation_split sa_multiwoz_dev
+  --test_splits spokenwoz_test sa_multiwoz_dev
   --do_not_remove_columns audio wav_id turn_index text agent_text domains slots context 
 
   --slurp_dump_pred
@@ -124,7 +122,8 @@ args=(
   #--from_pretrained=""
   #--restart_from="/mnt/matylda6/isedlacek/projects/huggingface_asr/exp/wsm_olmo1b_stte_w2000_libri_how2/checkpoint-16000/"
   #--from_pretrained="/mnt/matylda5/iyusuf/exps/eloquence/ehpc_62_dump/bolaji/exp/wll_olmo1b_general_context_asr_fisher_libri_how2_train_enc_context0_labels_nostr/checkpoint-38000"
-  --from_pretrained="/mnt/scratch/tmp/isedlacek/models/phase1_ft_nc" # base connector
+  #--from_pretrained="/mnt/scratch/tmp/isedlacek/models/phase1_ft_nc" # base connector
+  --from_pretrained="/mnt/matylda6/isedlacek/projects/huggingface_asr/exp/spokenwoz_multiwoz_lora_8_ua/checkpoint-4000" # base connector
   #--from_pretrained="/mnt/matylda6/isedlacek/projects/huggingface_asr/exp/spokenwoz_ft_single/checkpoint-12000"
   #--restart_from="/mnt/matylda6/isedlacek/projects/huggingface_asr/exp/spokenwoz_ft_original_tr/checkpoint-6000"
   # latest qlogin /mnt/matylda6/isedlacek/projects/huggingface_asr/exp/test/checkpoint-8000

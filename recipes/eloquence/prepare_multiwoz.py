@@ -6,7 +6,7 @@ if __name__ == "__main__":
         '/mnt/matylda6/isedlacek/projects/huggingface_asr/src/dataset_builders/sa_multiwoz',
         data_dir='/mnt/matylda4/kesiraju/code/OLMo/speech_aware_dialogue/processed',
         num_proc=16,
-        #splits=['dev', 'train'],
+        splits=['test_verbatim_gt', 'test_tts'],
         title_case_slots=True,
         trust_remote_code=True,
     )

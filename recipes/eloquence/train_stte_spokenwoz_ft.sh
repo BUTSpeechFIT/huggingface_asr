@@ -1,13 +1,13 @@
 #!/bin/bash
-#$ -N spokenwoz_lora_8_fixed
+#$ -N spokenwoz_multiwoz_lora_r16a16    
 #$ -q long.q@supergpu*
 #$ -l ram_free=40G,mem_free=40G
 #$ -l matylda6=0.5,scratch=0.5
 #$ -l gpu=2,gpu_ram=20G
-#$ -o /mnt/matylda6/isedlacek/projects/job_logs/eloquence/dst/spokenwoz_lora_8_fixed.o
-#$ -e /mnt/matylda6/isedlacek/projects/job_logs/eloquence/dst/spokenwoz_lora_8_fixed.e
+#$ -o /mnt/matylda6/isedlacek/projects/job_logs/eloquence/dst/spokenwoz_multiwoz_lora_r16a16.o
+#$ -e /mnt/matylda6/isedlacek/projects/job_logs/eloquence/dst/spokenwoz_multiwoz_lora_r16a16.e
 N_GPUS=2
-EXPERIMENT="spokenwoz_lora_8"
+EXPERIMENT="spokenwoz_multiwoz_lora_r16a16"
 
 # Job should finish in about 2 days
 ulimit -t 200000
@@ -33,8 +33,8 @@ RECIPE_DIR="${WORK_DIR}/recipes/eloquence"
 #DATASETS="${RECIPE_DIR}/datasets_fisher_ctx.json"
 #DATASETS="${RECIPE_DIR}/datasets_slurp.json"
 #DATASETS="${RECIPE_DIR}/datasets_spokenwoz_whisper.json"
-#DATASETS="${RECIPE_DIR}/datasets_woz.json"
-DATASETS="${RECIPE_DIR}/datasets_spokenwoz.json"
+DATASETS="${RECIPE_DIR}/datasets_woz.json"
+#DATASETS="${RECIPE_DIR}/datasets_spokenwoz.json"
 #DATASETS="${RECIPE_DIR}/datasets_multiwoz.json"
 
 cd $WORK_DIR || {
@@ -61,11 +61,11 @@ echo "CUDA_VISIBLE_DEVICES=$CUDA_VISIBLE_DEVICES"
 args=(
   # General training arguments
   --output_dir=$EXPERIMENT_PATH
-  --per_device_train_batch_size="6" # 20
-  --per_device_eval_batch_size="6" # 24
+  --per_device_train_batch_size="4" # 20
+  --per_device_eval_batch_size="4" # 24
   --dataloader_num_workers="4"
   #--num_train_epochs="14"
-  --max_steps="50000"
+  --max_steps="30000"
   --group_by_length="True"
   --length_column_name="turn_index"
   --bf16
@@ -76,16 +76,18 @@ args=(
   --qformer_eval_callback
   --ddp_find_unused_parameters="False"
   --decoder_lora
+  --decoder_lora_rank 16
+  --decoder_lora_alpha 16
 
   # Optimizer related arguments
   --optim="adamw_torch"
   --learning_rate="5e-5"
-  --warmup_steps="2000"
+  --warmup_steps="1000"
   --early_stopping_patience="3"
   --weight_decay="1e-6"
   --max_grad_norm="5.0"
   #--lsm_factor="0.1"
-  --gradient_accumulation_steps="4"
+  --gradient_accumulation_steps="6"
 
   # Logging, saving and evaluation related arguments
   --report_to="wandb"
@@ -107,8 +109,8 @@ args=(
   --preprocessing_num_workers="16"
   --writer_batch_size="200" # 1000
   --collator_rename_features="False"
-  --validation_split spokenwoz_dev
-  --test_splits spokenwoz_dev spokenwoz_test
+  --validation_split dev
+  --test_splits spokenwoz_test sa_multiwoz_test
   --do_not_remove_columns audio wav_id turn_index text agent_text domains slots context 
 
   --slurp_dump_pred
@@ -159,6 +161,8 @@ args=(
   --predict_with_generate
   --no_metrics
 )
+
+echo "Running with args: ${args[@]}"
 
 echo "Running training.."
 if [ "$N_GPUS" -gt 1 ]; then

@@ -1,5 +1,6 @@
+torchaudio
 torch
-transformers
+transformers==4.48.2
 audiomentations
 kaldiio
 jiwer
@@ -15,4 +16,8 @@ numpy
 packaging
 pandas
 librosa
-torchaudio
+tslearn
+sacrebleu
+ninja
+nltk
+peft

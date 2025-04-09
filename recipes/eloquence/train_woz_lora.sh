@@ -1,13 +1,13 @@
 #!/bin/bash
-#$ -N spokenwoz_multiwoz_lora_r16a16_ua
+#$ -N spokenwoz_lora_r16a16
 #$ -q long.q@supergpu*
 #$ -l ram_free=40G,mem_free=40G
 #$ -l matylda6=0.5,scratch=0.5
-#$ -l gpu=4,gpu_ram=20G
-#$ -o /mnt/matylda6/isedlacek/projects/job_logs/eloquence/dst/spokenwoz_multiwoz_lora_r16a16_ua.o
-#$ -e /mnt/matylda6/isedlacek/projects/job_logs/eloquence/dst/spokenwoz_multiwoz_lora_r16a16_ua.e
-N_GPUS=4
-EXPERIMENT="spokenwoz_multiwoz_lora_r16a16_ua"
+#$ -l gpu=3,gpu_ram=20G
+#$ -o /mnt/matylda6/isedlacek/projects/job_logs/eloquence/dst/spokenwoz_lora_r16a16.o
+#$ -e /mnt/matylda6/isedlacek/projects/job_logs/eloquence/dst/spokenwoz_lora_r16a16.e
+N_GPUS=3
+EXPERIMENT="spokenwoz_lora_r16a16"
 
 # Job should finish in about 2 days
 ulimit -t 200000
@@ -33,8 +33,8 @@ RECIPE_DIR="${WORK_DIR}/recipes/eloquence"
 #DATASETS="${RECIPE_DIR}/datasets_fisher_ctx.json"
 #DATASETS="${RECIPE_DIR}/datasets_slurp.json"
 #DATASETS="${RECIPE_DIR}/datasets_spokenwoz_whisper.json"
-DATASETS="${RECIPE_DIR}/datasets_woz.json"
-#DATASETS="${RECIPE_DIR}/datasets_spokenwoz.json"
+#DATASETS="${RECIPE_DIR}/datasets_woz.json"
+DATASETS="${RECIPE_DIR}/datasets_spokenwoz.json"
 #DATASETS="${RECIPE_DIR}/datasets_multiwoz.json"
 
 cd $WORK_DIR || {
@@ -61,8 +61,8 @@ echo "CUDA_VISIBLE_DEVICES=$CUDA_VISIBLE_DEVICES"
 args=(
   # General training arguments
   --output_dir=$EXPERIMENT_PATH
-  --per_device_train_batch_size="3" # 20
-  --per_device_eval_batch_size="3" # 24
+  --per_device_train_batch_size="4" # 20
+  --per_device_eval_batch_size="4" # 24
   --dataloader_num_workers="4"
   #--num_train_epochs="14"
   --max_steps="30000"
@@ -75,10 +75,10 @@ args=(
   --load_best_model_at_end
   --qformer_eval_callback
   --ddp_find_unused_parameters="False"
+
   --decoder_lora
   --decoder_lora_rank 16
   --decoder_lora_alpha 16
-  --woz_use_agent_history
 
   # Optimizer related arguments
   --optim="adamw_torch"
@@ -110,8 +110,8 @@ args=(
   --preprocessing_num_workers="16"
   --writer_batch_size="200" # 1000
   --collator_rename_features="False"
-  --validation_split dev
-  --test_splits spokenwoz_test
+  --validation_split spokenwoz_dev
+  --test_splits spokenwoz_dev spokenwoz_test
   --do_not_remove_columns audio wav_id turn_index text agent_text domains slots context 
 
   --slurp_dump_pred
@@ -162,6 +162,8 @@ args=(
   --predict_with_generate
   --no_metrics
 )
+
+echo "Running with args: ${args[@]}"
 
 echo "Running training.."
 if [ "$N_GPUS" -gt 1 ]; then

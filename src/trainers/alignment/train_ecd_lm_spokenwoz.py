@@ -1,6 +1,5 @@
 """Main training script for the encoder -> connector -> decoder-only LM architecture """
 import sys
-from typing import Optional, Union, Tuple
 from transformers import (
     AutoFeatureExtractor,
     AutoModelForCausalLM,
@@ -10,14 +9,10 @@ from transformers import (
     Seq2SeqTrainer,
     Blip2QFormerConfig,
     WhisperForConditionalGeneration,
-    BitsAndBytesConfig,
-    WavLMModel,
-    WavLMConfig,
     set_seed,
 )
 
 from copy import deepcopy
-from transformers.modeling_outputs import Wav2Vec2BaseModelOutput
 from transformers.utils import logging
 import torch
 
@@ -26,7 +21,7 @@ from utilities.collators import WOZCollator
 from utilities.data_utils import get_dataset
 from utilities.eval_utils import compute_metrics_spokenwoz
 from utilities.model_utils import average_checkpoints as average_checkpoints
-from utilities.general_utils import do_evaluate, do_generate_woz_batched, do_generate_woz
+from utilities.general_utils import do_evaluate, do_generate_woz_batched
 from utilities.training_arguments import (
     DataTrainingArguments,
     GeneralTrainingArguments,
@@ -36,47 +31,12 @@ from utilities.training_arguments import (
 )
 
 from models.old_alignment import AlignmentConfig
-from models.aligned_decoder_lm import TMPSpeechEncoderConnectorLMDecoder
+from models.aligned_decoder_lm import TMPSpeechEncoderConnectorLMDecoder, Loadable
+from models.model_wrappers import WavLMModelWrapper
 
-from peft import LoraConfig, get_peft_model, replace_lora_weights_loftq
+from peft import LoraConfig, get_peft_model
 
 set_seed(3407)
-
-
-class WavLMWrapperConfig(WavLMConfig):
-    layer_to_extract = None
-
-class WavLMModelWrapper(WavLMModel):
-    def __init__(self, config: WavLMWrapperConfig):
-        #config.update({ 'attn_implementation': 'flash_attention_2' })
-        super().__init__(config)
-
-    def get_encoder(self):
-        return self
-
-    def forward(
-        self,
-        input_values: Optional[torch.Tensor],
-        attention_mask: Optional[torch.Tensor] = None,
-        mask_time_indices: Optional[torch.FloatTensor] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
-    ) -> Union[Tuple, Wav2Vec2BaseModelOutput]:
-        wav_lm_output = super().forward(
-            input_values=input_values,
-            attention_mask=attention_mask,
-            mask_time_indices=mask_time_indices,
-            output_attentions=output_attentions,
-            output_hidden_states=True,
-            return_dict=return_dict,
-        )
-        if self.config.layer_to_extract is None:
-            return wav_lm_output
-        else:
-            _hidden_state = wav_lm_output.hidden_states[self.config.layer_to_extract]
-            wav_lm_output.last_hidden_state = _hidden_state
-            return wav_lm_output
 
 
 if __name__ == "__main__":
