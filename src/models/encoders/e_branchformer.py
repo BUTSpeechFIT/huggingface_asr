@@ -1,4 +1,4 @@
-""" PyTorch Wav2Vec2-Ebranchformer model."""
+"""PyTorch Wav2Vec2-Ebranchformer model."""
 
 import math
 from typing import Optional, Tuple, Union
@@ -23,7 +23,11 @@ from transformers.models.wav2vec2.modeling_wav2vec2 import (
 from transformers.models.wav2vec2_conformer.modeling_wav2vec2_conformer import (
     Wav2Vec2ConformerConfig,
     Wav2Vec2ConformerEncoder,
+)
+from transformers.models.wav2vec2_conformer.modeling_wav2vec2_conformer import (
     Wav2Vec2ConformerFeedForward as Wav2Vec2EBranchformerFeedForward,
+)
+from transformers.models.wav2vec2_conformer.modeling_wav2vec2_conformer import (
     Wav2Vec2ConformerModel,
     Wav2Vec2ConformerSelfAttention,
 )
@@ -113,8 +117,8 @@ class Wav2Vec2EBranchformerSelfAttention(Wav2Vec2ConformerSelfAttention):
         value = value.transpose(1, 2)
 
         # prepend the context of 'key' matrix
-        if cached_key != None:
-            assert cached_key.shape[2] == left_context_len
+        if cached_key is not None:
+            assert cached_key.shape[2] == left_context_len  # nosec
             key = torch.cat([cached_key, key], dim=2)
 
             # update the cached_key
@@ -126,8 +130,8 @@ class Wav2Vec2EBranchformerSelfAttention(Wav2Vec2ConformerSelfAttention):
                 cached_key = torch.zeros(shape, device=key.device)
 
         # prepend the context of 'value' matrix
-        if cached_value != None:
-            assert cached_value.shape[2] == left_context_len
+        if cached_value is not None:
+            assert cached_value.shape[2] == left_context_len  # nosec
             value = torch.cat([cached_value, value], dim=2)
 
             # update the cached_key
@@ -321,12 +325,12 @@ class Wav2Vec2EBranchformerEncoderLayer(nn.Module):
         hidden_states: torch.FloatTensor,
         attention_mask: Optional[torch.Tensor] = None,
         relative_position_embeddings: Optional[torch.Tensor] = None,
+        output_attentions: bool = False,
         cached_key: Optional[torch.Tensor] = None,
         cached_value: Optional[torch.Tensor] = None,
         cached_conv: Optional[torch.Tensor] = None,
         cached_conv_fusion: Optional[torch.Tensor] = None,
         left_context_len: int = 0,
-        output_attentions: bool = False,
     ):
         # 1. Optional ff1
         if self.ff1:
@@ -417,6 +421,7 @@ class Wav2Vec2EBranchformerEncoder(Wav2Vec2ConformerEncoder):
         attention_lens: Tensor = None,
         chunk_size: int = -1,
         left_context_len: int = 0,
+        processed_lens: Optional[Tensor] = None,
         is_streaming_inference: bool = False,
         causal_look_ahead: int = 16,
     ) -> Tensor:
@@ -432,8 +437,8 @@ class Wav2Vec2EBranchformerEncoder(Wav2Vec2ConformerEncoder):
         - training with chunks: block-diagonal mask (small look-ahead, left context)
         """
 
-        assert chunk_size == -1 or chunk_size > 0, chunk_size
-        assert left_context_len >= 0, left_context_len
+        assert chunk_size == -1 or chunk_size > 0, chunk_size  # nosec
+        assert left_context_len >= 0, left_context_len  # nosec
 
         if is_streaming_inference:
             # streaming_decode mask -> unlimited access within the chunk's length (no causal masking)
@@ -441,13 +446,23 @@ class Wav2Vec2EBranchformerEncoder(Wav2Vec2ConformerEncoder):
             time1 = attention_lens.shape[-1]
             time2 = time1 + left_context_len
 
-            # extend attention_lens for `left_context_len`
-            left_attention_lens = torch.ones(
-                batch_size,
-                left_context_len,
-                dtype=attention_lens.dtype,
-                device=attention_lens.device,
-            )
+            if processed_lens is not None:
+                # mask-out initial left-context frames, containing 0.0's from initalization
+                n_mask_out = left_context_len - processed_lens
+                n_mask_out[n_mask_out < 0] = 0
+                seq_range = torch.arange(0, left_context_len, device=attention_lens.device)
+                expaned_lengths = seq_range.unsqueeze(0).expand(batch_size, left_context_len)
+                left_attention_lens = expaned_lengths >= n_mask_out.unsqueeze(-1)
+            else:
+                # prepare flags for left-context attention mask, no masking
+                left_attention_lens = torch.ones(
+                    batch_size,
+                    left_context_len,
+                    dtype=attention_lens.dtype,
+                    device=attention_lens.device,
+                )
+
+            # concatenate `left_context_lens` with `attention_lens`
             attention_lens = torch.cat([left_attention_lens, attention_lens], dim=1)
 
             # expand the attention_mask to "attention-prob" shape
@@ -529,8 +544,8 @@ class Wav2Vec2EBranchformerEncoder(Wav2Vec2ConformerEncoder):
         all_hidden_states = () if output_hidden_states else None
         all_self_attentions = () if output_attentions else None
 
-        assert chunk_size == -1 or chunk_size > 0, chunk_size
-        assert left_context_len >= 0, left_context_len
+        assert chunk_size == -1 or chunk_size > 0, chunk_size  # nosec
+        assert left_context_len >= 0, left_context_len  # nosec
 
         # make sure padded tokens output 0
         expand_attention_mask = attention_lens.unsqueeze(-1).repeat(1, 1, hidden_states.shape[2])
@@ -678,6 +693,7 @@ class Wav2Vec2EBranchformerEncoder(Wav2Vec2ConformerEncoder):
         attention_lens: Tensor,
         streaming_states: list[Tensor],
         left_context_len: int = 64,
+        processed_lens: Optional[Tensor] = None,
         output_attentions: bool = False,
     ) -> tuple[Tensor, list[Tensor], list[Tensor]]:
         """
@@ -697,7 +713,7 @@ class Wav2Vec2EBranchformerEncoder(Wav2Vec2ConformerEncoder):
 
         """
 
-        assert len(streaming_states) == 4 * len(self.layers), (len(streaming_states), 4 * len(self.layers))
+        assert len(streaming_states) == 4 * len(self.layers), (len(streaming_states), 4 * len(self.layers))  # nosec
 
         new_streaming_states = []
         attention_out = []
@@ -710,6 +726,7 @@ class Wav2Vec2EBranchformerEncoder(Wav2Vec2ConformerEncoder):
             hidden_states=hidden_states,
             attention_lens=attention_lens,
             left_context_len=left_context_len,
+            processed_lens=processed_lens,
             is_streaming_inference=True,
         )
 
@@ -859,7 +876,8 @@ class Wav2Vec2EBranchformerModel(CustomFE, Wav2Vec2ConformerModel):
         input_values: torch.FloatTensor,
         streaming_states: list[torch.Tensor],
         left_context_len: int,
-        mask_time_indices: Optional[torch.FloatTensor] = None,
+        processed_lens: Optional[torch.Tensor],
+        # mask_time_indices: Optional[torch.FloatTensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
         output_attentions: bool = False,
     ) -> tuple[Tensor, list[Tensor], list[Tensor]]:
@@ -895,15 +913,13 @@ class Wav2Vec2EBranchformerModel(CustomFE, Wav2Vec2ConformerModel):
         # apply feature_projection
         hidden_states, extract_features_norm = self.feature_projection(extract_features)
 
-        # torch.save(hidden_states.cpu(), "pre_encoder_output_ch5000.pt")
-        # breakpoint()
-
-        pre_encoder_output = hidden_states.clone()  # DEBUG, to be removed!
+        # surfacing the `pre_encoder_output`, it can be used for debugging streaming
+        pre_encoder_output = hidden_states.clone()
 
         # apply Spec-augment
-        hidden_states = self._mask_hidden_states(
-            hidden_states, mask_time_indices=mask_time_indices, attention_mask=attention_mask
-        )
+        # hidden_states = self._mask_hidden_states(
+        #    hidden_states, mask_time_indices=mask_time_indices, attention_mask=attention_mask
+        # )
 
         # convert left_context length: fbank -> embedding time
         left_context_len = self._get_feat_extract_output_lengths(
@@ -916,6 +932,7 @@ class Wav2Vec2EBranchformerModel(CustomFE, Wav2Vec2ConformerModel):
             attention_lens=attention_mask,
             streaming_states=streaming_states,
             left_context_len=left_context_len,
+            processed_lens=processed_lens,
             output_attentions=output_attentions,
         )
 
