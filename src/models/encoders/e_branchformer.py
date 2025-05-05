@@ -916,11 +916,6 @@ class Wav2Vec2EBranchformerModel(CustomFE, Wav2Vec2ConformerModel):
         # surfacing the `pre_encoder_output`, it can be used for debugging streaming
         pre_encoder_output = hidden_states.clone()
 
-        # apply Spec-augment
-        # hidden_states = self._mask_hidden_states(
-        #    hidden_states, mask_time_indices=mask_time_indices, attention_mask=attention_mask
-        # )
-
         # convert left_context length: fbank -> embedding time
         left_context_len = self._get_feat_extract_output_lengths(
             input_lengths=left_context_len,
@@ -964,53 +959,6 @@ class Wav2Vec2EBranchformerForPreTraining(Wav2Vec2ForPreTraining):
         if hasattr(self.wav2vec2, "masked_spec_embed"):
             del self.wav2vec2.masked_spec_embed
         self.post_init()
-
-
-#
-#
-# class Wav2Vec2EBranchformerEncoderLayerWrapper(Wav2Vec2EBranchformerEncoderLayer):
-#     def __init__(self, config: Wav2Vec2EBranchformerConfig, wav2vec2: Wav2Vec2EBranchformerModel):
-#         super().__init__(config)
-#         self.wav2vec2 = wav2vec2
-#
-#     def forward(
-#             self,
-#             hidden_states: torch.FloatTensor,
-#             attention_mask: Optional[torch.Tensor] = None,
-#             relative_position_embeddings: Optional[torch.Tensor] = None,
-#             output_attentions: bool = False,
-#             input_values: Optional[torch.Tensor] = None,
-#     ):
-#
-#         # if self.wav2vec2.encoder.embed_positions is not None:
-#         #     relative_position_embeddings = self.wav2vec2.encoder.embed_positions(hidden_states)
-#         # else:
-#         #     relative_position_embeddings = None
-#         extract_features = self.wav2vec2.feature_extractor(input_values)
-#         extract_features = extract_features.transpose(1, 2)
-#         if attention_mask is not None:
-#             # compute reduced attention_mask corresponding to feature vectors
-#             attention_mask = self.wav2vec2._get_feature_vector_attention_mask(
-#                 extract_features.shape[1], attention_mask, add_adapter=False
-#             )
-#         if attention_mask is not None:
-#             # make sure padded tokens output 0
-#             hidden_states[~attention_mask] = 0.0
-#
-#             # extend attention_mask
-#             attention_mask = 1.0 - attention_mask[:, None, None, :].to(dtype=hidden_states.dtype)
-#             attention_mask = attention_mask * torch.finfo(hidden_states.dtype).min
-#             attention_mask = attention_mask.expand(
-#                 attention_mask.shape[0], 1, attention_mask.shape[-1], attention_mask.shape[-1]
-#             )
-#
-#         return super().forward(
-#             hidden_states=hidden_states,
-#             attention_mask=attention_mask,
-#             relative_position_embeddings=relative_position_embeddings,
-#             output_attentions=output_attentions,
-#         )
-#
 
 
 class Wav2Vec2EBranchformerForCTC(Wav2Vec2ForCTC):
@@ -1102,23 +1050,3 @@ class Wav2Vec2EBranchformerForCTC(Wav2Vec2ForCTC):
         return CausalLMOutput(
             loss=loss, logits=logits, hidden_states=outputs.hidden_states, attentions=outputs.attentions
         )
-
-
-alex_proposed_model_interface = """
-
-def forward(
-    self,
-    input_ids: torch.LongTensor = None,  # LM rescoring ?
-    attention_mask: Optional[torch.Tensor] = None,
-    position_ids; Optional[torch.LongTensor] = None,  # ???
-    past_key_values: Optional[Union[Cache, List[torch.FloatTensor]]] = None,  # context
-    inputs_embeds: Optional[torch.FloatTensor] = None,  # hidden_values
-    use_cache: Optional[bool] = None,  # what is the cache, past_key_values or sth. more ?
-    output_attentions: Optional[bool] = None,
-    output_hidden_states: Optional[bool] = None,
-    return_dict: Optional[bool] = None,
-    cache_position: Optional[torch.LongTensor] = None,
-) -> Union[Tuple, BaseModelOutputWithPast]:
-    ...
-
-"""
