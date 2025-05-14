@@ -13,6 +13,8 @@ Currently, these two example recipes utilize the most recent version of the Spok
 ## SpokenWOZ data preparation
 Upon request, we can provide the SpokenWOZ dataset in the Arrow format.
 
+UPDATE: Our SpokenWOZ version with Whisper transcripts can be found on Hugging Face: `https://huggingface.co/datasets/pirxus/spokenwoz-whisper`.
+
 In the other case, SpokenWOZ preparation is very simple. After downloading the dataset from `https://spokenwoz.github.io/SpokenWOZ-github.io/`, use the `recipes/eloquence/prepare_spokenwoz.py` script to convert the dataset to the Arrow format. Lastly, modify the `recipes/eloquence/datasets_spokenwoz.json` file to point to the generated arrow dataset.
 
 ## SpokenWOZ DST pre-trained models
@@ -32,10 +34,10 @@ import torch
 from transformers import AutoTokenizer, AutoFeatureExtractor
 from models.aligned_decoder_lm import SpeechEncoderConnectorLLM
 from utilities.collators import WOZCollator
-from datasets import load_from_disk
+from datasets import load_dataset
 
 # Load the dataset, model, tokenizer and feature extractor
-dataset = load_from_disk("path/to/spokenwoz/arrow") # TODO: replace with the correct path
+dataset = load_dataset("pirxus/spokenwoz-whisper")
 model = SpeechEncoderConnectorLLM.from_pretrained("pirxus/wavlm-large_olmo1b_lora_r16a16_np_ua_swft")
 tokenizer = AutoTokenizer.from_pretrained("pirxus/wavlm-large_olmo1b_lora_r16a16_np_ua_swft")
 feature_extractor = AutoFeatureExtractor.from_pretrained("pirxus/wavlm-large_olmo1b_lora_r16a16_np_ua_swft")
