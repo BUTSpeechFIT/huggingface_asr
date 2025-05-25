@@ -1,4 +1,5 @@
-"""Main training script for the encoder -> connector -> decoder-only LM architecture """
+"""Main training script for the encoder -> connector -> decoder-only LM architecture"""
+
 import sys
 from typing import Optional, Union, Tuple
 from transformers import (
@@ -13,7 +14,16 @@ from transformers import (
     BitsAndBytesConfig,
     WavLMModel,
     WavLMConfig,
-    set_seed
+    Wav2Vec2Config,
+    Wav2Vec2Model,
+    SeamlessM4Tv2Model,
+    set_seed,
+)
+from transformers.models.seamless_m4t.feature_extraction_seamless_m4t import (
+    SeamlessM4TFeatureExtractor,
+)
+from transformers.models.whisper.feature_extraction_whisper import (
+    WhisperFeatureExtractor,
 )
 from transformers.modeling_outputs import Wav2Vec2BaseModelOutput
 from transformers.utils import logging
@@ -30,7 +40,7 @@ from utilities.training_arguments import (
     GeneralTrainingArguments,
     GenerationArguments,
     ModelArguments,
-    ConnectorArguments
+    ConnectorArguments,
 )
 
 set_seed(42)
@@ -45,9 +55,10 @@ from peft import LoraConfig, get_peft_model, replace_lora_weights_loftq
 class WavLMWrapperConfig(WavLMConfig):
     layer_to_extract = None
 
+
 class WavLMModelWrapper(WavLMModel):
     def __init__(self, config: WavLMWrapperConfig):
-        #config.update({ 'attn_implementation': 'flash_attention_2' })
+        # config.update({ 'attn_implementation': 'flash_attention_2' })
         super().__init__(config)
 
     def get_encoder(self):
@@ -78,12 +89,59 @@ class WavLMModelWrapper(WavLMModel):
             return wav_lm_output
 
 
+class Wav2Vec2WrapperConfig(Wav2Vec2Config):
+    layer_to_extract = None
+
+
+class Wav2Vec2ModelWrapper(Wav2Vec2Model):
+    def __init__(self, config: Wav2Vec2WrapperConfig):
+        # config.update({ 'attn_implementation': 'flash_attention_2' })
+        super().__init__(config)
+
+    def get_encoder(self):
+        return self
+
+    def forward(
+        self,
+        input_values: Optional[torch.Tensor],
+        attention_mask: Optional[torch.Tensor] = None,
+        mask_time_indices: Optional[torch.FloatTensor] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
+    ) -> Union[Tuple, Wav2Vec2BaseModelOutput]:
+        wav2vec2_output = super().forward(
+            input_values=input_values,
+            attention_mask=attention_mask,
+            mask_time_indices=mask_time_indices,
+            output_attentions=output_attentions,
+            output_hidden_states=True,
+            return_dict=return_dict,
+        )
+        if self.config.layer_to_extract is None:
+            return wav2vec2_output
+        else:
+            _hidden_state = wav2vec2_output.hidden_states[self.config.layer_to_extract]
+            wav2vec2_output.last_hidden_state = _hidden_state
+            return wav2vec2_output
+
+
 if __name__ == "__main__":
     logging.set_verbosity_debug()
     logger = logging.get_logger("transformers")
-    parser = HfArgumentParser((ModelArguments, DataTrainingArguments, GeneralTrainingArguments, GenerationArguments, ConnectorArguments))
+    parser = HfArgumentParser(
+        (
+            ModelArguments,
+            DataTrainingArguments,
+            GeneralTrainingArguments,
+            GenerationArguments,
+            ConnectorArguments,
+        )
+    )
 
-    model_args, data_args, training_args, gen_args, conn_args = parser.parse_args_into_dataclasses()
+    model_args, data_args, training_args, gen_args, conn_args = (
+        parser.parse_args_into_dataclasses()
+    )
 
     # 0. prepare the how2 dataset object..
     # 1. Collect, preprocess dataset and extract evaluation dataset
@@ -117,25 +175,27 @@ if __name__ == "__main__":
         sys.exit(0)
 
     # 2. Create feature extractor and tokenizer
-    feature_extractor = AutoFeatureExtractor.from_pretrained(training_args.feature_extractor_name)
+    feature_extractor = AutoFeatureExtractor.from_pretrained(
+        training_args.feature_extractor_name
+    )
     tokenizer = AutoTokenizer.from_pretrained(
         training_args.tokenizer_name,
-        add_eos_token = True,
+        add_eos_token=True,
     )
     # correct pad token
-    if not hasattr(tokenizer, 'pad_token_id'): # FIXME
-        tokenizer.pad_token_id = tokenizer(tokenizer.pad_token)['input_ids'][0]
+    if not hasattr(tokenizer, "pad_token_id"):  # FIXME
+        tokenizer.pad_token_id = tokenizer(tokenizer.pad_token)["input_ids"][0]
 
     # 3. Instantiate model
     # -- load the asr encoder
-    if 'whisper' in model_args.base_encoder_model:
+    if "whisper" in model_args.base_encoder_model:
         encoder = WhisperForConditionalGeneration.from_pretrained(
             model_args.base_encoder_model,
             torch_dtype=torch.bfloat16,
-            attn_implementation='flash_attention_2',
+            attn_implementation="flash_attention_2",
         )
         d_model = encoder.config.d_model
-    elif 'wavlm' in model_args.base_encoder_model:
+    elif "wavlm" in model_args.base_encoder_model:
         encoder = WavLMModelWrapper.from_pretrained(
             model_args.base_encoder_model,
             torch_dtype=torch.bfloat16,
@@ -143,18 +203,42 @@ if __name__ == "__main__":
         encoder.config.apply_spec_augment = False
         encoder.config.layer_to_extract = model_args.layer_to_extract
         d_model = encoder.config.hidden_size
+    elif "wav2vec2" in model_args.base_encoder_model:
+        encoder = Wav2Vec2ModelWrapper.from_pretrained(
+            model_args.base_encoder_model,
+            torch_dtype=torch.bfloat16,
+        )
+        encoder.config.apply_spec_augment = False
+        encoder.config.layer_to_extract = model_args.layer_to_extract
+        d_model = encoder.config.hidden_size
+    elif "seamless" in model_args.base_encoder_model:
+        encoder = SeamlessM4Tv2Model.from_pretrained(
+            model_args.base_encoder_model,
+            torch_dtype=torch.bfloat16,
+        )
+        encoder.set_modality("speech")
+        # encoder = model.get_encoder()
+        d_model = encoder.config.hidden_size
     else:
-        raise NotImplementedError('only Whisper and WavLm are supported')
+        raise NotImplementedError(
+            "only [Whisper, WavLm, Wav2Vec2, Seamless] are supported"
+        )
 
     decoder = AutoModelForCausalLM.from_pretrained(
         model_args.base_decoder_model,
         torch_dtype=torch.bfloat16,
-        #attn_implementation="flash_attention_2",
+        # attn_implementation="flash_attention_2",
     )
 
     # set up lora for the decoder
     if conn_args.decoder_lora:
-        lora_config = LoraConfig(task_type='CAUSAL_LM', target_modules='all-linear')
+        lora_config = LoraConfig(
+            task_type="CAUSAL_LM",
+            target_modules="all-linear",
+            r=conn_args.decoder_lora_rank,
+            lora_alpha=conn_args.decoder_lora_alpha,
+            lora_dropout=conn_args.decoder_lora_dropout,
+        )
         decoder = get_peft_model(decoder, lora_config)
 
     # -- prepare the connector
@@ -163,31 +247,31 @@ if __name__ == "__main__":
     else:
 
         qformer_config = Blip2QFormerConfig(
-                hidden_size=conn_args.conn_hidden_size,
-                num_hidden_layers=conn_args.conn_layers,
-                num_attention_heads=conn_args.conn_attn_heads,
-                intermediate_size=conn_args.qf_intermediate_size,
-                hidden_act='gelu_new',
-                cross_attention_frequency=1,
-                encoder_hidden_size=d_model
-            )
+            hidden_size=conn_args.conn_hidden_size,
+            num_hidden_layers=conn_args.conn_layers,
+            num_attention_heads=conn_args.conn_attn_heads,
+            intermediate_size=conn_args.qf_intermediate_size,
+            hidden_act="gelu_new",
+            cross_attention_frequency=1,
+            encoder_hidden_size=d_model,
+        )
 
         apmo_config = AlignmentConfig(
-                encoder_config=encoder.config,
-                qformer_config=qformer_config,
-                lm_config=decoder.config,
-                num_query_tokens=conn_args.n_queries,
-                mm_pooling=conn_args.qf_mm_pooling,
-                mm_loss_weight=conn_args.qf_mm_loss_weight,
-                connector_type=conn_args.connector_type,
-                downsampling_factor=conn_args.downsampling_factor,
-                prompt_tuning_prefix_len=conn_args.prompt_tuning_prefix_len,
-                prompt_tuning_suffix_len=conn_args.prompt_tuning_suffix_len,
-                init_prompt_from_embeds=conn_args.init_prompt_from_embeds,
-                prompt_tuning_prefix_init=conn_args.prompt_tuning_prefix_init,
-                prompt_tuning_suffix_init=conn_args.prompt_tuning_suffix_init,
-                freeze_encoder=model_args.freeze_encoder,
-            )
+            encoder_config=encoder.config,
+            qformer_config=qformer_config,
+            lm_config=decoder.config,
+            num_query_tokens=conn_args.n_queries,
+            mm_pooling=conn_args.qf_mm_pooling,
+            mm_loss_weight=conn_args.qf_mm_loss_weight,
+            connector_type=conn_args.connector_type,
+            downsampling_factor=conn_args.downsampling_factor,
+            prompt_tuning_prefix_len=conn_args.prompt_tuning_prefix_len,
+            prompt_tuning_suffix_len=conn_args.prompt_tuning_suffix_len,
+            init_prompt_from_embeds=conn_args.init_prompt_from_embeds,
+            prompt_tuning_prefix_init=conn_args.prompt_tuning_prefix_init,
+            prompt_tuning_suffix_init=conn_args.prompt_tuning_suffix_init,
+            freeze_encoder=model_args.freeze_encoder,
+        )
 
     # get the initialization point for the soft prompts if specified so
     # TODO: check the soft prompt implementation
@@ -199,19 +283,35 @@ if __name__ == "__main__":
 
         config = AlignmentConfig.from_pretrained(model_path)
         logger.info(f"Loading model from pretrained checkpoint...")
-        
-        model = SpeechEncoderConnectorLMDecoder.from_pretrained(model_path, config, encoder, decoder, tokenizer)
+
+        model = SpeechEncoderConnectorLMDecoder.from_pretrained(
+            model_path, config, encoder, decoder, tokenizer
+        )
 
         if model_args.freeze_encoder:
             model.freeze_encoder()
 
     else:
-        model = SpeechEncoderConnectorLMDecoder(encoder=encoder, decoder=decoder, config=apmo_config, freeze_decoder= not conn_args.decoder_lora, tokenizer=tokenizer)
+        model = SpeechEncoderConnectorLMDecoder(
+            encoder=encoder,
+            decoder=decoder,
+            config=apmo_config,
+            freeze_decoder=not conn_args.decoder_lora,
+            tokenizer=tokenizer,
+        )
+
+    for name, param in model.decoder.named_parameters():
+        if "lora" in name:
+            param.requires_grad = True
 
     logger.info(f"Finished loading model {model}")
 
     # 4. Update generation config
-    bos = decoder.config.decoder_start_token_id if tokenizer.bos_token_id is None else tokenizer.bos_token_id
+    bos = (
+        decoder.config.decoder_start_token_id
+        if tokenizer.bos_token_id is None
+        else tokenizer.bos_token_id
+    )
     gen_config = GenerationConfig(
         bos_token_id=bos,
         pad_token_id=tokenizer.pad_token_id,
@@ -220,19 +320,18 @@ if __name__ == "__main__":
         length_penalty=gen_args.length_penalty,
         early_stopping=gen_args.early_stopping,
         eos_token_id=tokenizer.eos_token_id,
-        #max_length=gen_args.max_length if gen_args.max_new_tokens is None else None,
+        # max_length=gen_args.max_length if gen_args.max_new_tokens is None else None,
         num_beams=gen_args.num_beams,
         max_new_tokens=gen_args.max_new_tokens,
     )
 
     logger.info(f"Model updating generation config:\n {str(gen_config)}")
-    #training_args.generation_max_length = gen_args.max_length
+    # training_args.generation_max_length = gen_args.max_length
     training_args.generation_num_beams = gen_args.num_beams
     model.generation_config = gen_config
     model.decoder.generation_config = gen_config
-    if hasattr(model.decoder, 'decoder'):
+    if hasattr(model.decoder, "decoder"):
         model.decoder.decoder.generation_config = gen_config
-
 
     # 5. Initialize callbacks
     callbacks = init_callbacks(data_args, training_args, dataset, feature_extractor)
@@ -255,17 +354,23 @@ if __name__ == "__main__":
         # get the eval loss this way as a metric
         c_metrics = None
     else:
-        c_metrics = lambda pred: compute_metrics_slurp(tokenizer, pred, gen_args.wandb_predictions_to_save, data_args.slurp_use_slots, data_args.slurp_dump_pred) 
+        c_metrics = lambda pred: compute_metrics_slurp(
+            tokenizer,
+            pred,
+            gen_args.wandb_predictions_to_save,
+            data_args.slurp_use_slots,
+            data_args.slurp_dump_pred,
+        )
 
     # 7. Initialize trainer
     trainer = Seq2SeqTrainer(
-            args=training_args,
-            model=model,
-            callbacks=callbacks,
-            train_dataset=dataset[data_args.train_split],
-            eval_dataset=training_eval_dataset,
-            data_collator=data_collator,
-            compute_metrics=c_metrics,
+        args=training_args,
+        model=model,
+        callbacks=callbacks,
+        train_dataset=dataset[data_args.train_split],
+        eval_dataset=training_eval_dataset,
+        data_collator=data_collator,
+        compute_metrics=c_metrics,
     )
 
     # 8. Train model

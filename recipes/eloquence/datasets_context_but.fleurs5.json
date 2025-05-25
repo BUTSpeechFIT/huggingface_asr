@@ -1,0 +1,28 @@
+[
+  {
+    "dataset_name": "/mnt/scratch/tmp/isvecjan/hf_datasets/google_fleurs.uessex/all",
+    "dataset_id": "fleurs",
+    "load_from_disk": true,
+    "train_splits": [
+      "train"
+    ],
+    "validation_splits": [
+      "validation_en_us"
+    ],
+    "test_splits": [
+      "test",
+      "test_el_gr",
+      "test_en_us",
+      "test_es_419",
+      "test_it_it",
+      "test_sr_rs"
+    ],
+    "text_column_name": "text",
+    "audio_column_name": "audio",
+    "length_column_name": "length",
+    "text_transformations": [
+    ],
+    "additional_args": {
+    }
+  }
+]

@@ -161,8 +161,12 @@ class SpeechEncoderConnectorLMDecoder(PreTrainedModel):
         # FIXME: the padding required in generate - rework the config class to include all
         # the token_ids on the top level ...
         self.config = config
-        self.config.update({'pad_token_id': self.decoder.config.eos_token_id})
-        self.decoder.config.update({'pad_token_id': self.decoder.config.eos_token_id})
+        if isinstance(self.decoder.config.eos_token_id, list): # FIXME
+            self.config.update({'pad_token_id': self.decoder.config.eos_token_id[1]})
+            self.decoder.config.update({'pad_token_id': self.decoder.config.eos_token_id[1]})
+        else:
+            self.config.update({'pad_token_id': self.decoder.config.eos_token_id})
+            self.decoder.config.update({'pad_token_id': self.decoder.config.eos_token_id})
 
     def prepare_prompt_tuning_init_point(self, config, tokenizer):
         # FIXME: This method should be reworked... not a great prompt tuning initialization solution

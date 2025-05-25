@@ -1,0 +1,36 @@
+[
+  {
+    "dataset_name": "/mnt/scratch/tmp/isvecjan/hf_datasets/google_fleurs.speechmassive/all",
+    "dataset_id": "fleurs",
+    "load_from_disk": true,
+    "train_splits": [
+      "train"
+    ],
+    "validation_splits": [
+      "validation_en_us"
+    ],
+    "test_splits": [
+      "test",
+      "test_en_us",
+      "test_es_419",
+      "test_fr_fr",
+      "test_ar_eg",
+      "test_de_de",
+      "test_hu_hu",
+      "test_ko_kr",
+      "test_nl_nl",
+      "test_pl_pl",
+      "test_pt_br",
+      "test_ru_ru",
+      "test_tr_tr",
+      "test_vi_vn"
+    ],
+    "text_column_name": "text",
+    "audio_column_name": "audio",
+    "length_column_name": "length",
+    "text_transformations": [
+    ],
+    "additional_args": {
+    }
+  }
+]

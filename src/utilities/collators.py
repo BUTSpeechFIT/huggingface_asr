@@ -51,7 +51,9 @@ class SpeechCollatorWithPadding:
                 /Fine_tuning_Wav2Vec2_for_English_ASR.ipynb
     """
 
-    feature_extractor: Union[Wav2Vec2FeatureExtractor, Speech2TextFeatureExtractor, WhisperFeatureExtractor]
+    feature_extractor: Union[
+        Wav2Vec2FeatureExtractor, Speech2TextFeatureExtractor, WhisperFeatureExtractor
+    ]
     tokenizer: PreTrainedTokenizer
     padding: Union[bool, str] = True
     max_length: Optional[int] = None
@@ -65,19 +67,28 @@ class SpeechCollatorWithPadding:
     mask_unks: bool = False
 
     def __call__(
-        self, features: List[Dict[str, Union[List[int], torch.Tensor, Dict[str, BatchFeature]]]]
+        self,
+        features: List[
+            Dict[str, Union[List[int], torch.Tensor, Dict[str, BatchFeature]]]
+        ],
     ) -> BatchFeature:
         # split inputs and labels since they have to be of different lengths and need
         # different padding methods
         input_features = [
-            BatchFeature({self.feature_extractor.model_input_names[0]: feature[self.audio_path].squeeze(dim=0)})
+            BatchFeature(
+                {
+                    self.feature_extractor.model_input_names[0]: feature[
+                        self.audio_path
+                    ].squeeze(dim=0)
+                }
+            )
             for feature in features
         ]
 
         if isinstance(features[0][self.text_path], list):
-            labels_prime = [ ' '.join(feature[self.text_path]) for feature in features ]
+            labels_prime = [" ".join(feature[self.text_path]) for feature in features]
         else:
-            labels_prime = [ feature[self.text_path] for feature in features ]
+            labels_prime = [feature[self.text_path] for feature in features]
 
         labels = self.tokenizer.batch_encode_plus(
             labels_prime,
@@ -107,7 +118,9 @@ class SpeechCollatorWithPadding:
         batch["labels"] = labels
 
         if self.model_input_name != self.feature_extractor.model_input_names[0]:
-            batch[self.model_input_name] = batch[self.feature_extractor.model_input_names[0]]
+            batch[self.model_input_name] = batch[
+                self.feature_extractor.model_input_names[0]
+            ]
             del batch[self.feature_extractor.model_input_names[0]]
 
         return batch
@@ -159,7 +172,10 @@ class DataCollatorForWav2Vec2Pretraining:
     model_input_name: str = True
 
     def __post_init__(self):
-        if not isinstance(self.feature_extractor, (Wav2Vec2FeatureExtractor, Speech2TextFeatureExtractor)):
+        if not isinstance(
+            self.feature_extractor,
+            (Wav2Vec2FeatureExtractor, Speech2TextFeatureExtractor),
+        ):
             raise ValueError(
                 f"`feature_extractor` has to be of type {Wav2Vec2FeatureExtractor} or {Speech2TextFeatureExtractor} for {self.__class__}."
             )
@@ -169,7 +185,13 @@ class DataCollatorForWav2Vec2Pretraining:
     ) -> Union[Dict[str, torch.Tensor], BatchFeature]:
         # reformat list to dict and set to pytorch format
         input_features = [
-            BatchFeature({self.feature_extractor.model_input_names[0]: feature[self.audio_path].squeeze(dim=0)})
+            BatchFeature(
+                {
+                    self.feature_extractor.model_input_names[0]: feature[
+                        self.audio_path
+                    ].squeeze(dim=0)
+                }
+            )
             for feature in features
         ]
         batch = self.feature_extractor.pad(
@@ -217,16 +239,21 @@ class DataCollatorForWav2Vec2Pretraining:
             self.model.config.num_negatives,
             mask_time_indices=mask_time_indices,
         )
-        batch["mask_time_indices"] = torch.tensor(mask_time_indices, dtype=torch.long, device=device)
-        batch["sampled_negative_indices"] = torch.tensor(sampled_negative_indices, dtype=torch.long, device=device)
+        batch["mask_time_indices"] = torch.tensor(
+            mask_time_indices, dtype=torch.long, device=device
+        )
+        batch["sampled_negative_indices"] = torch.tensor(
+            sampled_negative_indices, dtype=torch.long, device=device
+        )
 
         if self.model_input_name != self.feature_extractor.model_input_names[0]:
-            batch[self.model_input_name] = batch[self.feature_extractor.model_input_names[0]]
+            batch[self.model_input_name] = batch[
+                self.feature_extractor.model_input_names[0]
+            ]
             del batch[self.feature_extractor.model_input_names[0]]
 
         del batch["sub_attention_mask"]
         return batch
-
 
 
 @dataclass
@@ -273,15 +300,24 @@ class SpeechMTCollatorWithPadding:
     target_text_path: str = None
     source_text_path: str = None
     model_input_name: str = None
-    source_prompt_prefix: str = ''
+    source_prompt_prefix: str = ""
 
     def __call__(
-        self, features: List[Dict[str, Union[List[int], torch.Tensor, Dict[str, BatchFeature]]]]
+        self,
+        features: List[
+            Dict[str, Union[List[int], torch.Tensor, Dict[str, BatchFeature]]]
+        ],
     ) -> BatchFeature:
         # split inputs and labels since they have to be of different lengths and need
         # different padding methods
         input_features = [
-            BatchFeature({self.feature_extractor.model_input_names[0]: feature[self.audio_path].squeeze(dim=0)})
+            BatchFeature(
+                {
+                    self.feature_extractor.model_input_names[0]: feature[
+                        self.audio_path
+                    ].squeeze(dim=0)
+                }
+            )
             for feature in features
         ]
 
@@ -293,7 +329,10 @@ class SpeechMTCollatorWithPadding:
         )
 
         source_text_ids = self.tokenizer_source.batch_encode_plus(
-            [self.source_prompt_prefix + feature[self.source_text_path] for feature in features],
+            [
+                self.source_prompt_prefix + feature[self.source_text_path]
+                for feature in features
+            ],
             return_attention_mask=True,
             padding="longest",
             return_tensors="pt",
@@ -314,14 +353,17 @@ class SpeechMTCollatorWithPadding:
 
         labels = labels["input_ids"].masked_fill(labels.attention_mask.ne(1), -100)
         batch["labels"] = labels
-        batch["mm_input_ids"] = source_text_ids['input_ids']
-        batch["mm_attention_mask"] = source_text_ids['attention_mask']
+        batch["mm_input_ids"] = source_text_ids["input_ids"]
+        batch["mm_attention_mask"] = source_text_ids["attention_mask"]
 
         if self.model_input_name != self.feature_extractor.model_input_names[0]:
-            batch[self.model_input_name] = batch[self.feature_extractor.model_input_names[0]]
+            batch[self.model_input_name] = batch[
+                self.feature_extractor.model_input_names[0]
+            ]
             del batch[self.feature_extractor.model_input_names[0]]
 
         return batch
+
 
 @dataclass
 class SpeechAlignedCollatorWithPadding:
@@ -370,19 +412,28 @@ class SpeechAlignedCollatorWithPadding:
     prompt_suffix: Optional[str] = None
 
     def __call__(
-        self, features: List[Dict[str, Union[List[int], torch.Tensor, Dict[str, BatchFeature]]]]
+        self,
+        features: List[
+            Dict[str, Union[List[int], torch.Tensor, Dict[str, BatchFeature]]]
+        ],
     ) -> BatchFeature:
         # split inputs and labels since they have to be of different lengths and need
         # different padding methods
         input_features = [
-            BatchFeature({self.feature_extractor.model_input_names[0]: feature[self.audio_path].squeeze(dim=0)})
+            BatchFeature(
+                {
+                    self.feature_extractor.model_input_names[0]: feature[
+                        self.audio_path
+                    ].squeeze(dim=0)
+                }
+            )
             for feature in features
         ]
 
         if isinstance(features[0][self.text_path], list):
-            labels_prime = [ ' '.join(feature[self.text_path]) for feature in features ]
+            labels_prime = [" ".join(feature[self.text_path]) for feature in features]
         else:
-            labels_prime = [ feature[self.text_path] for feature in features ]
+            labels_prime = [feature[self.text_path] for feature in features]
 
         labels = self.tokenizer_target.batch_encode_plus(
             labels_prime,
@@ -392,9 +443,9 @@ class SpeechAlignedCollatorWithPadding:
         )
 
         # cut off the bos token
-        if labels['input_ids'][0, 0] == self.tokenizer_target.bos_token_id:
-            labels['input_ids'] = labels['input_ids'][:,1:]
-            labels['attention_mask'] = labels['attention_mask'][:,1:]
+        if labels["input_ids"][0, 0] == self.tokenizer_target.bos_token_id:
+            labels["input_ids"] = labels["input_ids"][:, 1:]
+            labels["attention_mask"] = labels["attention_mask"][:, 1:]
 
         if self.prompt_prefix is not None:
             prompt_prefix_ids = self.tokenizer_source.batch_encode_plus(
@@ -405,9 +456,14 @@ class SpeechAlignedCollatorWithPadding:
             )
 
             # cut off the prefix eos token id
-            if prompt_prefix_ids['input_ids'][0, -1] == self.tokenizer_source.eos_token_id:
-                prompt_prefix_ids['input_ids'] = prompt_prefix_ids['input_ids'][:,:-1]
-                prompt_prefix_ids['attention_mask'] = prompt_prefix_ids['attention_mask'][:,:-1]
+            if (
+                prompt_prefix_ids["input_ids"][0, -1]
+                == self.tokenizer_source.eos_token_id
+            ):
+                prompt_prefix_ids["input_ids"] = prompt_prefix_ids["input_ids"][:, :-1]
+                prompt_prefix_ids["attention_mask"] = prompt_prefix_ids[
+                    "attention_mask"
+                ][:, :-1]
 
         else:
             prompt_prefix_ids = None
@@ -421,14 +477,24 @@ class SpeechAlignedCollatorWithPadding:
             )
 
             # cut off the bos token
-            if prompt_suffix_ids['input_ids'][0, 0] == self.tokenizer_target.bos_token_id:
-                prompt_suffix_ids['input_ids'] = prompt_suffix_ids['input_ids'][:,1:]
-                prompt_suffix_ids['attention_mask'] = prompt_suffix_ids['attention_mask'][:,1:]
+            if (
+                prompt_suffix_ids["input_ids"][0, 0]
+                == self.tokenizer_target.bos_token_id
+            ):
+                prompt_suffix_ids["input_ids"] = prompt_suffix_ids["input_ids"][:, 1:]
+                prompt_suffix_ids["attention_mask"] = prompt_suffix_ids[
+                    "attention_mask"
+                ][:, 1:]
 
             # cut off the eos token
-            if prompt_suffix_ids['input_ids'][0, -1] == self.tokenizer_target.eos_token_id:
-                prompt_suffix_ids['input_ids'] = prompt_suffix_ids['input_ids'][:,:-1]
-                prompt_suffix_ids['attention_mask'] = prompt_suffix_ids['attention_mask'][:,:-1]
+            if (
+                prompt_suffix_ids["input_ids"][0, -1]
+                == self.tokenizer_target.eos_token_id
+            ):
+                prompt_suffix_ids["input_ids"] = prompt_suffix_ids["input_ids"][:, :-1]
+                prompt_suffix_ids["attention_mask"] = prompt_suffix_ids[
+                    "attention_mask"
+                ][:, :-1]
 
         else:
             prompt_suffix_ids = None
@@ -451,18 +517,21 @@ class SpeechAlignedCollatorWithPadding:
         batch["labels"] = labels
 
         if prompt_prefix_ids is not None:
-            batch["prompt_prefix_ids"] = prompt_prefix_ids['input_ids']
-            batch["prompt_prefix_mask"] = prompt_prefix_ids['attention_mask']
+            batch["prompt_prefix_ids"] = prompt_prefix_ids["input_ids"]
+            batch["prompt_prefix_mask"] = prompt_prefix_ids["attention_mask"]
 
         if prompt_suffix_ids is not None:
-            batch["prompt_suffix_ids"] = prompt_suffix_ids['input_ids']
-            batch["prompt_suffix_mask"] = prompt_suffix_ids['attention_mask']
+            batch["prompt_suffix_ids"] = prompt_suffix_ids["input_ids"]
+            batch["prompt_suffix_mask"] = prompt_suffix_ids["attention_mask"]
 
         if self.model_input_name != self.feature_extractor.model_input_names[0]:
-            batch[self.model_input_name] = batch[self.feature_extractor.model_input_names[0]]
+            batch[self.model_input_name] = batch[
+                self.feature_extractor.model_input_names[0]
+            ]
             del batch[self.feature_extractor.model_input_names[0]]
 
         return batch
+
 
 @dataclass
 class MultiTokMTCollatorWithPadding:
@@ -510,7 +579,10 @@ class MultiTokMTCollatorWithPadding:
     prompt_prefix: Optional[str] = None
 
     def __call__(
-        self, features: List[Dict[str, Union[List[int], torch.Tensor, Dict[str, BatchFeature]]]]
+        self,
+        features: List[
+            Dict[str, Union[List[int], torch.Tensor, Dict[str, BatchFeature]]]
+        ],
     ) -> dict:
         # split inputs and labels since they have to be of different lengths and need
         # different padding methods
@@ -537,36 +609,46 @@ class MultiTokMTCollatorWithPadding:
 
         return batch
 
+
 @contextmanager
 def left_padding(tokenizer):
     original_side = tokenizer.padding_side
     try:
-        tokenizer.padding_side = 'left'
+        tokenizer.padding_side = "left"
         yield
     finally:
         tokenizer.padding_side = original_side
 
+
 @contextmanager
 def nadd_eos(tokenizer):
-    original = tokenizer.add_eos_token
-    try:
-        tokenizer.add_eos_token = False
+    if hasattr(tokenizer, "add_eos_token"):
+        original = tokenizer.add_eos_token
+        try:
+            tokenizer.add_eos_token = False
+            yield
+        finally:
+            tokenizer.add_eos_token = original
+    else:
         yield
-    finally:
-        tokenizer.add_eos_token = original
+
 
 @contextmanager
 def nadd_bos(tokenizer):
-    original = tokenizer.add_bos_token
-    try:
-        tokenizer.add_bos_token = False
+    if hasattr(tokenizer, "add_bos_token"):
+        original = tokenizer.add_bos_token
+        try:
+            tokenizer.add_bos_token = False
+            yield
+        finally:
+            tokenizer.add_bos_token = original
+    else:
         yield
-    finally:
-        tokenizer.add_bos_token = original
+
 
 @dataclass
 class GeneralContextCollator:
-    """ Data collator for general/fisher ASR dataset with conversation history """
+    """Data collator for general/fisher ASR dataset with conversation history"""
 
     feature_extractor: Union[Wav2Vec2FeatureExtractor, Speech2TextFeatureExtractor]
     tokenizer: Optional[PreTrainedTokenizer] = None
@@ -579,26 +661,42 @@ class GeneralContextCollator:
     audio_path: Optional[str] = None
     text_path: Optional[str] = None
     model_input_name: Optional[str] = None
-    context_prefix: Optional[str] = 'Context: '
+    context_prefix: Optional[str] = "Context: "
     prompt_prefix: Optional[str] = None
     prompt_suffix: Optional[str] = None
     max_context: Optional[int] = 5
     context_trunc_to_shortest: Optional[bool] = False
 
     def __call__(
-        self, features: List[Dict[str, Union[List[int], torch.Tensor, Dict[str, BatchFeature]]]]
+        self,
+        features: List[
+            Dict[str, Union[List[int], torch.Tensor, Dict[str, BatchFeature]]]
+        ],
     ) -> BatchFeature:
         # split inputs and labels since they have to be of different lengths and need
         # different padding methods
+        # print("features1", self.audio_path, type(self.audio_path), flush=True)
+        # print(
+        #     "features2",
+        #     features[self.audio_path],
+        #     type(features[self.audio_path]),
+        #     flush=True,
+        # )
         input_features = [
-            BatchFeature({self.feature_extractor.model_input_names[0]: feature[self.audio_path].squeeze(dim=0)})
+            BatchFeature(
+                {
+                    self.feature_extractor.model_input_names[0]: feature[
+                        self.audio_path
+                    ].squeeze(dim=0)
+                }
+            )
             for feature in features
         ]
 
         if isinstance(features[0][self.text_path], list):
-            labels_words = [ ' '.join(feature[self.text_path]) for feature in features ]
+            labels_words = [" ".join(feature[self.text_path]) for feature in features]
         else:
-            labels_words = [ feature[self.text_path] for feature in features ]
+            labels_words = [feature[self.text_path] for feature in features]
 
         with nadd_bos(self.tokenizer):
             labels = self.tokenizer.batch_encode_plus(
@@ -612,8 +710,16 @@ class GeneralContextCollator:
         max_context = self.max_context
         context_words = []
         for feature in features:
-            if feature['context']:
-                context_words.append(self.context_prefix + ' '.join([ ' '.join(turn['labels']) for turn in feature['context'][-max_context:]]))
+            if feature["context"]:
+                context_words.append(
+                    self.context_prefix
+                    + " ".join(
+                        [
+                            " ".join(turn["labels"])
+                            for turn in feature["context"][-max_context:]
+                        ]
+                    )
+                )
             else:
                 context_words.append(self.context_prefix)
 
@@ -626,7 +732,7 @@ class GeneralContextCollator:
             )
 
         # 3) Tokenize the embedding prefix
-        if self.prompt_prefix not in [None, '']:
+        if self.prompt_prefix not in [None, ""]:
             with nadd_bos(self.tokenizer), nadd_eos(self.tokenizer):
                 prompt_prefix_ids = self.tokenizer.batch_encode_plus(
                     [self.prompt_prefix for _ in features],
@@ -638,12 +744,16 @@ class GeneralContextCollator:
             prompt_prefix_ids = None
 
         # 3) Tokenize the embedding suffix
-        if self.prompt_suffix not in [None, '']:
+        if self.prompt_suffix not in [None, ""]:
             with nadd_eos(self.tokenizer), nadd_bos(self.tokenizer):
-                #if self.mode == 'turns': FIXME: so, the initial speaker tag should probably be
+                # if self.mode == 'turns': FIXME: so, the initial speaker tag should probably be
                 # added to the suffix..
                 prompt_suffix_ids = self.tokenizer.batch_encode_plus(
-                    [self.prompt_suffix for _ in features],
+                    (
+                        [self.prompt_suffix + f["language"] + ": " for f in features]
+                        if "language" in features[0]
+                        else [self.prompt_suffix for _ in features]
+                    ),
                     return_attention_mask=True,
                     padding="longest",
                     return_tensors="pt",
@@ -670,26 +780,31 @@ class GeneralContextCollator:
         batch["labels"] = labels
 
         if context is not None:
-            batch["context_ids"] = context['input_ids']
-            batch["context_mask"] = context['attention_mask']
+            batch["context_ids"] = context["input_ids"]
+            batch["context_mask"] = context["attention_mask"]
 
         if prompt_prefix_ids is not None:
-            batch["prompt_prefix_ids"] = prompt_prefix_ids['input_ids']
-            batch["prompt_prefix_mask"] = prompt_prefix_ids['attention_mask']
+            batch["prompt_prefix_ids"] = prompt_prefix_ids["input_ids"]
+            batch["prompt_prefix_mask"] = prompt_prefix_ids["attention_mask"]
 
         if prompt_suffix_ids is not None:
-            batch["prompt_suffix_ids"] = prompt_suffix_ids['input_ids']
-            batch["prompt_suffix_mask"] = prompt_suffix_ids['attention_mask']
+            batch["prompt_suffix_ids"] = prompt_suffix_ids["input_ids"]
+            batch["prompt_suffix_mask"] = prompt_suffix_ids["attention_mask"]
 
         if self.model_input_name != self.feature_extractor.model_input_names[0]:
-            batch[self.model_input_name] = batch[self.feature_extractor.model_input_names[0]]
+            batch[self.model_input_name] = batch[
+                self.feature_extractor.model_input_names[0]
+            ]
             del batch[self.feature_extractor.model_input_names[0]]
+
+        batch["input_features"] = batch["input_features"].to(torch.float16)
 
         return batch
 
+
 @dataclass
 class FisherContextCollatorLeftPadding:
-    """ Data collator for the fisher dataset augmented with conversation context. """
+    """Data collator for the fisher dataset augmented with conversation context."""
 
     feature_extractor: Union[Wav2Vec2FeatureExtractor, Speech2TextFeatureExtractor]
     tokenizer: Optional[PreTrainedTokenizer] = None
@@ -702,50 +817,59 @@ class FisherContextCollatorLeftPadding:
     audio_path: Optional[str] = None
     text_path: Optional[str] = None
     model_input_name: Optional[str] = None
-    context_prefix: Optional[str] = 'Context: '
+    context_prefix: Optional[str] = "Context: "
     prompt_prefix: Optional[str] = None
     prompt_suffix: Optional[str] = None
-    mode: Optional[str] = "default" # available modes: default, turns,
+    mode: Optional[str] = "default"  # available modes: default, turns,
     max_context: Optional[int] = 5
     context_trunc_to_shortest: Optional[bool] = False
 
     def __call__(
-        self, features: List[Dict[str, Union[List[int], torch.Tensor, Dict[str, BatchFeature]]]]
+        self,
+        features: List[
+            Dict[str, Union[List[int], torch.Tensor, Dict[str, BatchFeature]]]
+        ],
     ) -> BatchFeature:
         # split inputs and labels since they have to be of different lengths and need
         # different padding methods
         input_features = [
-            BatchFeature({self.feature_extractor.model_input_names[0]: feature[self.audio_path].squeeze(dim=0)})
+            BatchFeature(
+                {
+                    self.feature_extractor.model_input_names[0]: feature[
+                        self.audio_path
+                    ].squeeze(dim=0)
+                }
+            )
             for feature in features
         ]
 
         # 1) Depending on the mode, assemble the labels
-        if self.mode == 'default':
-            labels_words = [ ' '.join(feature[self.text_path]) for feature in features ]
+        if self.mode == "default":
+            labels_words = [" ".join(feature[self.text_path]) for feature in features]
 
-        elif self.mode == 'turns':
+        elif self.mode == "turns":
             labels_words = []
             for feature in features:
-                last_spk = None # prevent the same speaker label to appear mutliple times in a row
+                last_spk = None  # prevent the same speaker label to appear mutliple times in a row
                 tmp = []
 
                 # remap the speaker tags to start with A, as there is no context
-                if not feature['context']:
-                    if feature['speakers'][0] == 'B':
-                        for i in range(len(feature['speakers'])):
-                            if feature['speakers'][i] == 'B':
-                                feature['speakers'][i] = 'A'
+                if not feature["context"]:
+                    if feature["speakers"][0] == "B":
+                        for i in range(len(feature["speakers"])):
+                            if feature["speakers"][i] == "B":
+                                feature["speakers"][i] = "A"
                             else:
-                                feature['speakers'][i] = 'B'
+                                feature["speakers"][i] = "B"
 
-                for utt, spk in zip(feature[self.text_path], feature['speakers']): 
+                for utt, spk in zip(feature[self.text_path], feature["speakers"]):
                     if spk == last_spk:
                         tmp.append(utt.strip())
                     else:
                         last_spk = spk
-                        tmp.append(spk + ': ' + utt.strip())
+                        tmp.append(spk + ": " + utt.strip())
 
-                labels_words.append(' '.join(tmp))
+                labels_words.append(" ".join(tmp))
 
         with nadd_bos(self.tokenizer):
             labels = self.tokenizer.batch_encode_plus(
@@ -757,35 +881,56 @@ class FisherContextCollatorLeftPadding:
 
         # 2) Depending on the mode, assemble the context
         max_context = self.max_context
-        if self.context_trunc_to_shortest: # FIXME: contexts of length zero break everything...
+        if (
+            self.context_trunc_to_shortest
+        ):  # FIXME: contexts of length zero break everything...
             # NOTE: for now, I'm leaving the 1 here, but it should probably have a better solution..
-            max_context = min(min(list(map(lambda x: len(x['context']) if x['context'] else 1, features))), self.max_context)
+            max_context = min(
+                min(
+                    list(
+                        map(
+                            lambda x: len(x["context"]) if x["context"] else 1, features
+                        )
+                    )
+                ),
+                self.max_context,
+            )
 
-        if self.mode == 'default':
+        if self.mode == "default":
             # the most monstrous list comprehension I've ever written..
             context_words = []
             for feature in features:
                 # FIXME: context zero lengt
-                if feature['context']:
-                    context_words.append(self.context_prefix + ' '.join([ ' '.join(turn['labels']) for turn in feature['context'][-max_context:]]))
+                if feature["context"]:
+                    context_words.append(
+                        self.context_prefix
+                        + " ".join(
+                            [
+                                " ".join(turn["labels"])
+                                for turn in feature["context"][-max_context:]
+                            ]
+                        )
+                    )
                 else:
                     context_words.append(self.context_prefix)
 
-        elif self.mode == 'turns': # FIXME: zero context kinda makes even less sense in this scenario...
+        elif (
+            self.mode == "turns"
+        ):  # FIXME: zero context kinda makes even less sense in this scenario...
             context_words = []
             for feature in features:
-                if feature['context']:
+                if feature["context"]:
                     tmp = []
                     last_spk = None
-                    for turn in feature['context'][-max_context:]:
-                        for utt, spk in zip(turn['labels'], turn['speakers']): 
+                    for turn in feature["context"][-max_context:]:
+                        for utt, spk in zip(turn["labels"], turn["speakers"]):
                             if spk == last_spk:
                                 tmp.append(utt.strip())
                             else:
                                 last_spk = spk
-                                tmp.append(spk + ': ' + utt.strip())
+                                tmp.append(spk + ": " + utt.strip())
 
-                    context_words.append(self.context_prefix + ' '.join(tmp))
+                    context_words.append(self.context_prefix + " ".join(tmp))
                 else:
                     context_words.append(self.context_prefix)
 
@@ -798,7 +943,7 @@ class FisherContextCollatorLeftPadding:
             )
 
         # 3) Tokenize the embedding prefix
-        if self.prompt_prefix not in [None, '']:
+        if self.prompt_prefix not in [None, ""]:
             with nadd_bos(self.tokenizer), nadd_eos(self.tokenizer):
                 prompt_prefix_ids = self.tokenizer.batch_encode_plus(
                     [self.prompt_prefix for _ in features],
@@ -810,9 +955,9 @@ class FisherContextCollatorLeftPadding:
             prompt_prefix_ids = None
 
         # 3) Tokenize the embedding suffix
-        if self.prompt_suffix not in [None, '']:
+        if self.prompt_suffix not in [None, ""]:
             with nadd_eos(self.tokenizer), nadd_bos(self.tokenizer):
-                #if self.mode == 'turns': FIXME: so, the initial speaker tag should probably be
+                # if self.mode == 'turns': FIXME: so, the initial speaker tag should probably be
                 # added to the suffix..
                 prompt_suffix_ids = self.tokenizer.batch_encode_plus(
                     [self.prompt_suffix for _ in features],
@@ -842,26 +987,29 @@ class FisherContextCollatorLeftPadding:
         batch["labels"] = labels
 
         if context is not None:
-            batch["context_ids"] = context['input_ids']
-            batch["context_mask"] = context['attention_mask']
+            batch["context_ids"] = context["input_ids"]
+            batch["context_mask"] = context["attention_mask"]
 
         if prompt_prefix_ids is not None:
-            batch["prompt_prefix_ids"] = prompt_prefix_ids['input_ids']
-            batch["prompt_prefix_mask"] = prompt_prefix_ids['attention_mask']
+            batch["prompt_prefix_ids"] = prompt_prefix_ids["input_ids"]
+            batch["prompt_prefix_mask"] = prompt_prefix_ids["attention_mask"]
 
         if prompt_suffix_ids is not None:
-            batch["prompt_suffix_ids"] = prompt_suffix_ids['input_ids']
-            batch["prompt_suffix_mask"] = prompt_suffix_ids['attention_mask']
+            batch["prompt_suffix_ids"] = prompt_suffix_ids["input_ids"]
+            batch["prompt_suffix_mask"] = prompt_suffix_ids["attention_mask"]
 
         if self.model_input_name != self.feature_extractor.model_input_names[0]:
-            batch[self.model_input_name] = batch[self.feature_extractor.model_input_names[0]]
+            batch[self.model_input_name] = batch[
+                self.feature_extractor.model_input_names[0]
+            ]
             del batch[self.feature_extractor.model_input_names[0]]
 
         return batch
 
+
 @dataclass
 class SlurpCollator:
-    """ Data collator for the SLURP dataset for TOD """
+    """Data collator for the SLURP dataset for TOD"""
 
     feature_extractor: Union[Wav2Vec2FeatureExtractor, Speech2TextFeatureExtractor]
     tokenizer: Optional[PreTrainedTokenizer] = None
@@ -874,43 +1022,72 @@ class SlurpCollator:
     audio_path: Optional[str] = None
     text_path: Optional[str] = None
     model_input_name: Optional[str] = None
-    prompt_prefix: Optional[str] = 'Given the following speech utterance, transcribe it and infer the task scenario, action and slots in JSON format: '
+    prompt_prefix: Optional[str] = (
+        "Given the following speech utterance, transcribe it and infer the task scenario, action and slots in JSON format: "
+    )
     prompt_suffix: Optional[str] = None
     use_slots: Optional[bool] = False
 
     def __call__(
-        self, features: List[Dict[str, Union[List[int], torch.Tensor, Dict[str, BatchFeature]]]]
+        self,
+        features: List[
+            Dict[str, Union[List[int], torch.Tensor, Dict[str, BatchFeature]]]
+        ],
     ) -> BatchFeature:
         # split inputs and labels since they have to be of different lengths and need
         # different padding methods
         input_features = [
-            BatchFeature({self.feature_extractor.model_input_names[0]: feature['audio'].squeeze(dim=0)})
+            BatchFeature(
+                {
+                    self.feature_extractor.model_input_names[0]: feature[
+                        "audio"
+                    ].squeeze(dim=0)
+                }
+            )
             for feature in features
         ]
 
-        labels_text = [ feature[self.text_path] for feature in features ]
+        labels_text = [feature[self.text_path] for feature in features]
 
-        jsons = [ json.loads(feature['full_line']) for feature in features ]
-        scenario = [ json['scenario'] for json in jsons ]
-        action = [ json['action'] for json in jsons ]
-        pattern = pattern = r'\[(.*?) : (.*?)\]'
+        jsons = [json.loads(feature["full_line"]) for feature in features]
+        scenario = [json["scenario"] for json in jsons]
+        action = [json["action"] for json in jsons]
+        pattern = pattern = r"\[(.*?) : (.*?)\]"
         if self.use_slots:
-            slots = [ json.dumps(dict(re.findall(pattern, j['sentence_annotation']))) for j in jsons ]
+            slots = [
+                json.dumps(dict(re.findall(pattern, j["sentence_annotation"])))
+                for j in jsons
+            ]
 
         labels_json = []
         for i, label in enumerate(labels_text):
             if self.use_slots:
                 labels_json.append(
-                    '"' + label + '"'
-                    + ', "scenario": "' + scenario[i] + '"' + ', "action": "' + action[i] 
-                    + '", "slots": ' + slots[i] + '}'
+                    '"'
+                    + label
+                    + '"'
+                    + ', "scenario": "'
+                    + scenario[i]
+                    + '"'
+                    + ', "action": "'
+                    + action[i]
+                    + '", "slots": '
+                    + slots[i]
+                    + "}"
                 )
             else:
                 labels_json.append(
-                    '"' + label + '"'
-                    + ', "scenario": "' + scenario[i] + '"' + ', "action": "' + action[i] + '"}'
+                    '"'
+                    + label
+                    + '"'
+                    + ', "scenario": "'
+                    + scenario[i]
+                    + '"'
+                    + ', "action": "'
+                    + action[i]
+                    + '"}'
                 )
-        
+
         with nadd_bos(self.tokenizer):
             labels = self.tokenizer.batch_encode_plus(
                 labels_json,
@@ -923,7 +1100,7 @@ class SlurpCollator:
         embed_prefix = self.prompt_prefix
 
         # 3) Tokenize the embedding prefix
-        if embed_prefix not in [None, '']:
+        if embed_prefix not in [None, ""]:
             with nadd_eos(self.tokenizer):
                 prompt_prefix_ids = self.tokenizer.batch_encode_plus(
                     [embed_prefix for _ in features],
@@ -935,7 +1112,7 @@ class SlurpCollator:
             prompt_prefix_ids = None
 
         # 3) Tokenize the embedding suffix
-        if embed_suffix not in [None, '']:
+        if embed_suffix not in [None, ""]:
             with nadd_eos(self.tokenizer), nadd_bos(self.tokenizer):
                 prompt_suffix_ids = self.tokenizer.batch_encode_plus(
                     [embed_suffix for _ in features],
@@ -965,27 +1142,183 @@ class SlurpCollator:
         batch["labels"] = labels
 
         if prompt_prefix_ids is not None:
-            batch["prompt_prefix_ids"] = prompt_prefix_ids['input_ids']
-            batch["prompt_prefix_mask"] = prompt_prefix_ids['attention_mask']
+            batch["prompt_prefix_ids"] = prompt_prefix_ids["input_ids"]
+            batch["prompt_prefix_mask"] = prompt_prefix_ids["attention_mask"]
 
         if prompt_suffix_ids is not None:
-            batch["prompt_suffix_ids"] = prompt_suffix_ids['input_ids']
-            batch["prompt_suffix_mask"] = prompt_suffix_ids['attention_mask']
+            batch["prompt_suffix_ids"] = prompt_suffix_ids["input_ids"]
+            batch["prompt_suffix_mask"] = prompt_suffix_ids["attention_mask"]
 
         if self.model_input_name != self.feature_extractor.model_input_names[0]:
-            batch[self.model_input_name] = batch[self.feature_extractor.model_input_names[0]]
+            batch[self.model_input_name] = batch[
+                self.feature_extractor.model_input_names[0]
+            ]
             del batch[self.feature_extractor.model_input_names[0]]
 
         return batch
 
+
+@dataclass
+class SpeechMassiveCollator:
+    """Data collator for the Speech Massive dataset for TOD"""
+
+    feature_extractor: Union[Wav2Vec2FeatureExtractor, Speech2TextFeatureExtractor]
+    tokenizer: Optional[PreTrainedTokenizer] = None
+    padding: Union[bool, str] = True
+    max_length: Optional[int] = None
+    max_length_labels: Optional[int] = None
+    pad_to_multiple_of: Optional[int] = None
+    pad_to_multiple_of_labels: Optional[int] = None
+    sampling_rate: Optional[int] = 16_000
+    audio_path: Optional[str] = None
+    text_path: Optional[str] = None
+    model_input_name: Optional[str] = None
+    prompt_prefix: Optional[str] = (
+        "Given the following speech utterance, transcribe it and infer the task scenario, action and slots in JSON format: "
+    )
+    prompt_suffix: Optional[str] = None
+    use_slots: Optional[bool] = False
+
+    def __call__(
+        self,
+        features: List[
+            Dict[str, Union[List[int], torch.Tensor, Dict[str, BatchFeature]]]
+        ],
+    ) -> BatchFeature:
+        # split inputs and labels since they have to be of different lengths and need
+        # different padding methods
+        input_features = [
+            BatchFeature(
+                {
+                    self.feature_extractor.model_input_names[0]: feature[
+                        "audio"
+                    ].squeeze(dim=0)
+                }
+            )
+            for feature in features
+        ]
+
+        labels_text = [feature[self.text_path] for feature in features]
+
+        # jsons = [ json.loads(feature['full_line']) for feature in features ]
+        # scenario = [ json['scenario'] for json in jsons ]
+        # action = [ json['action'] for json in jsons ]
+        # pattern = pattern = r'\[(.*?) : (.*?)\]'
+        # if self.use_slots:
+        # slots = [ json.dumps(dict(re.findall(pattern, j['sentence_annotation']))) for j in jsons ]
+        scenario = [feature["scenario"] for feature in features]
+        action = [feature["action"] for feature in features]
+        if self.use_slots:
+            slots = [feature["slots"] for feature in features]
+
+        labels_json = []
+        for i, label in enumerate(labels_text):
+
+            if self.use_slots:
+                labels_json.append(
+                    '"'
+                    + label
+                    + '"'
+                    + ', "scenario": "'
+                    + scenario[i]
+                    + '"'
+                    + ', "action": "'
+                    + action[i]
+                    + '", "slots": '
+                    + slots[i]
+                    + "}"
+                )
+            else:
+                labels_json.append(
+                    '"'
+                    + label
+                    + '"'
+                    + ', "scenario": "'
+                    + scenario[i]
+                    + '"'
+                    + ', "action": "'
+                    + action[i]
+                    + '"}'
+                )
+
+        with nadd_bos(self.tokenizer):
+            labels = self.tokenizer.batch_encode_plus(
+                labels_json,
+                return_attention_mask=True,
+                padding="longest",
+                return_tensors="pt",
+            )
+
+        embed_suffix = ' {"transcript": '
+        embed_prefix = self.prompt_prefix
+
+        # 3) Tokenize the embedding prefix
+        if embed_prefix not in [None, ""]:
+            with nadd_eos(self.tokenizer):
+                prompt_prefix_ids = self.tokenizer.batch_encode_plus(
+                    [embed_prefix for _ in features],
+                    return_attention_mask=True,
+                    padding="longest",
+                    return_tensors="pt",
+                )
+        else:
+            prompt_prefix_ids = None
+
+        # 3) Tokenize the embedding suffix
+        if embed_suffix not in [None, ""]:
+            with nadd_eos(self.tokenizer), nadd_bos(self.tokenizer):
+                prompt_suffix_ids = self.tokenizer.batch_encode_plus(
+                    [embed_suffix for _ in features],
+                    return_attention_mask=True,
+                    padding="longest",
+                    return_tensors="pt",
+                )
+        else:
+            prompt_suffix_ids = None
+
+        # 4) Apply padding to the features
+        batch = self.feature_extractor.pad(
+            input_features,
+            padding=self.padding,
+            max_length=self.max_length,
+            pad_to_multiple_of=self.pad_to_multiple_of,
+            return_tensors="pt",
+            return_attention_mask=True,
+        )
+
+        if isinstance(self.feature_extractor, WhisperFeatureExtractor):
+            batch[self.feature_extractor.model_input_names[0]] = batch[
+                self.feature_extractor.model_input_names[0]
+            ].transpose(-2, -1)
+
+        labels = labels["input_ids"].masked_fill(labels.attention_mask.ne(1), -100)
+        batch["labels"] = labels
+
+        if prompt_prefix_ids is not None:
+            batch["prompt_prefix_ids"] = prompt_prefix_ids["input_ids"]
+            batch["prompt_prefix_mask"] = prompt_prefix_ids["attention_mask"]
+
+        if prompt_suffix_ids is not None:
+            batch["prompt_suffix_ids"] = prompt_suffix_ids["input_ids"]
+            batch["prompt_suffix_mask"] = prompt_suffix_ids["attention_mask"]
+
+        if self.model_input_name != self.feature_extractor.model_input_names[0]:
+            batch[self.model_input_name] = batch[
+                self.feature_extractor.model_input_names[0]
+            ]
+            del batch[self.feature_extractor.model_input_names[0]]
+
+        return batch
+
+
 @dataclass
 class SpokenWOZCollator:
-    """ Data collator for the SpokenWOZ dataset for TOD
+    """Data collator for the SpokenWOZ dataset for TOD
 
     The propmpt structure for this collator is as follows:
         %prompt_prefix% %speech_embeds% %embed_suffix% %generated_text%
 
-        embed_suffix: {"dialogue_history": "%dialogue_history%", "current_turn": 
+        embed_suffix: {"dialogue_history": "%dialogue_history%", "current_turn":
         generated_text: "%transcript%", "domains": "%domains%", "slots": %slots% }
 
     """
@@ -1000,17 +1333,19 @@ class SpokenWOZCollator:
     text_path: Optional[str] = None
     context_text_path: Optional[str] = None
     model_input_name: Optional[str] = None
-    prompt_prefix: Optional[str] = 'Given the following user input speech utterance and the user input history, transcribe the utterance and infer the dialogue state domains and slots in JSON format: '
+    prompt_prefix: Optional[str] = (
+        "Given the following user input speech utterance and the user input history, transcribe the utterance and infer the dialogue state domains and slots in JSON format: "
+    )
     prompt_suffix: Optional[str] = None
 
     def flatten_dict(self, metadata):
         ret = {}
         for key, val in metadata.items():
             try:
-                val['book'].pop('booked')
+                val["book"].pop("booked")
             except:
                 pass
-            ret[key] = val['book'] | val['semi']
+            ret[key] = val["book"] | val["semi"]
         return ret
 
     def minimize_dict(self, metadata):
@@ -1029,27 +1364,44 @@ class SpokenWOZCollator:
         return list(metadata.keys())
 
     def __call__(
-        self, features: List[Dict[str, Union[List[int], torch.Tensor, Dict[str, BatchFeature]]]]
+        self,
+        features: List[
+            Dict[str, Union[List[int], torch.Tensor, Dict[str, BatchFeature]]]
+        ],
     ) -> BatchFeature:
         # split inputs and labels since they have to be of different lengths and need
         # different padding methods
         input_features = [
-            BatchFeature({self.feature_extractor.model_input_names[0]: feature[self.audio_path].squeeze(dim=0)})
+            BatchFeature(
+                {
+                    self.feature_extractor.model_input_names[0]: feature[
+                        self.audio_path
+                    ].squeeze(dim=0)
+                }
+            )
             for feature in features
         ]
 
-        labels_text = [ feature[self.text_path] for feature in features ]
+        labels_text = [feature[self.text_path] for feature in features]
         histories = []
         for feature in features:
-            histories.append(' '.join(feature['context'][self.context_text_path])) # TODO is this correct?
+            histories.append(
+                " ".join(feature["context"][self.context_text_path])
+            )  # TODO is this correct?
 
-        slots = [ self.minimize_dict(self.flatten_dict(json.loads(feature['metadata']))) for feature in features ]
-        domains = [ self.get_domains(slot) for slot in slots ]
+        slots = [
+            self.minimize_dict(self.flatten_dict(json.loads(feature["metadata"])))
+            for feature in features
+        ]
+        domains = [self.get_domains(slot) for slot in slots]
 
         labels_json = []
         for i, label in enumerate(labels_text):
-            labels_json.append(f'"{label}", "domains": {json.dumps(domains[i])}, "slots": {json.dumps(slots[i])}' + '}')
-        
+            labels_json.append(
+                f'"{label}", "domains": {json.dumps(domains[i])}, "slots": {json.dumps(slots[i])}'
+                + "}"
+            )
+
         with nadd_bos(self.tokenizer):
             labels = self.tokenizer.batch_encode_plus(
                 labels_json,
@@ -1060,7 +1412,7 @@ class SpokenWOZCollator:
 
         # 3) Tokenize the embedding prefix
         embed_prefix = self.prompt_prefix
-        if embed_prefix not in [None, '']:
+        if embed_prefix not in [None, ""]:
             with nadd_eos(self.tokenizer):
                 prompt_prefix_ids = self.tokenizer.batch_encode_plus(
                     [embed_prefix for _ in features],
@@ -1073,10 +1425,14 @@ class SpokenWOZCollator:
 
         embed_suffix = []
         for history in histories:
-            embed_suffix.append(' {' + f'"dialogue_history": "{history}", "current_turn": ')
+            embed_suffix.append(
+                " {" + f'"dialogue_history": "{history}", "current_turn": '
+            )
 
         # 3) Tokenize the embedding suffix
-        with nadd_eos(self.tokenizer), nadd_bos(self.tokenizer), left_padding(self.tokenizer):
+        with nadd_eos(self.tokenizer), nadd_bos(self.tokenizer), left_padding(
+            self.tokenizer
+        ):
             prompt_suffix_ids = self.tokenizer.batch_encode_plus(
                 [e for e in embed_suffix],
                 return_attention_mask=True,
@@ -1103,27 +1459,30 @@ class SpokenWOZCollator:
         batch["labels"] = labels
 
         if prompt_prefix_ids is not None:
-            batch["prompt_prefix_ids"] = prompt_prefix_ids['input_ids']
-            batch["prompt_prefix_mask"] = prompt_prefix_ids['attention_mask']
+            batch["prompt_prefix_ids"] = prompt_prefix_ids["input_ids"]
+            batch["prompt_prefix_mask"] = prompt_prefix_ids["attention_mask"]
 
         if prompt_suffix_ids is not None:
-            batch["prompt_suffix_ids"] = prompt_suffix_ids['input_ids']
-            batch["prompt_suffix_mask"] = prompt_suffix_ids['attention_mask']
+            batch["prompt_suffix_ids"] = prompt_suffix_ids["input_ids"]
+            batch["prompt_suffix_mask"] = prompt_suffix_ids["attention_mask"]
 
         if self.model_input_name != self.feature_extractor.model_input_names[0]:
-            batch[self.model_input_name] = batch[self.feature_extractor.model_input_names[0]]
+            batch[self.model_input_name] = batch[
+                self.feature_extractor.model_input_names[0]
+            ]
             del batch[self.feature_extractor.model_input_names[0]]
 
         return batch
 
+
 @dataclass
 class WOZCollator:
-    """ Data collator for the SpokenWOZ and MultiWOZ datasets for TOD
+    """Data collator for the SpokenWOZ and MultiWOZ datasets for TOD
 
     The propmpt structure for this collator is as follows:
         %prompt_prefix% %speech_embeds% %embed_suffix% %generated_text%
 
-        embed_suffix: {"dialogue_history": "%dialogue_history%", "current_turn": 
+        embed_suffix: {"dialogue_history": "%dialogue_history%", "current_turn":
         generated_text: "%transcript%", "domains": "%domains%", "slots": %slots% }
 
     """
@@ -1136,47 +1495,69 @@ class WOZCollator:
     audio_path: Optional[str] = None
     text_path: Optional[str] = None
     model_input_name: Optional[str] = None
-    prompt_prefix: Optional[str] = 'Given the following user input speech utterance and the user input history, transcribe the utterance and infer the dialogue state domains and slots in JSON format: '
+    prompt_prefix: Optional[str] = (
+        "Given the following user input speech utterance and the user input history, transcribe the utterance and infer the dialogue state domains and slots in JSON format: "
+    )
     prompt_suffix: Optional[str] = None
     use_agent_history: Optional[bool] = True
 
     def __call__(
-        self, features: List[Dict[str, Union[List[int], torch.Tensor, Dict[str, BatchFeature]]]]
+        self,
+        features: List[
+            Dict[str, Union[List[int], torch.Tensor, Dict[str, BatchFeature]]]
+        ],
     ) -> BatchFeature:
         # split inputs and labels since they have to be of different lengths and need
         # different padding methods
         if isinstance(features[0][self.audio_path], dict):
             input_features = [
-                BatchFeature({self.feature_extractor.model_input_names[0]: feature[self.audio_path]['array'].squeeze()})
+                BatchFeature(
+                    {
+                        self.feature_extractor.model_input_names[0]: feature[
+                            self.audio_path
+                        ]["array"].squeeze()
+                    }
+                )
                 for feature in features
             ]
 
         else:
 
             input_features = [
-                BatchFeature({self.feature_extractor.model_input_names[0]: feature[self.audio_path].squeeze()})
+                BatchFeature(
+                    {
+                        self.feature_extractor.model_input_names[0]: feature[
+                            self.audio_path
+                        ].squeeze()
+                    }
+                )
                 for feature in features
             ]
 
-        labels_text = [ feature[self.text_path] for feature in features ]
+        labels_text = [feature[self.text_path] for feature in features]
         histories = []
         if self.use_agent_history:
             for feature in features:
                 h = []
-                for u, a in zip(feature['context']['text'], feature['context']['agent_text']):
+                for u, a in zip(
+                    feature["context"]["text"], feature["context"]["agent_text"]
+                ):
                     h.append("USER: " + u + " AGENT: " + a)
-                histories.append(' '.join(h))
+                histories.append(" ".join(h))
         else:
             for feature in features:
-                histories.append(' '.join(feature['context']['text']))
+                histories.append(" ".join(feature["context"]["text"]))
 
-        slots = [ ast.literal_eval(feature['slots']) for feature in features ]
-        domains = [ ast.literal_eval(feature['domains']) for feature in features ]
+        slots = [ast.literal_eval(feature["slots"]) for feature in features]
+        domains = [ast.literal_eval(feature["domains"]) for feature in features]
 
         labels_json = []
         for i, label in enumerate(labels_text):
-            labels_json.append(f'"{label}", "domains": {json.dumps(domains[i])}, "slots": {json.dumps(slots[i])}' + '}')
-        
+            labels_json.append(
+                f'"{label}", "domains": {json.dumps(domains[i])}, "slots": {json.dumps(slots[i])}'
+                + "}"
+            )
+
         with nadd_bos(self.tokenizer):
             labels = self.tokenizer.batch_encode_plus(
                 labels_json,
@@ -1187,7 +1568,7 @@ class WOZCollator:
 
         # 3) Tokenize the embedding prefix
         embed_prefix = self.prompt_prefix
-        if embed_prefix not in [None, '']:
+        if embed_prefix not in [None, ""]:
             with nadd_eos(self.tokenizer):
                 prompt_prefix_ids = self.tokenizer.batch_encode_plus(
                     [embed_prefix for _ in features],
@@ -1200,10 +1581,14 @@ class WOZCollator:
 
         embed_suffix = []
         for history in histories:
-            embed_suffix.append(' {' + f'"dialogue_history": "{history}", "current_turn": ')
+            embed_suffix.append(
+                " {" + f'"dialogue_history": "{history}", "current_turn": '
+            )
 
         # 3) Tokenize the embedding suffix
-        with nadd_eos(self.tokenizer), nadd_bos(self.tokenizer), left_padding(self.tokenizer):
+        with nadd_eos(self.tokenizer), nadd_bos(self.tokenizer), left_padding(
+            self.tokenizer
+        ):
             prompt_suffix_ids = self.tokenizer.batch_encode_plus(
                 [e for e in embed_suffix],
                 return_attention_mask=True,
@@ -1230,15 +1615,17 @@ class WOZCollator:
         batch["labels"] = labels
 
         if prompt_prefix_ids is not None:
-            batch["prompt_prefix_ids"] = prompt_prefix_ids['input_ids']
-            batch["prompt_prefix_mask"] = prompt_prefix_ids['attention_mask']
+            batch["prompt_prefix_ids"] = prompt_prefix_ids["input_ids"]
+            batch["prompt_prefix_mask"] = prompt_prefix_ids["attention_mask"]
 
         if prompt_suffix_ids is not None:
-            batch["prompt_suffix_ids"] = prompt_suffix_ids['input_ids']
-            batch["prompt_suffix_mask"] = prompt_suffix_ids['attention_mask']
+            batch["prompt_suffix_ids"] = prompt_suffix_ids["input_ids"]
+            batch["prompt_suffix_mask"] = prompt_suffix_ids["attention_mask"]
 
         if self.model_input_name != self.feature_extractor.model_input_names[0]:
-            batch[self.model_input_name] = batch[self.feature_extractor.model_input_names[0]]
+            batch[self.model_input_name] = batch[
+                self.feature_extractor.model_input_names[0]
+            ]
             del batch[self.feature_extractor.model_input_names[0]]
 
         return batch

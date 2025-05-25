@@ -6,8 +6,9 @@
 #$ -l gpu=2,gpu_ram=20G
 #$ -o /mnt/matylda6/isedlacek/projects/job_logs/eloquence/general_context_asr_training.o
 #$ -e /mnt/matylda6/isedlacek/projects/job_logs/eloquence/general_context_asr_training.e
-N_GPUS=1
-EXPERIMENT="general_context_asr_training"
+echo "Hostname: ${HOSTNAME}" >&2
+N_GPUS=2
+EXPERIMENT="wavlm_olmo1b"
 
 # Job should finish in about 2 days
 ulimit -t 200000
@@ -21,9 +22,11 @@ ulimit -v unlimited
 ulimit -u 4096
 
 # Initialize environment
-source /mnt/matylda6/isedlacek/miniconda3/bin/activate /mnt/matylda6/isedlacek/envs/huggingface_asr
+# source /mnt/matylda6/isedlacek/miniconda3/bin/activate /mnt/matylda6/isedlacek/envs/huggingface_asr
+source /mnt/matylda3/isvecjan/miniconda3/bin/activate /mnt/matylda3/isvecjan/miniconda3/envs/speechlm-0425
 
-WORK_DIR="/mnt/matylda6/isedlacek/projects/huggingface_asr"
+# WORK_DIR="/mnt/matylda6/isedlacek/projects/huggingface_asr"
+WORK_DIR=/mnt/matylda3/isvecjan/workspace/speechlm.hf_asr
 EXPERIMENT_PATH="${WORK_DIR}/exp/${EXPERIMENT}"
 RECIPE_DIR="${WORK_DIR}/recipes/eloquence"
 #DATASETS="${RECIPE_DIR}/datasets.json"
@@ -31,21 +34,23 @@ RECIPE_DIR="${WORK_DIR}/recipes/eloquence"
 #DATASETS="${RECIPE_DIR}/datasets_lc.json"
 #DATASETS="${RECIPE_DIR}/datasets_how2.json"
 #DATASETS="${RECIPE_DIR}/datasets_fisher_ctx.json"
-DATASETS="${RECIPE_DIR}/datasets_context.json"
+DATASETS="${RECIPE_DIR}/datasets_context.but.json"
 
 cd $WORK_DIR || {
   echo "No such directory $WORK_DIR"
   exit 1
 }
 
+export PYTHONPATH="${PYTHONPATH}:${WORK_DIR}/src"
+export WANDB_MODE=offline
+export WANDB_PROJECT="eloquence_asr_llm"
+export WANDB_RUN_ID="${EXPERIMENT}"
 export TRANSFORMERS_OFFLINE=1
 export HF_DATASETS_OFFLINE=1
 export HF_HUB_OFFLINE=1
-export HF_HOME="/mnt/matylda6/isedlacek/hugging-face"
+# export HF_HOME="/mnt/matylda6/isedlacek/hugging-face"
+export HF_HOME=/mnt/scratch/tmp/isvecjan/hf_home
 
-export WANDB_MODE=offline
-export WANDB_RUN_ID=$EXPERIMENT
-export WANDB_PROJECT="eloquence-asr"
 
 # get the gpu
 export CUDA_VISIBLE_DEVICES=$(free-gpus.sh $N_GPUS) || {
@@ -69,7 +74,7 @@ args=(
   --do_evaluate
   --load_best_model_at_end
   --qformer_eval_callback
-  --ddp_find_unused_parameters="False"
+  --ddp_find_unused_parameters="True"
 
   # Optimizer related arguments
   --optim="adamw_torch"
@@ -102,14 +107,14 @@ args=(
   --writer_batch_size="200" # 1000
   --collator_rename_features="False"
   --validation_split val
-  --test_splits val fisher_test
+  --test_splits val fisher_test librispeech_test how2_dev5
 
   # Fisher context arguments
   --fisher_context_prefix='Transcribe the rest of the conversation given the following conversation history: "'
-  --fisher_max_context=3
+  --fisher_max_context=0
   #--fisher_context_trunc_to_shortest
   --prompt_prefix='" '
-  --prompt_suffix=' Continuted transcript: ' 
+  --prompt_suffix=' Continued transcript: '
 
   # Preprocessing related arguments
   #--data_preprocessing_config="${RECIPE_DIR}/data_preprocessing_whisper.json"
@@ -125,18 +130,18 @@ args=(
   #--base_encoder_model="openai/whisper-small.en"
   --feature_extractor_name="microsoft/wavlm-large"
   --base_encoder_model="microsoft/wavlm-large"
-  --freeze_encoder="True"
+  --freeze_encoder="False"
 
   --tokenizer_name="allenai/OLMo-1B-hf"
   --base_decoder_model="allenai/OLMo-1B-hf"
-  
+
   --connector_type='encoder_stacked'
   --downsampling_factor=6
   --conn_hidden_size=1024
   --conn_layers=2
   --conn_attn_heads=16
   --qf_intermediate_size=4096
-  
+
   #--connector_type='linear_stacked'
   #--downsampling_factor=5
   #--conn_hidden_size=2048
@@ -153,5 +158,5 @@ echo "Running training.."
 if [ "$N_GPUS" -gt 1 ]; then
   torchrun --standalone --nnodes=1 --nproc-per-node=$N_GPUS src/trainers/alignment/train_ecd_lm_general_context.py "${args[@]}"
 else
-  python src/trainers/alignment/train_ecd_lm_general_context.py "${args[@]}"
+  python -u src/trainers/alignment/train_ecd_lm_general_context.py "${args[@]}"
 fi

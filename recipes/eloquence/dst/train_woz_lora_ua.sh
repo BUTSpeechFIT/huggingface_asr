@@ -3,10 +3,10 @@
 #$ -q long.q@supergpu*
 #$ -l ram_free=40G,mem_free=40G
 #$ -l matylda6=0.5,scratch=0.5
-#$ -l gpu=4,gpu_ram=20G
-#$ -o /mnt/matylda6/isedlacek/projects/job_logs/eloquence/dst/spokenwoz_lora_r16a16_no_prefix_aug_ua.o
-#$ -e /mnt/matylda6/isedlacek/projects/job_logs/eloquence/dst/spokenwoz_lora_r16a16_no_prefix_aug_ua.e
-N_GPUS=4
+#$ -l gpu=2,gpu_ram=20G
+#$ -o /mnt/matylda3/isvecjan/workspace/speechlm.hf_asr/recipes/eloquence/dst/train_woz_lora_ua.o
+#$ -e /mnt/matylda3/isvecjan/workspace/speechlm.hf_asr/recipes/eloquence/dst/train_woz_lora_ua.e
+N_GPUS=2 #4
 EXPERIMENT="spokenwoz_lora_r16a16_no_prefix_aug_ua"
 
 # Job should finish in about 2 days
@@ -21,9 +21,12 @@ ulimit -v unlimited
 ulimit -u 4096
 
 # Initialize environment
-source /mnt/matylda6/isedlacek/miniconda3/bin/activate /mnt/matylda6/isedlacek/envs/huggingface_asr
+# source /mnt/matylda6/isedlacek/miniconda3/bin/activate /mnt/matylda6/isedlacek/envs/huggingface_asr
+source /mnt/matylda3/isvecjan/miniconda3/bin/activate /mnt/matylda3/isvecjan/miniconda3/envs/speechlm
 
-WORK_DIR="/mnt/matylda6/isedlacek/projects/huggingface_asr"
+# WORK_DIR="/mnt/matylda6/isedlacek/projects/huggingface_asr"
+WORK_DIR=/mnt/matylda3/isvecjan/workspace/speechlm.hf_asr
+
 EXPERIMENT_PATH="${WORK_DIR}/exp/${EXPERIMENT}"
 RECIPE_DIR="${WORK_DIR}/recipes/eloquence"
 #DATASETS="${RECIPE_DIR}/datasets.json"
@@ -45,11 +48,15 @@ cd $WORK_DIR || {
 export TRANSFORMERS_OFFLINE=1
 export HF_DATASETS_OFFLINE=1
 export HF_HUB_OFFLINE=1
-export HF_HOME="/mnt/matylda6/isedlacek/hugging-face"
+# export HF_HOME="/mnt/matylda6/isedlacek/hugging-face"
+export HF_HOME=/mnt/matylda3/isvecjan/HUGGINGFACE_HOME
 
 export WANDB_MODE=offline
 export WANDB_RUN_ID=$EXPERIMENT
 export WANDB_PROJECT="eloquence-asr"
+export PYTHONPATH="${PYTHONPATH}:${WORK_DIR}/src"
+export HF_DATASETS_CACHE="/mnt/scratch/tmp/isvecjan/hf_datasets_cache"
+export CUDA_HOME=/usr/local/share/cuda
 
 # get the gpu
 export CUDA_VISIBLE_DEVICES=$(free-gpus.sh $N_GPUS) || {
@@ -90,7 +97,7 @@ args=(
   --weight_decay="1e-6"
   --max_grad_norm="5.0"
   #--lsm_factor="0.1"
-  --gradient_accumulation_steps="8"
+  --gradient_accumulation_steps=16 #"8"
 
   # Logging, saving and evaluation related arguments
   --report_to="wandb"
@@ -114,10 +121,10 @@ args=(
   --collator_rename_features="False"
   --validation_split spokenwoz_dev
   --test_splits spokenwoz_dev spokenwoz_test
-  --do_not_remove_columns audio wav_id turn_index text agent_text domains slots context 
+  --do_not_remove_columns audio wav_id turn_index text agent_text domains slots context
 
   --slurp_dump_pred
-  
+
   # Preprocessing related arguments
   #--data_preprocessing_config="${RECIPE_DIR}/data_preprocessing_whisper.json"
   #--data_preprocessing_config="${RECIPE_DIR}/data_preprocessing_wavlm.json"
@@ -140,20 +147,20 @@ args=(
   #--base_encoder_model="openai/whisper-small.en"
   #--feature_extractor_name="BUT-FIT/DeCRED-base"
   #--base_encoder_model="BUT-FIT/DeCRED-base"
-  --feature_extractor_name="microsoft/wavlm-large"
-  --base_encoder_model="microsoft/wavlm-large"
+  --feature_extractor_name="microsoft/wavlm-large" # facebook/wav2vec2-large-xlsr-53
+  --base_encoder_model="microsoft/wavlm-large" # facebook/wav2vec2-large-xlsr-53
   --freeze_encoder="True"
 
   --tokenizer_name="allenai/OLMo-1B-hf"
   --base_decoder_model="allenai/OLMo-1B-hf"
-  
+
   --connector_type='encoder_stacked'
   --downsampling_factor=6
   --conn_hidden_size=1024
   --conn_layers=2
   --conn_attn_heads=16
   --qf_intermediate_size=4096
-  
+
   #--connector_type='linear_stacked'
   #--downsampling_factor=5
   #--conn_hidden_size=2048

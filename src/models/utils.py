@@ -53,6 +53,8 @@ def shift_tokens_right(input_ids: torch.Tensor, pad_token_id: Optional[int], dec
     if pad_token_id is None:
         raise ValueError("self.model.config.pad_token_id has to be defined.")
     # replace possible -100 values in labels by `pad_token_id`
+    # print("shifted_input_ids", shifted_input_ids.shape)
+    # print("pad_token_id", pad_token_id)
     shifted_input_ids.masked_fill_(shifted_input_ids == -100, pad_token_id)
 
     return shifted_input_ids

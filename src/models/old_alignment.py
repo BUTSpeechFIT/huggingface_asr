@@ -176,7 +176,7 @@ class ApmoModel(PreTrainedModel):
         if ('T5ForConditionalGeneration' not in self.config.lm_config.architectures and
 
             self.qformer.config.num_hidden_layers == self.mt_encoder.config.encoder_layers):
-            for i in range(self.qformer.config.num_hidden_layers): 
+            for i in range(self.qformer.config.num_hidden_layers):
                 self.qformer.encoder.layer[i].attention.attention.query.weight.data = self.mt_encoder.layers[i].self_attn.q_proj.weight.data
                 self.qformer.encoder.layer[i].attention.attention.query.bias.data = self.mt_encoder.layers[i].self_attn.q_proj.bias.data
                 self.qformer.encoder.layer[i].attention.attention.key.weight.data = self.mt_encoder.layers[i].self_attn.k_proj.weight.data
@@ -256,7 +256,7 @@ class ApmoModel(PreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
     ) -> Union[Tuple, SpeechQFormerMarianOutput]:
-        
+
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         if labels is not None:
@@ -419,7 +419,7 @@ class ApmoModel(PreTrainedModel):
         if mm_loss is None: mm_loss = 0
 
         loss = self.config.ce_loss_weight * lm_loss + self.config.mm_loss_weight * mm_loss
-                        
+
         return SpeechQFormerMarianOutput(
                 loss=loss,
                 enc_loss=mm_loss,
@@ -541,7 +541,7 @@ class S2TEncoderMarianDecoder(PreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
     ) -> Union[Tuple, SpeechQFormerMarianOutput]:
-        
+
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         if labels is not None:
@@ -711,7 +711,7 @@ class SpeechEncoderMarianEncoderDecoder(PreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
     ) -> Union[Tuple, SpeechQFormerMarianOutput]:
-        
+
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         if labels is not None:
@@ -743,7 +743,7 @@ class SpeechEncoderMarianEncoderDecoder(PreTrainedModel):
         else:
             audio_attention_mask = None
 
-        # Downsample the speech encoder outputs 
+        # Downsample the speech encoder outputs
         encoder_outputs.last_hidden_state = self.conv(encoder_outputs.last_hidden_state)
 
         # downsample encoder attention mask again..
@@ -805,7 +805,7 @@ class SpeechEncoderMarianEncoderDecoder(PreTrainedModel):
         else:
             audio_attention_mask = None
 
-        # Downsample the speech encoder outputs 
+        # Downsample the speech encoder outputs
         audio_embeds = self.conv(audio_embeds)
 
         # downsample encoder attention mask again..
@@ -917,7 +917,7 @@ class SpeechEncoderConvMarianEncoderDecoder(PreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
     ) -> Union[Tuple, SpeechQFormerMarianOutput]:
-        
+
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         if labels is not None:
@@ -949,7 +949,7 @@ class SpeechEncoderConvMarianEncoderDecoder(PreTrainedModel):
         else:
             audio_attention_mask = None
 
-        # Downsample the speech encoder outputs 
+        # Downsample the speech encoder outputs
         encoder_outputs.last_hidden_state = self.conv(encoder_outputs.last_hidden_state)
 
         # downsample encoder attention mask again..
@@ -1018,7 +1018,7 @@ class SpeechEncoderConvMarianEncoderDecoder(PreTrainedModel):
         else:
             audio_attention_mask = None
 
-        # Downsample the speech encoder outputs 
+        # Downsample the speech encoder outputs
         audio_embeds = self.conv(audio_embeds)
 
         # downsample encoder attention mask again..

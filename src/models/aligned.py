@@ -104,7 +104,7 @@ class AlignmentNetwork(PreTrainedModel):
                 if tokenizer is not None:
                     raise NotImplementedError
 
-                else: # assume prompt embeddings were passed 
+                else: # assume prompt embeddings were passed
                     assert len(init_prefix_from.shape) == 3, "We want shape of [1, N, D]"
                     assert init_prefix_from.shape[-1] == lm_hidden_size, "Incorrect prompt embedding dimension"
                     self.prompt_prefix = nn.Parameter(init_prefix_from)
@@ -126,7 +126,7 @@ class AlignmentNetwork(PreTrainedModel):
                 if tokenizer is not None:
                     raise NotImplementedError
 
-                else: # assume prompt embeddings were passed 
+                else: # assume prompt embeddings were passed
                     assert len(init_suffix_from.shape) == 3, "We want shape of [1, N, D]"
                     assert init_suffix_from.shape[-1] == lm_hidden_size, "Incorrect prompt embedding dimension"
                     self.prompt_suffix = nn.Parameter(init_suffix_from)
@@ -261,7 +261,7 @@ class AlignmentNetwork(PreTrainedModel):
 
         audio_embeds = encoder_outputs.last_hidden_state
 
-        # Downsample the speech encoder outputs 
+        # Downsample the speech encoder outputs
         audio_embeds = self.conv(audio_embeds)
 
         # downsample encoder attention mask again..
@@ -293,7 +293,7 @@ class AlignmentNetwork(PreTrainedModel):
 
         audio_embeds = encoder_outputs.last_hidden_state
 
-        # Downsample the speech encoder outputs 
+        # Downsample the speech encoder outputs
         downsampling_factor = self.config.downsampling_factor
         mod = audio_embeds.shape[-2] % downsampling_factor
         if mod != 0:
@@ -348,7 +348,7 @@ class AlignmentNetwork(PreTrainedModel):
 
         audio_embeds = encoder_outputs.last_hidden_state
 
-        # Downsample the speech encoder outputs 
+        # Downsample the speech encoder outputs
         audio_embeds = self.conv(audio_embeds)
 
         # downsample encoder attention mask again..
@@ -382,7 +382,7 @@ class AlignmentNetwork(PreTrainedModel):
 
         audio_embeds = encoder_outputs.last_hidden_state
 
-        # Downsample the speech encoder outputs 
+        # Downsample the speech encoder outputs
         downsampling_factor = self.config.downsampling_factor
         mod = audio_embeds.shape[-2] % downsampling_factor
         if mod != 0:
@@ -519,7 +519,7 @@ class SpeechEncoderBridgeTextDecoder(PreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
     ) -> Union[Tuple, SpeechQFormerMarianOutput]:
-        
+
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         if labels is not None:
@@ -742,7 +742,7 @@ class SpeechEncoderBridgeMarianEncoderDecoder(PreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
     ) -> Union[Tuple, SpeechQFormerMarianOutput]:
-        
+
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         if labels is not None:

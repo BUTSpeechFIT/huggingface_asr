@@ -1,0 +1,67 @@
+[
+  {
+    "dataset_name": "/mnt/matylda3/isvecjan/datasets/fisher_context",
+    "dataset_id": "fisher",
+    "load_from_disk": true,
+    "train_splits": [
+      "train"
+    ],
+    "validation_splits": [
+      "dev"
+    ],
+    "test_splits": [
+      "test"
+    ],
+    "text_column_name": "labels",
+    "audio_column_name": "audio",
+    "length_column_name": "total_len",
+    "text_transformations": [
+    ],
+    "additional_args": {
+    }
+  },
+  {
+    "dataset_name": "/mnt/matylda3/isvecjan/datasets/how2",
+    "dataset_id": "how2",
+    "load_from_disk": true,
+    "train_splits": [
+      "train"
+    ],
+    "validation_splits": [
+      "val"
+    ],
+    "test_splits": [
+      "dev5"
+    ],
+    "text_column_name": "transcription",
+    "audio_column_name": "audio",
+    "length_column_name": "input_len",
+    "text_transformations": [
+      "do_lower_case"
+    ],
+    "additional_args": {
+    }
+  },
+  {
+    "dataset_name": "/mnt/scratch/tmp/isvecjan/hf_datasets/librispeech_speechlm",
+    "dataset_id": "librispeech",
+    "load_from_disk": true,
+    "train_splits": [
+      "train"
+    ],
+    "validation_splits": [
+      "validation"
+    ],
+    "test_splits": [
+      "test"
+    ],
+    "text_column_name": "text",
+    "audio_column_name": "audio",
+    "length_column_name": "input_len",
+    "text_transformations": [
+        "do_lower_case"
+    ],
+    "additional_args": {
+    }
+  }
+]

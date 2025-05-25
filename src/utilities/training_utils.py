@@ -6,7 +6,8 @@ from torch import Tensor, nn
 from torch.utils.data import DataLoader, Dataset
 from transformers import BatchFeature, Seq2SeqTrainer, Trainer
 from transformers.data.data_collator import DataCollator
-from transformers.deepspeed import deepspeed_init
+# from transformers.deepspeed import deepspeed_init
+from transformers.integrations import deepspeed_init
 from transformers.dependency_versions_check import dep_version_check
 from transformers.modeling_utils import PreTrainedModel
 

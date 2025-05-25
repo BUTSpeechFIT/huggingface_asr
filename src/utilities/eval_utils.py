@@ -115,7 +115,7 @@ def compute_metrics_slurp(
         except:
             print(label)
             raise ValueError
-        
+
     #label_dicts = [ json.loads('{"transcript": ' + label) for label in label_str ]
 
     action_cnt = 0
@@ -193,6 +193,8 @@ def compute_metrics_slurp(
 
             else:
                 pred_slots = pred_dict['slots']
+                if type(pred_slots) != dict:
+                    continue
                 # slot should be empty
                 if label_slots_len == 0 and label_slots_len == len(pred_slots.items()):
                     slot_correct += 1
@@ -259,7 +261,7 @@ def compute_metrics_spokenwoz(
             print("Label JSON error: ", '{"current_turn": ' + label)
             pred_str.pop(i - popped)
             popped += 1
-        
+
     domain_tp = 0
     domain_fp = 0
     domain_fn = 0
@@ -374,7 +376,7 @@ def compute_metrics_spokenwoz(
 
         if not domain_ok:
             domain_errors += 1
-            
+
         if not slots_ok:
             slot_errors += 1
 

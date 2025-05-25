@@ -1,13 +1,15 @@
 #!/bin/bash
-#$ -N wlml_stte_olmo1b_slurp_asr_slots
+#$ -N train_stte_slurp
 #$ -q long.q@supergpu*
 #$ -l ram_free=40G,mem_free=40G
 #$ -l matylda6=0.5,scratch=0.2
 #$ -l gpu=1,gpu_ram=20G
-#$ -o /mnt/matylda6/isedlacek/projects/job_logs/eloquence/wlml_stte_olmo1b_slurp_asr_slots.o
-#$ -e /mnt/matylda6/isedlacek/projects/job_logs/eloquence/wlml_stte_olmo1b_slurp_asr_slots.e
+#$ -o /mnt/matylda3/isvecjan/workspace/speechlm.hf_asr/recipes/eloquence/train_stte_slurp.o
+#$ -e /mnt/matylda3/isvecjan/workspace/speechlm.hf_asr/recipes/eloquence/train_stte_slurp.e
+echo "Hostname: ${HOSTNAME}" >&2
+
 N_GPUS=1
-EXPERIMENT="wlml_stte_olmo1b_slurp_asr_slots"
+EXPERIMENT="train_stte_slurp"
 
 # Job should finish in about 2 days
 ulimit -t 200000
@@ -21,9 +23,13 @@ ulimit -v unlimited
 ulimit -u 4096
 
 # Initialize environment
-source /mnt/matylda6/isedlacek/miniconda3/bin/activate /mnt/matylda6/isedlacek/envs/huggingface_asr
+# source /mnt/matylda6/isedlacek/miniconda3/bin/activate /mnt/matylda6/isedlacek/envs/huggingface_asr
+# source /mnt/matylda3/isvecjan/miniconda3/bin/activate /mnt/matylda3/isvecjan/miniconda3/envs/speechlm
+source /mnt/matylda3/isvecjan/miniconda3/bin/activate /mnt/matylda3/isvecjan/miniconda3/envs/speechlm-0425
 
-WORK_DIR="/mnt/matylda6/isedlacek/projects/huggingface_asr"
+# WORK_DIR="/mnt/matylda6/isedlacek/projects/huggingface_asr"
+WORK_DIR=/mnt/matylda3/isvecjan/workspace/speechlm.hf_asr
+
 EXPERIMENT_PATH="${WORK_DIR}/exp/${EXPERIMENT}"
 RECIPE_DIR="${WORK_DIR}/recipes/eloquence"
 #DATASETS="${RECIPE_DIR}/datasets.json"
@@ -42,11 +48,15 @@ cd $WORK_DIR || {
 export TRANSFORMERS_OFFLINE=1
 export HF_DATASETS_OFFLINE=1
 export HF_HUB_OFFLINE=1
-export HF_HOME="/mnt/matylda6/isedlacek/hugging-face"
+# export HF_HOME="/mnt/matylda6/isedlacek/hugging-face"
+export HF_HOME=/mnt/matylda3/isvecjan/HUGGINGFACE_HOME
 
 export WANDB_MODE=offline
 export WANDB_RUN_ID=$EXPERIMENT
 export WANDB_PROJECT="eloquence-asr"
+export PYTHONPATH="${PYTHONPATH}:${WORK_DIR}/src"
+export HF_DATASETS_CACHE="/mnt/scratch/tmp/isvecjan/hf_datasets_cache"
+export CUDA_HOME=/usr/local/share/cuda
 
 # get the gpu
 export CUDA_VISIBLE_DEVICES=$(free-gpus.sh $N_GPUS) || {
@@ -106,8 +116,8 @@ args=(
   --test_splits dev slurp_test
 
   --slurp_use_slots
-  --slurp_dump_pred
-  
+  # --slurp_dump_pred
+
   # Preprocessing related arguments
   #--data_preprocessing_config="${RECIPE_DIR}/data_preprocessing_whisper.json"
   --data_preprocessing_config="${RECIPE_DIR}/data_preprocessing_wavlm.json"
@@ -126,14 +136,14 @@ args=(
 
   --tokenizer_name="allenai/OLMo-1B-hf"
   --base_decoder_model="allenai/OLMo-1B-hf"
-  
+
   --connector_type='encoder_stacked'
   --downsampling_factor=6
   --conn_hidden_size=1024
   --conn_layers=2
   --conn_attn_heads=16
   --qf_intermediate_size=4096
-  
+
   #--connector_type='linear_stacked'
   #--downsampling_factor=5
   #--conn_hidden_size=2048
@@ -145,6 +155,8 @@ args=(
   --predict_with_generate
   #--no_metrics
 )
+
+echo "Running with args: ${args[@]}"
 
 echo "Running training.."
 if [ "$N_GPUS" -gt 1 ]; then

@@ -1,17 +1,16 @@
 [
   {
-    "dataset_name": "/gpfs/scratch/ehpc148/honzas/hf_datasets_simon_m/slurp",
-    "dataset_id": "slurp",
+    "dataset_name": "/gpfs/scratch/ehpc148/honzas/hf_datasets/speechmassive/all",
+    "dataset_id": "speech_massive",
     "load_from_disk": true,
     "train_splits": [
-      "train",
-      "train_synthetic"
+      "train"
     ],
     "validation_splits": [
-      "dev"
+      "validation"
     ],
     "test_splits": [
-      "test"
+      "train_115"
     ],
     "text_column_name": "text",
     "audio_column_name": "audio",
