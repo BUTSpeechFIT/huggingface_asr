@@ -6,7 +6,6 @@ This module implements the ASR encoder + connector + decoder-only LM alignment m
 from dataclasses import dataclass
 import transformers
 from transformers import (
-
     PreTrainedModel,
     PreTrainedTokenizer,
     PretrainedConfig,
@@ -57,9 +56,12 @@ class SpeechEncoderConnectorLMDecoderModelOuput(ModelOutput):
 
     def to_tuple(self) -> Tuple[Any]:
         return tuple(
-            self[k]
-            if k not in ["vision_outputs", "qformer_outputs", "language_model_outputs"]
-            else getattr(self, k).to_tuple()
+            (
+                self[k]
+                if k
+                not in ["vision_outputs", "qformer_outputs", "language_model_outputs"]
+                else getattr(self, k).to_tuple()
+            )
             for k in self.keys()
         )
 
@@ -69,16 +71,16 @@ class SpeechEncoderConnectorLMDecoderConfig(PretrainedConfig):
         self,
         encoder_config=None,
         qformer_config=None,
-        connector_type='qformer',
+        connector_type="qformer",
         lm_config=None,
         num_query_tokens=80,
         modality_matching=True,
-        mm_pooling='avg',
-        mm_micro_loss='dot',
+        mm_pooling="avg",
+        mm_micro_loss="dot",
         mm_loss_weight=1.0,
         ce_loss_weight=1.0,
         num_pretrain_epochs=0,
-        **kwargs
+        **kwargs,
     ):
 
         super().__init__(**kwargs)
@@ -129,7 +131,6 @@ class SpeechEncoderConnectorLMDecoder(PreTrainedModel):
 
         if decoder:
             self.decoder = decoder
-
         else:
             raise ValueError("Decoder model needs to be supplied")
 
@@ -138,7 +139,9 @@ class SpeechEncoderConnectorLMDecoder(PreTrainedModel):
         if isinstance(config.lm_config, dict):
             config.lm_config = PretrainedConfig(**config.lm_config)
 
-        soft_prompt_init, init_prefix_from, init_suffix_from = self.prepare_prompt_tuning_init_point(config, tokenizer)
+        soft_prompt_init, init_prefix_from, init_suffix_from = (
+            self.prepare_prompt_tuning_init_point(config, tokenizer)
+        )
 
         self.connector = AlignmentNetwork(
             # NOTE: currently the soft_prompt_init and initialization from hard prompts cannot be combined
@@ -147,7 +150,7 @@ class SpeechEncoderConnectorLMDecoder(PreTrainedModel):
             soft_prompt_init=soft_prompt_init,
             init_prefix_from=init_prefix_from,
             init_suffix_from=init_suffix_from,
-            tokenizer=None
+            tokenizer=None,
         )
 
         # freeze encoder and decoder
@@ -156,41 +159,57 @@ class SpeechEncoderConnectorLMDecoder(PreTrainedModel):
 
         self.do_freeze_decoder = freeze_decoder
         if self.do_freeze_decoder:
-            self.freeze_decoder() # NOTE: the freezing should be done when the model is initialized
+            self.freeze_decoder()  # NOTE: the freezing should be done when the model is initialized
 
         # FIXME: the padding required in generate - rework the config class to include all
         # the token_ids on the top level ...
         self.config = config
-        if isinstance(self.decoder.config.eos_token_id, list): # FIXME
-            self.config.update({'pad_token_id': self.decoder.config.eos_token_id[1]})
-            self.decoder.config.update({'pad_token_id': self.decoder.config.eos_token_id[1]})
+        if isinstance(self.decoder.config.eos_token_id, list):  # FIXME
+            self.config.update({"pad_token_id": self.decoder.config.eos_token_id[1]})
+            self.decoder.config.update(
+                {"pad_token_id": self.decoder.config.eos_token_id[1]}
+            )
         else:
-            self.config.update({'pad_token_id': self.decoder.config.eos_token_id})
-            self.decoder.config.update({'pad_token_id': self.decoder.config.eos_token_id})
+            self.config.update({"pad_token_id": self.decoder.config.eos_token_id})
+            self.decoder.config.update(
+                {"pad_token_id": self.decoder.config.eos_token_id}
+            )
 
     def prepare_prompt_tuning_init_point(self, config, tokenizer):
         # FIXME: This method should be reworked... not a great prompt tuning initialization solution
-        soft_prompt_init = self.decoder.get_input_embeddings().weight.mean(dim=0) if config.init_prompt_from_embeds else None
+        soft_prompt_init = (
+            self.decoder.get_input_embeddings().weight.mean(dim=0)
+            if config.init_prompt_from_embeds
+            else None
+        )
 
         if config.prompt_tuning_prefix_init is not None:
-            assert tokenizer is not None, "Tokenizer has to be supplied in order to setup the prompt tuning"
+            assert (
+                tokenizer is not None
+            ), "Tokenizer has to be supplied in order to setup the prompt tuning"
             pref_tokenized = tokenizer(
                 config.prompt_tuning_prefix_init,
                 add_special_tokens=False,
-                return_tensors='pt',
+                return_tensors="pt",
             )
-            init_prefix_from = self.decoder.get_input_embeddings()(pref_tokenized.input_ids)
+            init_prefix_from = self.decoder.get_input_embeddings()(
+                pref_tokenized.input_ids
+            )
         else:
             init_prefix_from = None
 
         if config.prompt_tuning_suffix_init is not None:
-            assert tokenizer is not None, "Tokenizer has to be supplied in order to setup the prompt tuning"
+            assert (
+                tokenizer is not None
+            ), "Tokenizer has to be supplied in order to setup the prompt tuning"
             suff_tokenized = tokenizer(
                 config.prompt_tuning_suffix_init,
                 add_special_tokens=False,
-                return_tensors='pt',
+                return_tensors="pt",
             )
-            init_suffix_from = self.decoder.get_input_embeddings()(suff_tokenized.input_ids)
+            init_suffix_from = self.decoder.get_input_embeddings()(
+                suff_tokenized.input_ids
+            )
         else:
             init_suffix_from = None
 
@@ -206,9 +225,10 @@ class SpeechEncoderConnectorLMDecoder(PreTrainedModel):
             param.requires_grad = False
 
     def freeze_decoder(self):
-        if not self.freeze_decoder: return
+        if not self.freeze_decoder:
+            return
 
-        if hasattr(self.decoder, 'model'):
+        if hasattr(self.decoder, "model"):
             for _, param in self.decoder.model.named_parameters():
                 param.requires_grad = False
             for param in self.decoder.model.parameters():
@@ -223,7 +243,7 @@ class SpeechEncoderConnectorLMDecoder(PreTrainedModel):
             param.requires_grad = False
 
         self.decoder.lm_head.requires_grad = False
-        if hasattr(self.decoder, 'final_logits_bias'):
+        if hasattr(self.decoder, "final_logits_bias"):
             self.decoder.final_logits_bias.requires_grad = False
 
     def forward(
@@ -251,7 +271,9 @@ class SpeechEncoderConnectorLMDecoder(PreTrainedModel):
         return_dict: Optional[bool] = None,
     ) -> Union[Tuple, BaseModelOutput]:
 
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = (
+            return_dict if return_dict is not None else self.config.use_return_dict
+        )
 
         if labels is not None:
             # we don't want a bos token at the beginning of the labels
@@ -260,7 +282,7 @@ class SpeechEncoderConnectorLMDecoder(PreTrainedModel):
 
             if decoder_input_ids is None and decoder_inputs_embeds is None:
                 # TODO: fix this.. probably just always pad the labels with -100?
-                if self.decoder.config.model_type == 'llama':
+                if self.decoder.config.model_type == "llama":
                     sep = 29871
                 else:
                     sep = self.decoder.config.bos_token_id
@@ -272,29 +294,30 @@ class SpeechEncoderConnectorLMDecoder(PreTrainedModel):
                 # because of the way we compute loss, we don't need the shifted decoder_input_ids
                 # NOTE: this may not be ideal, think about what this means for the prompt
                 # suffix -- perhaps we need to enforce a space at the end of it?
-                decoder_input_ids = decoder_input_ids[:,1:]
+                decoder_input_ids = decoder_input_ids[:, 1:]
 
         # 1. forward the audio through the encoder
-        if self.encoder.training: self.encoder.eval()
+        if self.encoder.training:
+            self.encoder.eval()
         encoder_outputs = self.encoder(
             input_features,
             attention_mask=attention_mask,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
-            return_dict=True
+            return_dict=True,
         )
 
         encoder_outputs = BaseModelOutput(
             last_hidden_state=encoder_outputs.last_hidden_state,
             hidden_states=encoder_outputs.hidden_states,
-            attentions=encoder_outputs.attentions
+            attentions=encoder_outputs.attentions,
         )
 
         audio_embeds = encoder_outputs.last_hidden_state
 
         # downsample encoder attention mask
         if attention_mask is not None:
-            if hasattr(self.encoder, '_get_feature_vector_attention_mask'):
+            if hasattr(self.encoder, "_get_feature_vector_attention_mask"):
                 audio_attention_mask = self.encoder._get_feature_vector_attention_mask(
                     audio_embeds.shape[1], attention_mask
                 )
@@ -305,7 +328,7 @@ class SpeechEncoderConnectorLMDecoder(PreTrainedModel):
                         audio_embeds.shape[0],
                         audio_embeds.shape[1],
                     ),
-                    device = audio_embeds.device,
+                    device=audio_embeds.device,
                     dtype=torch.long,
                 )
         else:
@@ -340,15 +363,17 @@ class SpeechEncoderConnectorLMDecoder(PreTrainedModel):
                     .to(audio_embeds.device)
                 )
                 prompt_prefix_mask = torch.ones_like(
-                    prompt_prefix_ids, device=audio_embeds.device)
+                    prompt_prefix_ids, device=audio_embeds.device
+                )
             else:
                 prompt_prefix_ids = None
 
         else:
             # cut off the prefix eos token id
             if prompt_prefix_ids[0, -1] == self.decoder.config.eos_token_id:
-                print("WARNING: there was a trailing prompt prefix eos",
-                      prompt_suffix_ids)
+                print(
+                    "WARNING: there was a trailing prompt prefix eos", prompt_suffix_ids
+                )
                 prompt_prefix_ids = prompt_prefix_ids[..., :-1]
                 prompt_prefix_mask = prompt_prefix_mask[..., :-1]
 
@@ -356,11 +381,13 @@ class SpeechEncoderConnectorLMDecoder(PreTrainedModel):
         if prompt_prefix_ids is not None:
             prefix_embeds = self.decoder.get_input_embeddings()(prompt_prefix_ids)
             connector_outputs.last_hidden_state = torch.hstack(
-                (prefix_embeds, connector_outputs.last_hidden_state))
+                (prefix_embeds, connector_outputs.last_hidden_state)
+            )
 
             if audio_attention_mask is not None:
                 audio_attention_mask = torch.hstack(
-                    (prompt_prefix_mask, audio_attention_mask))
+                    (prompt_prefix_mask, audio_attention_mask)
+                )
 
         # prepend the context to the connector outputs
         if context_ids is not None:
@@ -372,7 +399,8 @@ class SpeechEncoderConnectorLMDecoder(PreTrainedModel):
 
             if audio_attention_mask is not None:
                 audio_attention_mask = torch.hstack(
-                    (context_mask, audio_attention_mask))
+                    (context_mask, audio_attention_mask)
+                )
             else:
                 raise NotImplementedError
                 # FIXME: this has to be covered as well -- there HAS to be an attention mask if we
@@ -381,42 +409,48 @@ class SpeechEncoderConnectorLMDecoder(PreTrainedModel):
         # append the prompt suffix
         if prompt_suffix_ids is not None:
             # cut off the bos token
-            if (self.decoder.config.bos_token_id is not None and
-                    prompt_suffix_ids[0, 0] == self.decoder.config.bos_token_id):
-                print("WARNING: there was a trailing prompt suffix bos",
-                      prompt_suffix_ids)
+            if (
+                self.decoder.config.bos_token_id is not None
+                and prompt_suffix_ids[0, 0] == self.decoder.config.bos_token_id
+            ):
+                print(
+                    "WARNING: there was a trailing prompt suffix bos", prompt_suffix_ids
+                )
                 prompt_suffix_ids = prompt_suffix_ids[..., 1:]
                 prompt_suffix_mask = prompt_suffix_mask[..., 1:]
 
             # cut off the eos token
             if prompt_suffix_ids[0, -1] == self.decoder.config.eos_token_id:
-                print("WARNING: there was a trailing prompt suffix eos",
-                      prompt_suffix_ids)
+                print(
+                    "WARNING: there was a trailing prompt suffix eos", prompt_suffix_ids
+                )
                 prompt_suffix_ids = prompt_suffix_ids[..., :-1]
                 prompt_suffix_mask = prompt_suffix_mask[..., :-1]
 
             # embed the suffix ids
             suffix_embeds = self.decoder.get_input_embeddings()(prompt_suffix_ids)
             connector_outputs.last_hidden_state = torch.hstack(
-                (connector_outputs.last_hidden_state, suffix_embeds))
+                (connector_outputs.last_hidden_state, suffix_embeds)
+            )
 
             if audio_attention_mask is not None:
                 audio_attention_mask = torch.hstack(
-                    (audio_attention_mask, prompt_suffix_mask))
+                    (audio_attention_mask, prompt_suffix_mask)
+                )
 
         device = connector_outputs.last_hidden_state.device
 
         decoder_inputs_embeds = self.decoder.get_input_embeddings()(decoder_input_ids)
-        decoder_inputs_attn_mask = torch.ones_like(
-            decoder_input_ids, device=device)
+        decoder_inputs_attn_mask = torch.ones_like(decoder_input_ids, device=device)
 
         decoder_inputs_embeds = torch.hstack(
-            (connector_outputs.last_hidden_state, decoder_inputs_embeds))
+            (connector_outputs.last_hidden_state, decoder_inputs_embeds)
+        )
 
-        attention_mask = torch.hstack(
-            (audio_attention_mask, decoder_inputs_attn_mask))
+        attention_mask = torch.hstack((audio_attention_mask, decoder_inputs_attn_mask))
 
-        if self.decoder.training: self.decoder.eval()
+        if self.decoder.training:
+            self.decoder.eval()
         decoder_outputs = self.decoder(
             inputs_embeds=decoder_inputs_embeds,
             attention_mask=attention_mask,
@@ -429,10 +463,10 @@ class SpeechEncoderConnectorLMDecoder(PreTrainedModel):
 
         if labels is not None:
             labels = labels.to(logits.device)
-            logits = logits[:, -labels.size(1):, :]
+            logits = logits[:, -labels.size(1) :, :]
             # Shift so that tokens < n predict n
-            #shift_logits = logits[..., :-1, :].contiguous()
-            #shift_labels = labels[..., 1:].contiguous().to(logits.device)
+            # shift_logits = logits[..., :-1, :].contiguous()
+            # shift_labels = labels[..., 1:].contiguous().to(logits.device)
             shift_logits = logits.contiguous()
             shift_labels = labels.contiguous().to(logits.device)
 
@@ -440,11 +474,15 @@ class SpeechEncoderConnectorLMDecoder(PreTrainedModel):
             loss_fct = CrossEntropyLoss(reduction="mean")
 
             loss = loss_fct(
-                shift_logits.view(-1, self.decoder.config.vocab_size), shift_labels.view(-1))
+                shift_logits.view(-1, self.decoder.config.vocab_size),
+                shift_labels.view(-1),
+            )
 
             with torch.no_grad():
                 preds = torch.argmax(shift_logits, -1)
-                accuracy = compute_accuracy(preds.detach(), shift_labels.detach(), ignore_label=-100)
+                accuracy = compute_accuracy(
+                    preds.detach(), shift_labels.detach(), ignore_label=-100
+                )
 
         # NOTE: here we're only returning the final cut logits, as there's no need for us to
         # return the whole sequence..
@@ -472,20 +510,20 @@ class SpeechEncoderConnectorLMDecoder(PreTrainedModel):
         encoder_outputs = self.encoder(
             input_features.to(self.encoder.dtype),
             attention_mask=attention_mask,
-            return_dict=True
+            return_dict=True,
         )
 
         encoder_outputs = BaseModelOutput(
             last_hidden_state=encoder_outputs.last_hidden_state,
             hidden_states=encoder_outputs.hidden_states,
-            attentions=encoder_outputs.attentions
+            attentions=encoder_outputs.attentions,
         )
 
         audio_embeds = encoder_outputs.last_hidden_state
 
         # downsample encoder attention mask
         if attention_mask is not None:
-            if hasattr(self.encoder, '_get_feature_vector_attention_mask'):
+            if hasattr(self.encoder, "_get_feature_vector_attention_mask"):
                 audio_attention_mask = self.encoder._get_feature_vector_attention_mask(
                     audio_embeds.shape[1], attention_mask
                 )
@@ -496,7 +534,7 @@ class SpeechEncoderConnectorLMDecoder(PreTrainedModel):
                         audio_embeds.shape[0],
                         audio_embeds.shape[1],
                     ),
-                    device = audio_embeds.device,
+                    device=audio_embeds.device,
                     dtype=torch.long,
                 )
         else:
@@ -518,7 +556,7 @@ class SpeechEncoderConnectorLMDecoder(PreTrainedModel):
                     connector_outputs.last_hidden_state.shape[0],
                     connector_outputs.last_hidden_state.shape[1],
                 ),
-                device = audio_embeds.device,
+                device=audio_embeds.device,
                 dtype=torch.long,
             )
 
@@ -532,15 +570,17 @@ class SpeechEncoderConnectorLMDecoder(PreTrainedModel):
                     .to(audio_embeds.device)
                 )
                 prompt_prefix_mask = torch.ones_like(
-                    prompt_prefix_ids, device=audio_embeds.device)
+                    prompt_prefix_ids, device=audio_embeds.device
+                )
             else:
                 prompt_prefix_ids = None
 
         else:
             # cut off the prefix eos token id
             if prompt_prefix_ids[0, -1] == self.decoder.config.eos_token_id:
-                print("WARNING: there was a trailing prompt prefix eos",
-                      prompt_suffix_ids)
+                print(
+                    "WARNING: there was a trailing prompt prefix eos", prompt_suffix_ids
+                )
                 prompt_prefix_ids = prompt_prefix_ids[..., :-1]
                 prompt_prefix_mask = prompt_prefix_mask[..., :-1]
 
@@ -548,11 +588,13 @@ class SpeechEncoderConnectorLMDecoder(PreTrainedModel):
         if prompt_prefix_ids is not None:
             prefix_embeds = self.decoder.get_input_embeddings()(prompt_prefix_ids)
             connector_outputs.last_hidden_state = torch.hstack(
-                (prefix_embeds, connector_outputs.last_hidden_state))
+                (prefix_embeds, connector_outputs.last_hidden_state)
+            )
 
             if audio_attention_mask is not None:
                 audio_attention_mask = torch.hstack(
-                    (prompt_prefix_mask, audio_attention_mask))
+                    (prompt_prefix_mask, audio_attention_mask)
+                )
 
         # prepend the context to the connector outputs
         if context_ids is not None:
@@ -564,7 +606,8 @@ class SpeechEncoderConnectorLMDecoder(PreTrainedModel):
 
             if audio_attention_mask is not None:
                 audio_attention_mask = torch.hstack(
-                    (context_mask, audio_attention_mask))
+                    (context_mask, audio_attention_mask)
+                )
             else:
                 raise NotImplementedError
                 # FIXME: this has to be covered as well -- there HAS to be an attention mask if we
@@ -573,28 +616,34 @@ class SpeechEncoderConnectorLMDecoder(PreTrainedModel):
         # append the prompt suffix
         if prompt_suffix_ids is not None:
             # cut off the bos token
-            if (self.decoder.config.bos_token_id is not None and
-                    prompt_suffix_ids[0, 0] == self.decoder.config.bos_token_id):
-                print("WARNING: there was a trailing prompt suffix bos",
-                      prompt_suffix_ids)
+            if (
+                self.decoder.config.bos_token_id is not None
+                and prompt_suffix_ids[0, 0] == self.decoder.config.bos_token_id
+            ):
+                print(
+                    "WARNING: there was a trailing prompt suffix bos", prompt_suffix_ids
+                )
                 prompt_suffix_ids = prompt_suffix_ids[..., 1:]
                 prompt_suffix_mask = prompt_suffix_mask[..., 1:]
 
             # cut off the eos token
             if prompt_suffix_ids[0, -1] == self.decoder.config.eos_token_id:
-                print("WARNING: there was a trailing prompt suffix eos",
-                      prompt_suffix_ids)
+                print(
+                    "WARNING: there was a trailing prompt suffix eos", prompt_suffix_ids
+                )
                 prompt_suffix_ids = prompt_suffix_ids[..., :-1]
                 prompt_suffix_mask = prompt_suffix_mask[..., :-1]
 
             # embed the suffix ids
             suffix_embeds = self.decoder.get_input_embeddings()(prompt_suffix_ids)
             connector_outputs.last_hidden_state = torch.hstack(
-                (connector_outputs.last_hidden_state, suffix_embeds))
+                (connector_outputs.last_hidden_state, suffix_embeds)
+            )
 
             if audio_attention_mask is not None:
                 audio_attention_mask = torch.hstack(
-                    (audio_attention_mask, prompt_suffix_mask))
+                    (audio_attention_mask, prompt_suffix_mask)
+                )
 
         decoder_outputs = self.decoder.generate(
             inputs_embeds=connector_outputs.last_hidden_state,
@@ -603,6 +652,7 @@ class SpeechEncoderConnectorLMDecoder(PreTrainedModel):
         )
 
         return decoder_outputs
+
 
 class TMPSpeechEncoderConnectorLMDecoder(PreTrainedModel):
     config_class = AlignmentConfig
@@ -642,7 +692,9 @@ class TMPSpeechEncoderConnectorLMDecoder(PreTrainedModel):
         if isinstance(config.lm_config, dict):
             config.lm_config = PretrainedConfig(**config.lm_config)
 
-        soft_prompt_init, init_prefix_from, init_suffix_from = self.prepare_prompt_tuning_init_point(config, tokenizer)
+        soft_prompt_init, init_prefix_from, init_suffix_from = (
+            self.prepare_prompt_tuning_init_point(config, tokenizer)
+        )
 
         self.connector = AlignmentNetwork(
             # NOTE: currently the soft_prompt_init and initialization from hard prompts cannot be combined
@@ -651,7 +703,7 @@ class TMPSpeechEncoderConnectorLMDecoder(PreTrainedModel):
             soft_prompt_init=soft_prompt_init,
             init_prefix_from=init_prefix_from,
             init_suffix_from=init_suffix_from,
-            tokenizer=None
+            tokenizer=None,
         )
 
         # freeze encoder and decoder
@@ -660,37 +712,49 @@ class TMPSpeechEncoderConnectorLMDecoder(PreTrainedModel):
 
         self.do_freeze_decoder = freeze_decoder
         if self.do_freeze_decoder:
-            self.freeze_decoder() # NOTE: the freezing should be done when the model is initialized
+            self.freeze_decoder()  # NOTE: the freezing should be done when the model is initialized
 
         # FIXME: the padding required in generate - rework the config class to include all
         # the token_ids on the top level ...
         self.config = config
-        self.config.update({'pad_token_id': self.decoder.config.eos_token_id})
-        self.decoder.config.update({'pad_token_id': self.decoder.config.eos_token_id})
+        self.config.update({"pad_token_id": self.decoder.config.eos_token_id})
+        self.decoder.config.update({"pad_token_id": self.decoder.config.eos_token_id})
 
     def prepare_prompt_tuning_init_point(self, config, tokenizer):
         # FIXME: This method should be reworked... not a great prompt tuning initialization solution
-        soft_prompt_init = self.decoder.get_input_embeddings().weight.mean(dim=0) if config.init_prompt_from_embeds else None
+        soft_prompt_init = (
+            self.decoder.get_input_embeddings().weight.mean(dim=0)
+            if config.init_prompt_from_embeds
+            else None
+        )
 
         if config.prompt_tuning_prefix_init is not None:
-            assert tokenizer is not None, "Tokenizer has to be supplied in order to setup the prompt tuning"
+            assert (
+                tokenizer is not None
+            ), "Tokenizer has to be supplied in order to setup the prompt tuning"
             pref_tokenized = tokenizer(
                 config.prompt_tuning_prefix_init,
                 add_special_tokens=False,
-                return_tensors='pt',
+                return_tensors="pt",
             )
-            init_prefix_from = self.decoder.get_input_embeddings()(pref_tokenized.input_ids)
+            init_prefix_from = self.decoder.get_input_embeddings()(
+                pref_tokenized.input_ids
+            )
         else:
             init_prefix_from = None
 
         if config.prompt_tuning_suffix_init is not None:
-            assert tokenizer is not None, "Tokenizer has to be supplied in order to setup the prompt tuning"
+            assert (
+                tokenizer is not None
+            ), "Tokenizer has to be supplied in order to setup the prompt tuning"
             suff_tokenized = tokenizer(
                 config.prompt_tuning_suffix_init,
                 add_special_tokens=False,
-                return_tensors='pt',
+                return_tensors="pt",
             )
-            init_suffix_from = self.decoder.get_input_embeddings()(suff_tokenized.input_ids)
+            init_suffix_from = self.decoder.get_input_embeddings()(
+                suff_tokenized.input_ids
+            )
         else:
             init_suffix_from = None
 
@@ -706,9 +770,10 @@ class TMPSpeechEncoderConnectorLMDecoder(PreTrainedModel):
             param.requires_grad = False
 
     def freeze_decoder(self):
-        if not self.do_freeze_decoder: return
+        if not self.do_freeze_decoder:
+            return
 
-        if hasattr(self.decoder, 'model'):
+        if hasattr(self.decoder, "model"):
             for _, param in self.decoder.model.named_parameters():
                 param.requires_grad = False
             for param in self.decoder.model.parameters():
@@ -723,7 +788,7 @@ class TMPSpeechEncoderConnectorLMDecoder(PreTrainedModel):
             param.requires_grad = False
 
         self.decoder.lm_head.requires_grad = False
-        if hasattr(self.decoder, 'final_logits_bias'):
+        if hasattr(self.decoder, "final_logits_bias"):
             self.decoder.final_logits_bias.requires_grad = False
 
     def forward(
@@ -749,7 +814,9 @@ class TMPSpeechEncoderConnectorLMDecoder(PreTrainedModel):
         return_dict: Optional[bool] = None,
     ) -> Union[Tuple, BaseModelOutput]:
 
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = (
+            return_dict if return_dict is not None else self.config.use_return_dict
+        )
 
         if labels is not None:
             # we don't want a bos token at the beginning of the labels
@@ -758,7 +825,7 @@ class TMPSpeechEncoderConnectorLMDecoder(PreTrainedModel):
 
             if decoder_input_ids is None and decoder_inputs_embeds is None:
                 # TODO: fix this.. probably just always pad the labels with -100?
-                if self.decoder.config.model_type == 'llama':
+                if self.decoder.config.model_type == "llama":
                     sep = 29871
                 else:
                     sep = self.decoder.config.bos_token_id
@@ -770,29 +837,30 @@ class TMPSpeechEncoderConnectorLMDecoder(PreTrainedModel):
                 # because of the way we compute loss, we don't need the shifted decoder_input_ids
                 # NOTE: this may not be ideal, think about what this means for the prompt
                 # suffix -- perhaps we need to enforce a space at the end of it?
-                decoder_input_ids = decoder_input_ids[:,1:]
+                decoder_input_ids = decoder_input_ids[:, 1:]
 
         # 1. forward the audio through the encoder
-        if self.encoder.training: self.encoder.eval()
+        if self.encoder.training:
+            self.encoder.eval()
         encoder_outputs = self.encoder(
             input_features,
             attention_mask=attention_mask,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
-            return_dict=True
+            return_dict=True,
         )
 
         encoder_outputs = BaseModelOutput(
             last_hidden_state=encoder_outputs.last_hidden_state,
             hidden_states=encoder_outputs.hidden_states,
-            attentions=encoder_outputs.attentions
+            attentions=encoder_outputs.attentions,
         )
 
         audio_embeds = encoder_outputs.last_hidden_state
 
         # downsample encoder attention mask
         if attention_mask is not None:
-            if hasattr(self.encoder, '_get_feature_vector_attention_mask'):
+            if hasattr(self.encoder, "_get_feature_vector_attention_mask"):
                 audio_attention_mask = self.encoder._get_feature_vector_attention_mask(
                     audio_embeds.shape[1], attention_mask
                 )
@@ -803,7 +871,7 @@ class TMPSpeechEncoderConnectorLMDecoder(PreTrainedModel):
                         audio_embeds.shape[0],
                         audio_embeds.shape[1],
                     ),
-                    device = audio_embeds.device,
+                    device=audio_embeds.device,
                     dtype=torch.long,
                 )
         else:
@@ -838,15 +906,17 @@ class TMPSpeechEncoderConnectorLMDecoder(PreTrainedModel):
                     .to(audio_embeds.device)
                 )
                 prompt_prefix_mask = torch.ones_like(
-                    prompt_prefix_ids, device=audio_embeds.device)
+                    prompt_prefix_ids, device=audio_embeds.device
+                )
             else:
                 prompt_prefix_ids = None
 
         else:
             # cut off the prefix eos token id
             if prompt_prefix_ids[0, -1] == self.decoder.config.eos_token_id:
-                print("WARNING: there was a trailing prompt prefix eos",
-                      prompt_suffix_ids)
+                print(
+                    "WARNING: there was a trailing prompt prefix eos", prompt_suffix_ids
+                )
                 prompt_prefix_ids = prompt_prefix_ids[..., :-1]
                 prompt_prefix_mask = prompt_prefix_mask[..., :-1]
 
@@ -854,51 +924,59 @@ class TMPSpeechEncoderConnectorLMDecoder(PreTrainedModel):
         if prompt_prefix_ids is not None:
             prefix_embeds = self.decoder.get_input_embeddings()(prompt_prefix_ids)
             connector_outputs.last_hidden_state = torch.hstack(
-                (prefix_embeds, connector_outputs.last_hidden_state))
+                (prefix_embeds, connector_outputs.last_hidden_state)
+            )
 
             if audio_attention_mask is not None:
                 audio_attention_mask = torch.hstack(
-                    (prompt_prefix_mask, audio_attention_mask))
+                    (prompt_prefix_mask, audio_attention_mask)
+                )
 
         # append the prompt suffix
         if prompt_suffix_ids is not None:
             # cut off the bos token
-            if (self.decoder.config.bos_token_id is not None and
-                    prompt_suffix_ids[0, 0] == self.decoder.config.bos_token_id):
-                print("WARNING: there was a trailing prompt suffix bos",
-                      prompt_suffix_ids)
+            if (
+                self.decoder.config.bos_token_id is not None
+                and prompt_suffix_ids[0, 0] == self.decoder.config.bos_token_id
+            ):
+                print(
+                    "WARNING: there was a trailing prompt suffix bos", prompt_suffix_ids
+                )
                 prompt_suffix_ids = prompt_suffix_ids[..., 1:]
                 prompt_suffix_mask = prompt_suffix_mask[..., 1:]
 
             # cut off the eos token
             if prompt_suffix_ids[0, -1] == self.decoder.config.eos_token_id:
-                print("WARNING: there was a trailing prompt suffix eos",
-                      prompt_suffix_ids)
+                print(
+                    "WARNING: there was a trailing prompt suffix eos", prompt_suffix_ids
+                )
                 prompt_suffix_ids = prompt_suffix_ids[..., :-1]
                 prompt_suffix_mask = prompt_suffix_mask[..., :-1]
 
             # embed the suffix ids
             suffix_embeds = self.decoder.get_input_embeddings()(prompt_suffix_ids)
             connector_outputs.last_hidden_state = torch.hstack(
-                (connector_outputs.last_hidden_state, suffix_embeds))
+                (connector_outputs.last_hidden_state, suffix_embeds)
+            )
 
             if audio_attention_mask is not None:
                 audio_attention_mask = torch.hstack(
-                    (audio_attention_mask, prompt_suffix_mask))
+                    (audio_attention_mask, prompt_suffix_mask)
+                )
 
         device = connector_outputs.last_hidden_state.device
 
         decoder_inputs_embeds = self.decoder.get_input_embeddings()(decoder_input_ids)
-        decoder_inputs_attn_mask = torch.ones_like(
-            decoder_input_ids, device=device)
+        decoder_inputs_attn_mask = torch.ones_like(decoder_input_ids, device=device)
 
         decoder_inputs_embeds = torch.hstack(
-            (connector_outputs.last_hidden_state, decoder_inputs_embeds))
+            (connector_outputs.last_hidden_state, decoder_inputs_embeds)
+        )
 
-        attention_mask = torch.hstack(
-            (audio_attention_mask, decoder_inputs_attn_mask))
+        attention_mask = torch.hstack((audio_attention_mask, decoder_inputs_attn_mask))
 
-        if self.decoder.training: self.decoder.eval()
+        if self.decoder.training:
+            self.decoder.eval()
         decoder_outputs = self.decoder(
             inputs_embeds=decoder_inputs_embeds,
             attention_mask=attention_mask,
@@ -911,10 +989,10 @@ class TMPSpeechEncoderConnectorLMDecoder(PreTrainedModel):
 
         if labels is not None:
             labels = labels.to(logits.device)
-            logits = logits[:, -labels.size(1):, :]
+            logits = logits[:, -labels.size(1) :, :]
             # Shift so that tokens < n predict n
-            #shift_logits = logits[..., :-1, :].contiguous()
-            #shift_labels = labels[..., 1:].contiguous().to(logits.device)
+            # shift_logits = logits[..., :-1, :].contiguous()
+            # shift_labels = labels[..., 1:].contiguous().to(logits.device)
             shift_logits = logits.contiguous()
             shift_labels = labels.contiguous().to(logits.device)
 
@@ -922,11 +1000,15 @@ class TMPSpeechEncoderConnectorLMDecoder(PreTrainedModel):
             loss_fct = CrossEntropyLoss(reduction="mean")
 
             loss = loss_fct(
-                shift_logits.view(-1, self.decoder.config.vocab_size), shift_labels.view(-1))
+                shift_logits.view(-1, self.decoder.config.vocab_size),
+                shift_labels.view(-1),
+            )
 
             with torch.no_grad():
                 preds = torch.argmax(shift_logits, -1)
-                accuracy = compute_accuracy(preds.detach(), shift_labels.detach(), ignore_label=-100)
+                accuracy = compute_accuracy(
+                    preds.detach(), shift_labels.detach(), ignore_label=-100
+                )
 
         # NOTE: here we're only returning the final cut logits, as there's no need for us to
         # return the whole sequence..
@@ -952,20 +1034,20 @@ class TMPSpeechEncoderConnectorLMDecoder(PreTrainedModel):
         encoder_outputs = self.encoder(
             input_features.to(self.encoder.dtype),
             attention_mask=attention_mask,
-            return_dict=True
+            return_dict=True,
         )
 
         encoder_outputs = BaseModelOutput(
             last_hidden_state=encoder_outputs.last_hidden_state,
             hidden_states=encoder_outputs.hidden_states,
-            attentions=encoder_outputs.attentions
+            attentions=encoder_outputs.attentions,
         )
 
         audio_embeds = encoder_outputs.last_hidden_state
 
         # downsample encoder attention mask
         if attention_mask is not None:
-            if hasattr(self.encoder, '_get_feature_vector_attention_mask'):
+            if hasattr(self.encoder, "_get_feature_vector_attention_mask"):
                 audio_attention_mask = self.encoder._get_feature_vector_attention_mask(
                     audio_embeds.shape[1], attention_mask
                 )
@@ -976,7 +1058,7 @@ class TMPSpeechEncoderConnectorLMDecoder(PreTrainedModel):
                         audio_embeds.shape[0],
                         audio_embeds.shape[1],
                     ),
-                    device = audio_embeds.device,
+                    device=audio_embeds.device,
                     dtype=torch.long,
                 )
         else:
@@ -998,7 +1080,7 @@ class TMPSpeechEncoderConnectorLMDecoder(PreTrainedModel):
                     connector_outputs.last_hidden_state.shape[0],
                     connector_outputs.last_hidden_state.shape[1],
                 ),
-                device = audio_embeds.device,
+                device=audio_embeds.device,
                 dtype=torch.long,
             )
 
@@ -1012,15 +1094,17 @@ class TMPSpeechEncoderConnectorLMDecoder(PreTrainedModel):
                     .to(audio_embeds.device)
                 )
                 prompt_prefix_mask = torch.ones_like(
-                    prompt_prefix_ids, device=audio_embeds.device)
+                    prompt_prefix_ids, device=audio_embeds.device
+                )
             else:
                 prompt_prefix_ids = None
 
         else:
             # cut off the prefix eos token id
             if prompt_prefix_ids[0, -1] == self.decoder.config.eos_token_id:
-                print("WARNING: there was a trailing prompt prefix eos",
-                      prompt_suffix_ids)
+                print(
+                    "WARNING: there was a trailing prompt prefix eos", prompt_suffix_ids
+                )
                 prompt_prefix_ids = prompt_prefix_ids[..., :-1]
                 prompt_prefix_mask = prompt_prefix_mask[..., :-1]
 
@@ -1028,37 +1112,45 @@ class TMPSpeechEncoderConnectorLMDecoder(PreTrainedModel):
         if prompt_prefix_ids is not None:
             prefix_embeds = self.decoder.get_input_embeddings()(prompt_prefix_ids)
             connector_outputs.last_hidden_state = torch.hstack(
-                (prefix_embeds, connector_outputs.last_hidden_state))
+                (prefix_embeds, connector_outputs.last_hidden_state)
+            )
 
             if audio_attention_mask is not None:
                 audio_attention_mask = torch.hstack(
-                    (prompt_prefix_mask, audio_attention_mask))
+                    (prompt_prefix_mask, audio_attention_mask)
+                )
 
         # append the prompt suffix
         if prompt_suffix_ids is not None:
             # cut off the bos token
-            if (self.decoder.config.bos_token_id is not None and
-                    prompt_suffix_ids[0, 0] == self.decoder.config.bos_token_id):
-                print("WARNING: there was a trailing prompt suffix bos",
-                      prompt_suffix_ids)
+            if (
+                self.decoder.config.bos_token_id is not None
+                and prompt_suffix_ids[0, 0] == self.decoder.config.bos_token_id
+            ):
+                print(
+                    "WARNING: there was a trailing prompt suffix bos", prompt_suffix_ids
+                )
                 prompt_suffix_ids = prompt_suffix_ids[..., 1:]
                 prompt_suffix_mask = prompt_suffix_mask[..., 1:]
 
             # cut off the eos token
             if prompt_suffix_ids[0, -1] == self.decoder.config.eos_token_id:
-                print("WARNING: there was a trailing prompt suffix eos",
-                      prompt_suffix_ids)
+                print(
+                    "WARNING: there was a trailing prompt suffix eos", prompt_suffix_ids
+                )
                 prompt_suffix_ids = prompt_suffix_ids[..., :-1]
                 prompt_suffix_mask = prompt_suffix_mask[..., :-1]
 
             # embed the suffix ids
             suffix_embeds = self.decoder.get_input_embeddings()(prompt_suffix_ids)
             connector_outputs.last_hidden_state = torch.hstack(
-                (connector_outputs.last_hidden_state, suffix_embeds))
+                (connector_outputs.last_hidden_state, suffix_embeds)
+            )
 
             if audio_attention_mask is not None:
                 audio_attention_mask = torch.hstack(
-                    (audio_attention_mask, prompt_suffix_mask))
+                    (audio_attention_mask, prompt_suffix_mask)
+                )
 
         decoder_outputs = self.decoder.generate(
             inputs_embeds=connector_outputs.last_hidden_state,
@@ -1068,8 +1160,9 @@ class TMPSpeechEncoderConnectorLMDecoder(PreTrainedModel):
 
         return decoder_outputs
 
+
 class SpeechEncoderConnectorLLM(PreTrainedModel):
-    """ Speech LLM model with a connector network.
+    """Speech LLM model with a connector network.
 
     To instantiate a new model, first load the speech encoder and LLM separately
     from pre-trained checkpoints. Then, instantiate the connector config
@@ -1081,7 +1174,6 @@ class SpeechEncoderConnectorLLM(PreTrainedModel):
 
     config_class = AlignmentConfig
     main_input_name = "input_features"
-
 
     # TODO: refactor the model building methods
     # - fix the model saving -> save only the connector module
@@ -1101,9 +1193,13 @@ class SpeechEncoderConnectorLLM(PreTrainedModel):
     ):
 
         if config is None:
-            raise ValueError("Configuration has to be supplied. Before instantiating the model, please create a configuration object using the foundation models.")
+            raise ValueError(
+                "Configuration has to be supplied. Before instantiating the model, please create a configuration object using the foundation models."
+            )
             if encoder is None or decoder is None:
-                raise ValueError("Either configuration or individual encoder/decoder models have to be supplied")
+                raise ValueError(
+                    "Either configuration or individual encoder/decoder models have to be supplied"
+                )
 
             # FIXME finish the config construction
             # NOTE it's stupid, as the individual encoder and decoder configs should be populated here and the alignment
@@ -1136,21 +1232,24 @@ class SpeechEncoderConnectorLLM(PreTrainedModel):
             config.qformer_config = Blip2QFormerConfig(**config.qformer_config)
         if isinstance(config.lm_config, dict):
             config.lm_config = PretrainedConfig(**config.lm_config)
-        #if hasattr(config, "lora_config") and isinstance(config.lora_config, dict):
+        # if hasattr(config, "lora_config") and isinstance(config.lora_config, dict):
         #    config.lora_config = PretrainedConfig(**config.lora_config)
 
         super().__init__(config)
 
         if not encoder:
             # FIXME: wavlm wrapper..
-            if 'WavLMModel' in self.config.encoder_config.architectures:
+            if "WavLMModel" in self.config.encoder_config.architectures:
                 encoder = WavLMModelWrapper(self.config.encoder_config)
-            elif 'WhisperForConditionalGeneration' in self.config.encoder_config.architectures:
+            elif (
+                "WhisperForConditionalGeneration"
+                in self.config.encoder_config.architectures
+            ):
                 encoder = WhisperForConditionalGeneration(self.config.encoder_config)
         else:
             # check if the encoder is a pretrained model id or a model instance
             if isinstance(encoder, str):
-                if 'wavlm' in encoder:
+                if "wavlm" in encoder:
                     encoder = WavLMModelWrapper.from_pretrained(encoder)
                 else:
                     encoder = AutoModel.from_pretrained(encoder)
@@ -1162,15 +1261,17 @@ class SpeechEncoderConnectorLLM(PreTrainedModel):
             self.encoder = encoder.encoder
 
         if not decoder:
-            decoder = getattr(transformers, self.config.lm_config.architectures[0])(self.config.lm_config)
+            decoder = getattr(transformers, self.config.lm_config.architectures[0])(
+                self.config.lm_config
+            )
             decoder.tie_weights()
 
             # handle the lora config init for legacy reasons..
-            lora_config = getattr(self.config, 'lora_config', None)
+            lora_config = getattr(self.config, "lora_config", None)
             if not lora_config and reinit_lora:
                 lora_config = LoraConfig(
-                    task_type='CAUSAL_LM',
-                    target_modules='all-linear',
+                    task_type="CAUSAL_LM",
+                    target_modules="all-linear",
                     r=lora_r,
                     lora_alpha=lora_a,
                     lora_dropout=lora_dropout,
@@ -1189,7 +1290,9 @@ class SpeechEncoderConnectorLLM(PreTrainedModel):
 
         self.decoder = decoder
 
-        soft_prompt_init, init_prefix_from, init_suffix_from = self.prepare_prompt_tuning_init_point(config, tokenizer)
+        soft_prompt_init, init_prefix_from, init_suffix_from = (
+            self.prepare_prompt_tuning_init_point(config, tokenizer)
+        )
 
         self.connector = AlignmentNetwork(
             # NOTE: currently the soft_prompt_init and initialization from hard prompts cannot be combined
@@ -1198,7 +1301,7 @@ class SpeechEncoderConnectorLLM(PreTrainedModel):
             soft_prompt_init=soft_prompt_init,
             init_prefix_from=init_prefix_from,
             init_suffix_from=init_suffix_from,
-            tokenizer=None
+            tokenizer=None,
         )
 
         # freeze encoder and decoder
@@ -1207,25 +1310,27 @@ class SpeechEncoderConnectorLLM(PreTrainedModel):
 
         self.do_freeze_decoder = freeze_decoder
         if self.do_freeze_decoder:
-            self.freeze_decoder() # NOTE: the freezing should be done when the model is initialized
+            self.freeze_decoder()  # NOTE: the freezing should be done when the model is initialized
 
         # FIXME: the padding required in generate - rework the config class to include all
         # the token_ids on the top level ...
         self.config = config
-        self.config.update({'pad_token_id': self.decoder.config.eos_token_id})
-        self.decoder.config.update({'pad_token_id': self.decoder.config.eos_token_id})
-    
+        self.config.update({"pad_token_id": self.decoder.config.eos_token_id})
+        self.decoder.config.update({"pad_token_id": self.decoder.config.eos_token_id})
+
     def _tie_weights(self):
         self.decoder.tie_weights()
 
     def insert_decoder_lora(self, lora_r=8, lora_a=8, lora_dropout=0.1):
         if self.config.lora_config is not None:
-            print("WARNING: LoRA config already exists in the model, skipping the reinitialization")
+            print(
+                "WARNING: LoRA config already exists in the model, skipping the reinitialization"
+            )
             return
 
         lora_config = LoraConfig(
-            task_type='CAUSAL_LM',
-            target_modules='all-linear',
+            task_type="CAUSAL_LM",
+            target_modules="all-linear",
             r=lora_r,
             lora_alpha=lora_a,
             lora_dropout=lora_dropout,
@@ -1233,30 +1338,41 @@ class SpeechEncoderConnectorLLM(PreTrainedModel):
         self.config.lora_config = lora_config.to_dict()
         self.decoder = get_peft_model(self.decoder, lora_config)
 
-
     def prepare_prompt_tuning_init_point(self, config, tokenizer):
         # FIXME: This method should be reworked... not a great prompt tuning initialization solution
-        soft_prompt_init = self.decoder.get_input_embeddings().weight.mean(dim=0) if config.init_prompt_from_embeds else None
+        soft_prompt_init = (
+            self.decoder.get_input_embeddings().weight.mean(dim=0)
+            if config.init_prompt_from_embeds
+            else None
+        )
 
         if config.prompt_tuning_prefix_init is not None:
-            assert tokenizer is not None, "Tokenizer has to be supplied in order to setup the prompt tuning"
+            assert (
+                tokenizer is not None
+            ), "Tokenizer has to be supplied in order to setup the prompt tuning"
             pref_tokenized = tokenizer(
                 config.prompt_tuning_prefix_init,
                 add_special_tokens=False,
-                return_tensors='pt',
+                return_tensors="pt",
             )
-            init_prefix_from = self.decoder.get_input_embeddings()(pref_tokenized.input_ids)
+            init_prefix_from = self.decoder.get_input_embeddings()(
+                pref_tokenized.input_ids
+            )
         else:
             init_prefix_from = None
 
         if config.prompt_tuning_suffix_init is not None:
-            assert tokenizer is not None, "Tokenizer has to be supplied in order to setup the prompt tuning"
+            assert (
+                tokenizer is not None
+            ), "Tokenizer has to be supplied in order to setup the prompt tuning"
             suff_tokenized = tokenizer(
                 config.prompt_tuning_suffix_init,
                 add_special_tokens=False,
-                return_tensors='pt',
+                return_tensors="pt",
             )
-            init_suffix_from = self.decoder.get_input_embeddings()(suff_tokenized.input_ids)
+            init_suffix_from = self.decoder.get_input_embeddings()(
+                suff_tokenized.input_ids
+            )
         else:
             init_suffix_from = None
 
@@ -1277,20 +1393,22 @@ class SpeechEncoderConnectorLLM(PreTrainedModel):
 
     def unfreeze_decoder_lora(self):
         unfrozen_params = 0
-        
+
         # Iterate through all named parameters
         for name, param in self.decoder.named_parameters():
             # Check if the parameter is part of LoRA layers
             # Common LoRA parameter naming patterns include 'lora_A', 'lora_B', 'adapter'
-            if any(lora_name in name.lower() for lora_name in ['lora', 'adapter']):
+            if any(lora_name in name.lower() for lora_name in ["lora", "adapter"]):
                 # Unfreeze the parameter
                 param.requires_grad = True
                 unfrozen_params += param.numel()
-        
+
         print(f"Unfrozen {unfrozen_params} LoRA parameters")
-        
+
         # Optionally verify which parameters are now trainable
-        trainable_params = sum(p.numel() for p in self.decoder.parameters() if p.requires_grad)
+        trainable_params = sum(
+            p.numel() for p in self.decoder.parameters() if p.requires_grad
+        )
         print(f"Total trainable parameters: {trainable_params}")
 
     def freeze_decoder(self, requires_grad=False):
@@ -1298,15 +1416,25 @@ class SpeechEncoderConnectorLLM(PreTrainedModel):
             param.requires_grad = requires_grad
 
         self.decoder.lm_head.requires_grad = requires_grad
-        if hasattr(self.decoder, 'final_logits_bias'):
+        if hasattr(self.decoder, "final_logits_bias"):
             self.decoder.final_logits_bias.requires_grad = requires_grad
 
     def get_param_count(self):
-        print(f"Total number of parameters in the model: {sum(p.numel() for p in self.parameters()):,}")
-        print(f"Total trainable parameters: {sum(p.numel() for p in self.parameters() if p.requires_grad):,}")
-        print(f"Trainable encoder parameters: {sum(p.numel() for p in self.encoder.parameters() if p.requires_grad):,}")
-        print(f"Trainable connector parameters: {sum(p.numel() for p in self.connector.parameters() if p.requires_grad):,}")
-        print(f"Trainable decoder parameters: {sum(p.numel() for p in self.decoder.parameters() if p.requires_grad):,}")
+        print(
+            f"Total number of parameters in the model: {sum(p.numel() for p in self.parameters()):,}"
+        )
+        print(
+            f"Total trainable parameters: {sum(p.numel() for p in self.parameters() if p.requires_grad):,}"
+        )
+        print(
+            f"Trainable encoder parameters: {sum(p.numel() for p in self.encoder.parameters() if p.requires_grad):,}"
+        )
+        print(
+            f"Trainable connector parameters: {sum(p.numel() for p in self.connector.parameters() if p.requires_grad):,}"
+        )
+        print(
+            f"Trainable decoder parameters: {sum(p.numel() for p in self.decoder.parameters() if p.requires_grad):,}"
+        )
 
     def forward(
         self,
@@ -1331,7 +1459,9 @@ class SpeechEncoderConnectorLLM(PreTrainedModel):
         return_dict: Optional[bool] = None,
     ) -> Union[Tuple, BaseModelOutput]:
 
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = (
+            return_dict if return_dict is not None else self.config.use_return_dict
+        )
 
         if labels is not None:
             # we don't want a bos token at the beginning of the labels
@@ -1340,7 +1470,7 @@ class SpeechEncoderConnectorLLM(PreTrainedModel):
 
             if decoder_input_ids is None and decoder_inputs_embeds is None:
                 # TODO: fix this.. probably just always pad the labels with -100?
-                if self.decoder.config.model_type == 'llama':
+                if self.decoder.config.model_type == "llama":
                     sep = 29871
                 else:
                     sep = self.decoder.config.bos_token_id
@@ -1352,29 +1482,30 @@ class SpeechEncoderConnectorLLM(PreTrainedModel):
                 # because of the way we compute loss, we don't need the shifted decoder_input_ids
                 # NOTE: this may not be ideal, think about what this means for the prompt
                 # suffix -- perhaps we need to enforce a space at the end of it?
-                decoder_input_ids = decoder_input_ids[:,1:]
+                decoder_input_ids = decoder_input_ids[:, 1:]
 
         # 1. forward the audio through the encoder
-        if self.encoder.training: self.encoder.eval()
+        if self.encoder.training:
+            self.encoder.eval()
         encoder_outputs = self.encoder(
             input_features,
             attention_mask=attention_mask,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
-            return_dict=True
+            return_dict=True,
         )
 
         encoder_outputs = BaseModelOutput(
             last_hidden_state=encoder_outputs.last_hidden_state,
             hidden_states=encoder_outputs.hidden_states,
-            attentions=encoder_outputs.attentions
+            attentions=encoder_outputs.attentions,
         )
 
         audio_embeds = encoder_outputs.last_hidden_state
 
         # downsample encoder attention mask
         if attention_mask is not None:
-            if hasattr(self.encoder, '_get_feature_vector_attention_mask'):
+            if hasattr(self.encoder, "_get_feature_vector_attention_mask"):
                 audio_attention_mask = self.encoder._get_feature_vector_attention_mask(
                     audio_embeds.shape[1], attention_mask
                 )
@@ -1385,7 +1516,7 @@ class SpeechEncoderConnectorLLM(PreTrainedModel):
                         audio_embeds.shape[0],
                         audio_embeds.shape[1],
                     ),
-                    device = audio_embeds.device,
+                    device=audio_embeds.device,
                     dtype=torch.long,
                 )
         else:
@@ -1420,15 +1551,17 @@ class SpeechEncoderConnectorLLM(PreTrainedModel):
                     .to(audio_embeds.device)
                 )
                 prompt_prefix_mask = torch.ones_like(
-                    prompt_prefix_ids, device=audio_embeds.device)
+                    prompt_prefix_ids, device=audio_embeds.device
+                )
             else:
                 prompt_prefix_ids = None
 
         else:
             # cut off the prefix eos token id
             if prompt_prefix_ids[0, -1] == self.decoder.config.eos_token_id:
-                print("WARNING: there was a trailing prompt prefix eos",
-                      prompt_suffix_ids)
+                print(
+                    "WARNING: there was a trailing prompt prefix eos", prompt_suffix_ids
+                )
                 prompt_prefix_ids = prompt_prefix_ids[..., :-1]
                 prompt_prefix_mask = prompt_prefix_mask[..., :-1]
 
@@ -1436,51 +1569,59 @@ class SpeechEncoderConnectorLLM(PreTrainedModel):
         if prompt_prefix_ids is not None:
             prefix_embeds = self.decoder.get_input_embeddings()(prompt_prefix_ids)
             connector_outputs.last_hidden_state = torch.hstack(
-                (prefix_embeds, connector_outputs.last_hidden_state))
+                (prefix_embeds, connector_outputs.last_hidden_state)
+            )
 
             if audio_attention_mask is not None:
                 audio_attention_mask = torch.hstack(
-                    (prompt_prefix_mask, audio_attention_mask))
+                    (prompt_prefix_mask, audio_attention_mask)
+                )
 
         # append the prompt suffix
         if prompt_suffix_ids is not None:
             # cut off the bos token
-            if (self.decoder.config.bos_token_id is not None and
-                    prompt_suffix_ids[0, 0] == self.decoder.config.bos_token_id):
-                print("WARNING: there was a trailing prompt suffix bos",
-                      prompt_suffix_ids)
+            if (
+                self.decoder.config.bos_token_id is not None
+                and prompt_suffix_ids[0, 0] == self.decoder.config.bos_token_id
+            ):
+                print(
+                    "WARNING: there was a trailing prompt suffix bos", prompt_suffix_ids
+                )
                 prompt_suffix_ids = prompt_suffix_ids[..., 1:]
                 prompt_suffix_mask = prompt_suffix_mask[..., 1:]
 
             # cut off the eos token
             if prompt_suffix_ids[0, -1] == self.decoder.config.eos_token_id:
-                print("WARNING: there was a trailing prompt suffix eos",
-                      prompt_suffix_ids)
+                print(
+                    "WARNING: there was a trailing prompt suffix eos", prompt_suffix_ids
+                )
                 prompt_suffix_ids = prompt_suffix_ids[..., :-1]
                 prompt_suffix_mask = prompt_suffix_mask[..., :-1]
 
             # embed the suffix ids
             suffix_embeds = self.decoder.get_input_embeddings()(prompt_suffix_ids)
             connector_outputs.last_hidden_state = torch.hstack(
-                (connector_outputs.last_hidden_state, suffix_embeds))
+                (connector_outputs.last_hidden_state, suffix_embeds)
+            )
 
             if audio_attention_mask is not None:
                 audio_attention_mask = torch.hstack(
-                    (audio_attention_mask, prompt_suffix_mask))
+                    (audio_attention_mask, prompt_suffix_mask)
+                )
 
         device = connector_outputs.last_hidden_state.device
 
         decoder_inputs_embeds = self.decoder.get_input_embeddings()(decoder_input_ids)
-        decoder_inputs_attn_mask = torch.ones_like(
-            decoder_input_ids, device=device)
+        decoder_inputs_attn_mask = torch.ones_like(decoder_input_ids, device=device)
 
         decoder_inputs_embeds = torch.hstack(
-            (connector_outputs.last_hidden_state, decoder_inputs_embeds))
+            (connector_outputs.last_hidden_state, decoder_inputs_embeds)
+        )
 
-        attention_mask = torch.hstack(
-            (audio_attention_mask, decoder_inputs_attn_mask))
+        attention_mask = torch.hstack((audio_attention_mask, decoder_inputs_attn_mask))
 
-        if self.decoder.training: self.decoder.eval()
+        if self.decoder.training:
+            self.decoder.eval()
         decoder_outputs = self.decoder(
             inputs_embeds=decoder_inputs_embeds,
             attention_mask=attention_mask,
@@ -1493,10 +1634,10 @@ class SpeechEncoderConnectorLLM(PreTrainedModel):
 
         if labels is not None:
             labels = labels.to(logits.device)
-            logits = logits[:, -labels.size(1):, :]
+            logits = logits[:, -labels.size(1) :, :]
             # Shift so that tokens < n predict n
-            #shift_logits = logits[..., :-1, :].contiguous()
-            #shift_labels = labels[..., 1:].contiguous().to(logits.device)
+            # shift_logits = logits[..., :-1, :].contiguous()
+            # shift_labels = labels[..., 1:].contiguous().to(logits.device)
             shift_logits = logits.contiguous()
             shift_labels = labels.contiguous().to(logits.device)
 
@@ -1504,11 +1645,15 @@ class SpeechEncoderConnectorLLM(PreTrainedModel):
             loss_fct = CrossEntropyLoss(reduction="mean")
 
             loss = loss_fct(
-                shift_logits.view(-1, self.decoder.config.vocab_size), shift_labels.view(-1))
+                shift_logits.view(-1, self.decoder.config.vocab_size),
+                shift_labels.view(-1),
+            )
 
             with torch.no_grad():
                 preds = torch.argmax(shift_logits, -1)
-                accuracy = compute_accuracy(preds.detach(), shift_labels.detach(), ignore_label=-100)
+                accuracy = compute_accuracy(
+                    preds.detach(), shift_labels.detach(), ignore_label=-100
+                )
 
         # NOTE: here we're only returning the final cut logits, as there's no need for us to
         # return the whole sequence..
@@ -1534,20 +1679,20 @@ class SpeechEncoderConnectorLLM(PreTrainedModel):
         encoder_outputs = self.encoder(
             input_features.to(self.encoder.dtype),
             attention_mask=attention_mask,
-            return_dict=True
+            return_dict=True,
         )
 
         encoder_outputs = BaseModelOutput(
             last_hidden_state=encoder_outputs.last_hidden_state,
             hidden_states=encoder_outputs.hidden_states,
-            attentions=encoder_outputs.attentions
+            attentions=encoder_outputs.attentions,
         )
 
         audio_embeds = encoder_outputs.last_hidden_state
 
         # downsample encoder attention mask
         if attention_mask is not None:
-            if hasattr(self.encoder, '_get_feature_vector_attention_mask'):
+            if hasattr(self.encoder, "_get_feature_vector_attention_mask"):
                 audio_attention_mask = self.encoder._get_feature_vector_attention_mask(
                     audio_embeds.shape[1], attention_mask
                 )
@@ -1558,7 +1703,7 @@ class SpeechEncoderConnectorLLM(PreTrainedModel):
                         audio_embeds.shape[0],
                         audio_embeds.shape[1],
                     ),
-                    device = audio_embeds.device,
+                    device=audio_embeds.device,
                     dtype=torch.long,
                 )
         else:
@@ -1580,7 +1725,7 @@ class SpeechEncoderConnectorLLM(PreTrainedModel):
                     connector_outputs.last_hidden_state.shape[0],
                     connector_outputs.last_hidden_state.shape[1],
                 ),
-                device = audio_embeds.device,
+                device=audio_embeds.device,
                 dtype=torch.long,
             )
 
@@ -1594,15 +1739,17 @@ class SpeechEncoderConnectorLLM(PreTrainedModel):
                     .to(audio_embeds.device)
                 )
                 prompt_prefix_mask = torch.ones_like(
-                    prompt_prefix_ids, device=audio_embeds.device)
+                    prompt_prefix_ids, device=audio_embeds.device
+                )
             else:
                 prompt_prefix_ids = None
 
         else:
             # cut off the prefix eos token id
             if prompt_prefix_ids[0, -1] == self.decoder.config.eos_token_id:
-                print("WARNING: there was a trailing prompt prefix eos",
-                      prompt_suffix_ids)
+                print(
+                    "WARNING: there was a trailing prompt prefix eos", prompt_suffix_ids
+                )
                 prompt_prefix_ids = prompt_prefix_ids[..., :-1]
                 prompt_prefix_mask = prompt_prefix_mask[..., :-1]
 
@@ -1610,37 +1757,45 @@ class SpeechEncoderConnectorLLM(PreTrainedModel):
         if prompt_prefix_ids is not None:
             prefix_embeds = self.decoder.get_input_embeddings()(prompt_prefix_ids)
             connector_outputs.last_hidden_state = torch.hstack(
-                (prefix_embeds, connector_outputs.last_hidden_state))
+                (prefix_embeds, connector_outputs.last_hidden_state)
+            )
 
             if audio_attention_mask is not None:
                 audio_attention_mask = torch.hstack(
-                    (prompt_prefix_mask, audio_attention_mask))
+                    (prompt_prefix_mask, audio_attention_mask)
+                )
 
         # append the prompt suffix
         if prompt_suffix_ids is not None:
             # cut off the bos token
-            if (self.decoder.config.bos_token_id is not None and
-                    prompt_suffix_ids[0, 0] == self.decoder.config.bos_token_id):
-                print("WARNING: there was a trailing prompt suffix bos",
-                      prompt_suffix_ids)
+            if (
+                self.decoder.config.bos_token_id is not None
+                and prompt_suffix_ids[0, 0] == self.decoder.config.bos_token_id
+            ):
+                print(
+                    "WARNING: there was a trailing prompt suffix bos", prompt_suffix_ids
+                )
                 prompt_suffix_ids = prompt_suffix_ids[..., 1:]
                 prompt_suffix_mask = prompt_suffix_mask[..., 1:]
 
             # cut off the eos token
             if prompt_suffix_ids[0, -1] == self.decoder.config.eos_token_id:
-                print("WARNING: there was a trailing prompt suffix eos",
-                      prompt_suffix_ids)
+                print(
+                    "WARNING: there was a trailing prompt suffix eos", prompt_suffix_ids
+                )
                 prompt_suffix_ids = prompt_suffix_ids[..., :-1]
                 prompt_suffix_mask = prompt_suffix_mask[..., :-1]
 
             # embed the suffix ids
             suffix_embeds = self.decoder.get_input_embeddings()(prompt_suffix_ids)
             connector_outputs.last_hidden_state = torch.hstack(
-                (connector_outputs.last_hidden_state, suffix_embeds))
+                (connector_outputs.last_hidden_state, suffix_embeds)
+            )
 
             if audio_attention_mask is not None:
                 audio_attention_mask = torch.hstack(
-                    (audio_attention_mask, prompt_suffix_mask))
+                    (audio_attention_mask, prompt_suffix_mask)
+                )
 
         decoder_outputs = self.decoder.generate(
             inputs_embeds=connector_outputs.last_hidden_state,

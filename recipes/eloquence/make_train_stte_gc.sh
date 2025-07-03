@@ -32,14 +32,14 @@ validation_split=val
 test_splits="val fisher_test librispeech_test how2_dev5"
 # validation_split=validation
 # test_splits="fleurs_test fleurs_test_el_gr fleurs_test_en_us fleurs_test_es_419 fleurs_test_it_it fleurs_test_sr_rs"
-prompt_suffix="Continued transcript"
+prompt_suffix="Continued transcript:"
 # prompt_suffix="Continued transcript in"
 info=
 
 work_dir="/mnt/matylda3/isvecjan/workspace/speechlm.hf_asr"
 
 # Parse cmd line options
-. parse_options.sh || exit 1
+. /mnt/matylda3/isvecjan/workspace/rustyspoons/scripts/parse_options.sh || exit 1
 
 recipe_dir="${work_dir}/recipes/eloquence"
 experiment=${enc}_${dec}_${dataset}_b$((${gpus} * ${batch} * ${grad_acc}))_lr${lr}${info}
@@ -63,11 +63,11 @@ fi
 # Dataset
 if [[ $dataset == "english" ]]; then
   datasets="\${RECIPE_DIR}/datasets_context_but.fisher_how2_librispeech.json"
-elif [[ $dataset == "fleurs5" ]]; then
+elif [[ $dataset == "fleurs-essex5" ]]; then
   datasets="\${RECIPE_DIR}/datasets_context_but.fleurs5.json"
   validation_split=validation
   test_splits="validation fleurs_test fleurs_test_el_gr fleurs_test_en_us fleurs_test_es_419 fleurs_test_it_it fleurs_test_sr_rs"
-elif [[ $dataset == "fleurs13" ]]; then
+elif [[ $dataset == "fleurs-sm" ]]; then
   datasets="\${RECIPE_DIR}/datasets_context_but.fleurs13.json"
   validation_split=validation
   test_splits="fleurs_test fleurs_test_en_us fleurs_test_es_419 fleurs_test_fr_fr \
@@ -190,10 +190,12 @@ export CUDA_VISIBLE_DEVICES=\$(free-gpus.sh \$N_GPUS) || {
   echo "Could not obtain GPU."
   exit 1
 }
-echo "CUDA_VISIBLE_DEVICES=\$CUDA_VISIBLE_DEVICES"
+echo "CUDA_VISIBLE_DEVICES=\$CUDA_VISIBLE_DEVICES" >&2
 
 args=(
   # General training arguments
+  --seed=1234
+  --data_seed=4321
   --output_dir=\$EXPERIMENT_PATH/\$EXPERIMENT
   --per_device_train_batch_size="$batch"
   --per_device_eval_batch_size="$batch"
@@ -366,4 +368,4 @@ else
 fi
 """ > $work_dir/exp/$experiment.sh
 
-qsub $work_dir/exp/$experiment.sh
+# qsub $work_dir/exp/$experiment.sh

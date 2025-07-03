@@ -44,6 +44,7 @@ from peft import LoraConfig, get_peft_model, replace_lora_weights_loftq
 
 
 if __name__ == "__main__":
+    start_script = time.time()
     logging.set_verbosity_debug()
     logger = logging.get_logger("transformers")
     parser = HfArgumentParser(
@@ -103,12 +104,16 @@ if __name__ == "__main__":
     feature_extractor = AutoFeatureExtractor.from_pretrained(
         training_args.feature_extractor_name
     )
+    end = time.time()
+    logger.info(f"Loaded feature extractor in {end - start:.2f} seconds")
+
+    start = time.time()
     tokenizer = AutoTokenizer.from_pretrained(
         training_args.tokenizer_name,
         add_eos_token=True,
     )
     end = time.time()
-    logger.info(f"Loaded feature extractor and tokenizer in {end - start:.2f} seconds")
+    logger.info(f"Loaded tokenizer in {end - start:.2f} seconds")
     # if not tokenizer.pad_token and : # FIXME
     #     tokenizer.add_special_tokens({'pad_token': '[PAD]'})
     if not hasattr(tokenizer, "pad_token_id"):  # FIXME
@@ -175,7 +180,10 @@ if __name__ == "__main__":
         "Llama" in model_args.base_decoder_model
         or model_args.base_decoder_model == "BSC-LT/salamandra-2b"
     ):  # FIXME
-        if "Llama" in model_args.base_decoder_model:
+        if "Llama-3.2" in model_args.base_decoder_model:
+            tokenizer.pad_token = tokenizer.decode([decoder.config.eos_token_id])
+            tokenizer.pad_token_id = decoder.config.eos_token_id
+        elif "Llama" in model_args.base_decoder_model:
             tokenizer.pad_token = tokenizer.decode([decoder.config.eos_token_id[1]])
             tokenizer.pad_token_id = decoder.config.eos_token_id[1]
         elif model_args.base_decoder_model == "BSC-LT/salamandra-2b":
@@ -350,6 +358,9 @@ if __name__ == "__main__":
     )
     end = time.time()
     logger.info(f"Initialized trainer in {end - start:.2f} seconds")
+
+    end_script = time.time()
+    print(f"Total script time: {end_script - start_script:.2f} seconds")
 
     # 8. Train model
     if training_args.do_train:
