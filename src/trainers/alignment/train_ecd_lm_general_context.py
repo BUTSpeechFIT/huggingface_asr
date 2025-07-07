@@ -3,6 +3,7 @@
 import sys
 
 from transformers import (
+    set_seed,
     AutoFeatureExtractor,
     AutoModelForCausalLM,
     AutoTokenizer,
@@ -61,6 +62,7 @@ if __name__ == "__main__":
     model_args, data_args, training_args, gen_args, conn_args = (
         parser.parse_args_into_dataclasses()
     )
+    set_seed(training_args.seed)
     end = time.time()
     logger.info(f"Parsed arguments in {end - start:.2f} seconds")
 

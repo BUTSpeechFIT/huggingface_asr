@@ -1,15 +1,15 @@
 #!/bin/bash
-#$ -N general_context_asr_training
+#$ -N wL_ll32_gc_1
 #$ -q long.q@supergpu*
 #$ -l ram_free=40G,mem_free=40G
 #$ -l matylda6=0.5,scratch=0.5
 #$ -l gpu=4,gpu_ram=20G
 #$ -l h=!(supergpu5|supergpu8|supergpu7|supergpu15)
-#$ -o /mnt/matylda3/isvecjan/workspace/speechlm.hf_asr/exp/wavlm_olmo1b.o
-#$ -e /mnt/matylda3/isvecjan/workspace/speechlm.hf_asr/exp/wavlm_olmo1b.e
+#$ -o /mnt/matylda3/isvecjan/workspace/speechlm.hf_asr/exp/wL_ll32_gc_1.o
+#$ -e /mnt/matylda3/isvecjan/workspace/speechlm.hf_asr/exp/wL_ll32_gc_1.e
 echo "Hostname: ${HOSTNAME}" >&2
 N_GPUS=4
-EXPERIMENT="wavlm_olmo1b"
+EXPERIMENT="wL_ll32_gc_1"
 
 # Job should finish in about 2 days
 ulimit -t 200000
@@ -48,9 +48,9 @@ export PYTHONPATH="${PYTHONPATH}:${WORK_DIR}/src"
 export WANDB_MODE=offline
 export WANDB_PROJECT="eloquence_asr_llm"
 export WANDB_RUN_ID="${EXPERIMENT}"
-export TRANSFORMERS_OFFLINE=1
-export HF_DATASETS_OFFLINE=1
-export HF_HUB_OFFLINE=1
+# export TRANSFORMERS_OFFLINE=1
+# export HF_DATASETS_OFFLINE=1
+# export HF_HUB_OFFLINE=1
 # export HF_HOME="/mnt/matylda6/isedlacek/hugging-face"
 export HF_HOME=/mnt/scratch/tmp/isvecjan/hf_home
 
@@ -67,7 +67,7 @@ args=(
   --output_dir=$EXPERIMENT_PATH
   --per_device_train_batch_size="4" # 12 # 16
   --per_device_eval_batch_size="8" # 24
-  --dataloader_num_workers="2"
+  --dataloader_num_workers="4"
   #--num_train_epochs="14"
   --max_steps="80000"
   --group_by_length="True"
@@ -122,26 +122,25 @@ args=(
   --prompt_suffix=' Continued transcript: '
 
   # Preprocessing related arguments
-  #--data_preprocessing_config="${RECIPE_DIR}/data_preprocessing_whisper.json"
-  --data_preprocessing_config="${RECIPE_DIR}/data_preprocessing_wavlm.json"
+  --data_preprocessing_config="${RECIPE_DIR}/data_preprocessing_whisper.json"
+  # --data_preprocessing_config="${RECIPE_DIR}/data_preprocessing_wavlm.json"
 
   # Model related arguments
   #--from_pretrained="/mnt/matylda6/isedlacek/projects/huggingface_asr/exp/wsm_olmo1b_stte_w2000_fisher_wavlm/checkpoint-26000"
-  #--from_pretrained="/mnt/matylda6/isedlacek/projects/huggingface_asr/exp/wsm_olmo1b_stte_w2000_libri_how2_cont/checkpoint-42000"
-  #--restart_from="/mnt/matylda6/isedlacek/projects/huggingface_asr/exp/wsm_olmo1b_stte_w2000_libri_how2/checkpoint-16000/"
+  --from_pretrained="/mnt/matylda3/isvecjan/workspace/speechlm.hf_asr/exp/wL_ll32_gc_1/checkpoint-18000"
+  --restart_from="/mnt/matylda3/isvecjan/workspace/speechlm.hf_asr/exp/wL_ll32_gc_1/checkpoint-18000"
   #--from_pretrained="/mnt/matylda6/isedlacek/projects/huggingface_asr/exp/wlml_stte_olmo1b_context_turns_fixed/checkpoint-40000"
 
-  --from_pretrained="/mnt/matylda3/isvecjan/workspace/speechlm.hf_asr/exp/wavlm_olmo1b/checkpoint-8000"
-  --restart_from="/mnt/matylda3/isvecjan/workspace/speechlm.hf_asr/exp/wavlm_olmo1b/checkpoint-8000"
-
-  #--feature_extractor_name="openai/whisper-small.en"
-  #--base_encoder_model="openai/whisper-small.en"
-  --feature_extractor_name="microsoft/wavlm-large"
-  --base_encoder_model="microsoft/wavlm-large"
+  # --feature_extractor_name="microsoft/wavlm-large"
+  # --base_encoder_model="microsoft/wavlm-large"
+  --feature_extractor_name="openai/whisper-large-v3-turbo"
+  --base_encoder_model="openai/whisper-large-v3-turbo"
   --freeze_encoder="False"
 
-  --tokenizer_name="allenai/OLMo-1B-hf"
-  --base_decoder_model="allenai/OLMo-1B-hf"
+  # --tokenizer_name="allenai/OLMo-1B-hf"
+  # --base_decoder_model="allenai/OLMo-1B-hf"
+  --tokenizer_name="meta-llama/Llama-3.2-1B"
+  --base_decoder_model="meta-llama/Llama-3.2-1B"
 
   --connector_type='encoder_stacked'
   --downsampling_factor=6
